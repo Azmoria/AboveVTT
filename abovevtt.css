@@ -2025,6 +2025,19 @@ button.avtt-roll-button {
     pointer-events: none;
 }
 
+
+[role="dialog"].ui-widget.ui-widget-content{
+    max-height: calc(100vh - 20px);
+}
+.body-rpgcharacter-sheet .ui-dialog .ui-dialog-content{
+    max-height: calc(100% - 60px) !important;
+    width: 100% !important;
+}
+.encounter-builder-app .ui-dialog .ui-dialog-content{
+    max-height: calc(100% - 20px) !important;
+    width: 100% !important;
+}
+
 #VTT{
 	z-index:2;
 }
