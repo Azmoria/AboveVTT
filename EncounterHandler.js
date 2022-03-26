@@ -172,6 +172,7 @@ class EncounterHandler {
 		console.log(`combat_iframe_did_load replacing previouslyOpenMonsterId: ${previouslyOpenMonsterId}, previouslyOpenTokenId: ${previouslyOpenTokenId}`);
 		$(".iframe-encounter-combat-tracker-replaced").remove();
 		$("#resizeDragMon ~ #resizeDragMon").remove();
+		$("#monster_close_title_button ~ #monster_close_title_button").remove();
 		// we are no longer loading, so remove our loading marker
 		if (window.EncounterHandler.combat_iframe.hasClass("iframe-encounter-combat-tracker-is-loading")) {
 			console.log("combat_iframe_did_load attempting to open after loading");
@@ -741,6 +742,7 @@ function open_monster_stat_block_with_stat(stat, tokenId) {
 
 
 
+
 	// find the monster element that matches monsterId
 	let encounter = window.EncounterHandler.encounters[window.EncounterHandler.avttId];
 	let encounterMonsters = encounter === undefined ? [] : encounter.monsters;
@@ -1088,10 +1090,11 @@ function init_enounter_combat_tracker_iframe() {
 			if (addedElement.hasClass("combat-tracker-page__content-section--monster-stat-block")) {
 				// a monster stat block was shown, make sure it shows up on screen
 				reposition_enounter_combat_tracker_iframe();
-				addedElement.find(".combat-tracker-page__content-section-close-button").css("position", "fixed");
+				addedElement.find(".combat-tracker-page__content-section-close-button").css("display", "none");
+			/*	addedElement.find(".combat-tracker-page__content-section-close-button").css("position", "fixed");
 				addedElement.find(".combat-tracker-page__content-section-close-button").click(function() {
 					close_monster_stat_block();
-				});
+				});*/
 			}
 
 			if (addedElement.hasClass("encounter-details-content-section")) {
@@ -1150,9 +1153,11 @@ function init_enounter_combat_tracker_iframe() {
 
 	if (window.DM) {
 
-		let draggable_resizable_div = $(`<div id='resizeDragMon' class='hideMon'></div>`);
-
+		let draggable_resizable_div = $(`<div id='resizeDragMon' class='hideMon'></div>`);	
 		$("body").append(draggable_resizable_div);	
+		const monster_close_title_button=$('<div id="monster_close_title_button"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>')
+		$("#resizeDragMon").append(monster_close_title_button);
+		monster_close_title_button.click(function(){close_monster_stat_block()});
 		$("#resizeDragMon").append(iframe);
 		iframe.attr("src", `/combat-tracker/${window.EncounterHandler.avttId}`);
 		/*Set draggable and resizeable on monster and player sheets. Allow dragging and resizing through iFrames by covering them to avoid mouse interaction*/

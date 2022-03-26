@@ -302,11 +302,12 @@ div.ct-sidebar__pane-content--is-dark-mode .sidebar-panel-content {
 
 #resizeDragMon iframe{
     width: 100%;
-    height: calc(100% - 20px) !important;
+    height: calc(100% - 24px) !important;
     position: absolute;
     left: 0;
-    top: 20px;
+    top: 24px;
     max-height: 100%;
+    border-radius: 0px 0px 5px 5px;
     border-radius: 3px 0px;  
 }
 
@@ -516,8 +517,7 @@ div#scene_selector,
     overflow-x: hidden;
 }
 /*combat UI Changes 2*/
-#combat_tracker_inside .tracker-list,
-#round_number_label{
+#combat_tracker_inside .tracker-list{
     height: calc(100% - 55px);
     background: #f9f9f9 url(../images/background_texture.png) repeat !important;  
 }
@@ -525,7 +525,10 @@ div#scene_selector,
     width: calc(100% + 2px);
     left: -1px;
     position: relative;
+    background: #f9f9f9 url(../images/background_texture.png) repeat !important;  
 }
+
+
 /*end combat ui changes 2*/
 
 #combat_footer {
@@ -2292,46 +2295,102 @@ button.avtt-roll-button {
     font-weight: bold;
     text-align: center;
     color: #fff;
-    border-radius: 5px 5px 0px 0px;
-    margin-bottom: 5px;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
     line-height: 28px;
     text-shadow: 0px 0px  #000,
         -1px -1px 0  #000,  
          1px -1px 0  #000,
          -1px 1px 0  #000,
          1px 1px 0  #000;
-    filter: drop-shadow(0px 1px 4px #000e);
     top: -2px;
     position: relative;
     width: calc(100% + 2px);
     left: -1px;
     cursor: move;
+    z-index: 1;
 }
-#combat_tracker_title_bar_exit{
-    fill: #fff;
-    filter: drop-shadow(1px 1px 1px #000e);
-    cursor: pointer;
-}
-#combat_tracker_title_bar_exit:hover svg rect{
-    x: 3;
-    y: 3;
-    width: 18px;
-    height: 18px;
-    fill: #F00;
-}
-#round_number_label{
-    filter: drop-shadow(0px 2px 3px #000e);
-    padding-top: 10px;
-    
+#combat_tracker_title_bar:after {
+    content: '';
+    height: 8px;
+    left: 0;
+    right: 0;
+    position: absolute;
+    z-index: -1;
+    bottom: -8px;
+    background:  linear-gradient(to bottom, #0005 5%, #0000 40%);
 }
 
-#combat_tracker_title_bar_exit{
-    width: 20px;
+#combat_tracker_title_bar_exit,
+#monster_close_title_button,
+#player_close_title_button {
+    fill: #fff5;
+    filter: drop-shadow(1px 1px 1px #000e);
+    cursor: pointer;
+    background: #0000;
+}
+
+#monster_close_title_button:hover,
+#player_close_title_button:hover {
+    background: #ddd3;
+    transition: all linear 0.2s;
+}
+#combat_tracker_title_bar_exit:hover {
+   background: #dddddd4d;
+    transition: all linear 0.2s;
+
+}
+#combat_tracker_title_bar_exit svg,
+#monster_close_title_button svg,
+#player_close_title_button svg {
     height: 20px;
+    width: 20px;
+}
+
+#combat_tracker_title_bar_exit svg g rect,
+#monster_close_title_button svg g rect,
+#player_close_title_button svg g rect {
+    height: 80px;
+    width: 10px;
+    fill: #ddd;
+    x: 45;
+    y: 10;
+}
+
+#combat_tracker_title_bar_exit,
+#monster_close_title_button,
+#player_close_title_button {
     position: absolute;
     right: 5px;
+    width: 20px;
+    height: 20px
+}
+
+#monster_close_title_button,
+#player_close_title_button {
     top: 2px;
 }
+
+#combat_tracker_title_bar_exit {
+    top: 4px;
+}
+
+#round_number_label{
+    position: relative;
+    z-index:  1;
+}
+#round_number_label:before{
+    content: '';
+    left: 0;
+    right: 0;
+    height: 6px;
+    position: absolute;
+    z-index: -1;
+    top: -6px;
+    background: linear-gradient(to top, #0005 5%, #0000 40%);
+}
+
+
 
 #combat_tracker_inside .ui-resizable-ne,
 #combat_tracker_inside .ui-resizable-se,
@@ -2344,17 +2403,42 @@ button.avtt-roll-button {
 #combat_tracker_inside .ui-resizable-w{
    left: -7px;
 }
-/* resizeable test borders
-[class*="ui-resizable"]{
-    border:  1px dotted #ddd;
-}*/
-#combat_area tr td:last-of-type{
-    padding-right: 5px;
-}
 #combat_tracker_inside .ui-resizable-se{
     width: 10px;
     height: 10px;
 }
+
+#resizeDragMon .ui-resizable-s,
+#resizeDragMon .ui-resizable-sw,
+#sheet .ui-resizable-s,
+#sheet .ui-resizable-sw,{
+    bottom:-7px;  
+}
+
+#resizeDragMon .ui-resizable-se,
+#sheet .ui-resizable-se{
+    height: 10px;
+    width: 10px;
+    right: -7px;
+    bottom: -10px;
+}
+#resizeDragMon .ui-resizable-e,
+#resizeDragMon .ui-resizable-w,
+#sheet .ui-resizable-e,
+#sheet .ui-resizable-w   {
+    height: calc(100% + 4px);  
+}
+
+/*Resizable Handle Test code */
+/*[class*="ui-resizable"]{
+    border:  1px dotted #ddd;
+}*/
+
+[class*="ui-resizable"]
+#combat_area tr td:last-of-type{
+    padding-right: 5px;
+}
+
 #combat_tracker_inside{
     width: 265px;
 }

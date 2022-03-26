@@ -939,7 +939,7 @@ function init_sheet(){
 	var buttonleft = 0;
 	var buttonprev = 0;
 
-	var close_button = $("<button>X</button>");
+	/*var close_button = $("<button>X</button>");
 
 	close_button.css("position", "absolute");
 	close_button.css('display', 'none');
@@ -952,7 +952,14 @@ function init_sheet(){
 	close_button.click(function() {
 		close_player_sheet();
 	});
-	container.append(close_button);
+	container.append(close_button);*/
+
+
+	const player_close_title_button=$('<div id="player_close_title_button"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>')
+	container.append(player_close_title_button);
+	player_close_title_button.click(function() {
+		close_player_sheet();
+	});
 
 	var reload_button = $("<button>🗘</button>");
 
@@ -969,7 +976,7 @@ function init_sheet(){
 	});
 	container.append(reload_button);
 	
-	var resize_button = $("<button>⇹</button>");
+	/*var resize_button = $("<button>⇹</button>");
 
 	resize_button.css("position", "absolute");
 	resize_button.css('display', 'none');
@@ -984,7 +991,7 @@ function init_sheet(){
 			container.addClass("thin");
 		}
 	});
-	container.append(resize_button);
+	container.append(resize_button);*/
 
 	//container.height($(".sidebar__inner").height() - 20);
 
