@@ -1802,6 +1802,124 @@ function token_context_menu_expanded(tokenIds) {
 	}
 	body.append(sizeInputs);
 
+	//image scaling size
+	let imageSizeInput = $(`<input class="image-scale-input-number" type="number" max="6" min="0.2" step="0.1" title="Token Image Scale" placeholder="1.0" name="Image Scale">`);
+	let imageSizeInputRange = $(`<input class="image-scale-input-range" type="range" value="1" min="0.2" max="6" step="0.1"/>`);
+	let tokenImageScales = tokens.map(t => t.options.imageSize);
+	if(tokenImageScales.length === 1) {
+		imageSizeInput.val(tokenImageScales[0] || 1);	
+		imageSizeInputRange.val(tokenImageScales[0] || 1);
+	}
+	imageSizeInput.on('keyup', function(event) {
+		var imageSize;
+		if(event.target.value <= 6 && event.target.value >= 0.2) { 
+			imageSize = event.target.value;
+		}
+		else if(event.target.value > 6){
+			imageSize = 6;
+		}
+		else if(event.target.value < 0.2){
+			imageSize = 0.2;
+		}
+		if (event.key == "Enter") {
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+			tokens.forEach(token => {
+				token.options.imageSize = imageSize;
+				token.place_sync_persist();
+			});
+		}
+		imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInput.on('focusout', function(event) {
+		var imageSize;
+		if(event.target.value <= 6 && event.target.value >= 0.2) { 
+			imageSize = event.target.value;
+		}
+		else if(event.target.value > 6){
+			imageSize = 6;
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+		}
+		else if(event.target.value < 0.2){
+			imageSize = 0.2;
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+		}	
+		tokens.forEach(token => {
+			token.options.imageSize = imageSize;
+			token.place_sync_persist();
+		});
+
+		imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInput.on(' input change', function(){
+   	 	imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInputRange.on(' input change', function(){
+   	 	imageSizeInput.val(imageSizeInputRange.val());
+	});
+	imageSizeInputRange.on('mouseup', function(){
+   	 	let imageSize = imageSizeInputRange.val();
+		tokens.forEach(token => {
+			token.options.imageSize = imageSize;
+			token.place_sync_persist();
+		});
+	});
+	let imageSizeWrapper = $(`
+		<div class="token-image-modal-url-label-wrapper image-size-wrapper" style="margin: 10px 0 10px 0">
+			<div class="token-image-modal-footer-title image-size-title">Token Image Scale</div>
+		</div>
+	`);
+	imageSizeWrapper.append(imageSizeInput); // Beside Label
+	imageSizeWrapper.append(imageSizeInputRange); // input below label
+	body.append(imageSizeWrapper);
+
+//border color selections
+	let borderColorInput = $(`<input class="border-color-input" type="color" value="#ddd"/>`);
+	let tokenBorderColors = tokens.map(t => t.options.color);
+	if(tokenBorderColors.length === 1) {
+		borderColorInput.val(tokenBorderColors[0] || "#dddddd");	
+	}
+	let borderColorWrapper = $(`
+		<div class="token-image-modal-url-label-wrapper border-color-wrapper" style="margin: 10px 0 10px 0">
+			<div class="token-image-modal-footer-title border-color-title">Border Color</div>
+		</div>
+	`);
+	borderColorWrapper.append(borderColorInput); 
+	body.append(borderColorWrapper);
+	colorPicker = $(".border-color-input");
+	colorPicker.spectrum({
+		type: "color",
+		showInput: true,
+		showInitial: true,
+		containerClassName: 'prevent-sidebar-modal-close',
+		clickoutFiresChange: false,
+		color: tokens[0].options.color
+	});
+	const borderColorPickerChange = function(e, tinycolor) {
+		let borderColor = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
+		if (e.type === 'change') {
+			tokens.forEach(token => {
+				token.options.color = borderColor;
+				$("#combat_area tr[data-target=" + token.options.id + "] img[class*='Avatar']").css("border-color", borderColor);
+				token.place_sync_persist();
+			});
+		}
+		else {
+			tokens.forEach(token => {
+				let selector = "div[data-id='" + token.options.id + "']";
+				let html = $("#tokens").find(selector);
+				let options = Object.assign({}, token.options);
+				token.options.color = borderColor;
+				
+				token.place_sync_persist();	
+			});
+		}
+	};
+	colorPicker.on('dragstop.spectrum', borderColorPickerChange);   // update the token as the player messes around with colors
+	colorPicker.on('change.spectrum', borderColorPickerChange); // commit the changes when the user clicks the submit button
+	colorPicker.on('hide.spectrum', borderColorPickerChange);   // the hide event includes the original color so let's change it back when we get it
 
 	// options
 	body.append("<h3 class='token-image-modal-footer-title' style='margin-top: 30px;'>Options</h3>");
@@ -1814,6 +1932,7 @@ function token_context_menu_expanded(tokenIds) {
 		{ name: "hidestat", label: "Hide Player HP/AC from players", enabledDescription:"Token stats are hidden from players", disabledDescription: "Token stats are visible to players" },
 		{ name: "disableborder", label: "Disable Border", enabledDescription:"Token has no border", disabledDescription: "Token has a random coloured border"  },
 		{ name: "disableaura", label: "Disable Health Meter", enabledDescription:"Token has no health glow", disabledDescription: "Token has health glow corresponding with their current health" },
+		{ name: "disablehpbar", label: "Disable Token HP% Bar", enabledDescription:"Token has no hp bar", disabledDescription: "Token has a hp bar" },
 		{ name: "revealname", label: "Show name to players", enabledDescription:"Token on hover name is visible to players", disabledDescription: "Token name is hidden to players" },
 		{ name: "legacyaspectratio", label: "Ignore Image Aspect Ratio", enabledDescription:"Token will stretch non-square images to fill the token space", disabledDescription: "Token will respect the aspect ratio of the image provided" },
 		{ name: "player_owned", label: "Player access to sheet/stats", enabledDescription:"Tokens' sheet is accessible to players via RMB click on token. If token stats is visible to players, players can modify the hp of the token", disabledDescription: "Tokens' sheet is not accessible to players. Players can't modify token stats"}

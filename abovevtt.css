@@ -2964,6 +2964,37 @@ button.avtt-roll-button {
 
 /*end combat tracker face lift*/
 
+.token>img {
+    transition: max-height 0.2s linear, max-width 0.2s linear;
+    filter:  drop-shadow(var(--token-border-color) -1px 0px 1px) drop-shadow(var(--token-border-color) 1px 0px 1px) drop-shadow(var(--token-border-color) 0px 1px 1px) drop-shadow(var(--token-border-color) 0px -1px 1px) drop-shadow(var(--token-hp-aura-color) 1px 0px 2px) drop-shadow(var(--token-hp-aura-color) 0px 1px 2px) drop-shadow(var(--token-hp-aura-color) 0px -1px 2px) drop-shadow(var(--token-hp-aura-color) -1px 0px 2px) drop-shadow(var(--token-temp-hp) 1px 0px 2px) drop-shadow(var(--token-temp-hp) -1px 0px 2px) drop-shadow(var(--token-temp-hp) 0px -1px 2px) drop-shadow(var(--token-temp-hp) 0px 1px 2px);
+}
+.image-size-wrapper,
+.border-color-wrapper {
+    display: block;
+}
+.image-size-title,
+.border-color-title {
+    display:  inline-block;
+}
+.image-scale-input-number {
+    float: right;
+    padding-left: 5px;
+    width: 48px;
+    height: 24px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+}
+.border-color-input ~ .sp-replacer{
+    float:  right;
+    width: 48px;
+    height: 24px;
+    border-radius: 5px;
+    padding: 0;
+}
+.image-scale-input-range {
+    width: 100%;
+}
+
 #prewiz, 
 #wizard_popup{
     z-index: 58000;
@@ -2998,6 +3029,24 @@ button.avtt-roll-button {
 .context-menu-icon-bardic-inspiration:before,
 .context-menu-icon-hasted:before {
     background-position: center;
+}
+
+.VTTToken img ~ .hpbar:after {
+    display: var(--token-hpbar-display);
+    transition: none;
+    position: absolute;
+    width: 100%;
+    visibility: visible;
+    height: 6px;
+    width: 100%;
+    bottom: -6px;
+    left: 0px;
+    right: 0px;
+    content: '';
+    border: 1px solid #000;
+    background-color: #0b0b0ddd !important;
+    background-image: linear-gradient(to left, transparent calc(100% - var(--hp-percentage)), var(--token-hpbar-aura-color) 0%, var(--token-hpbar-aura-color) 100%) !important;
+    box-shadow: inset 0px 0px 0px 1px var(--token-temp-hpbar), 0px 0px 3px 1px var(--token-temp-hpbar);
 }
 
 .button-loading::after {

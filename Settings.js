@@ -149,6 +149,12 @@ function init_settings(){
 			disabledDescription: 'New tokens will have an aura around them that represents their current health'
 		},
 		{
+			name: 'disablehpbar', 
+			label: 'Disable Token HP% Bar', 
+			enabledDescription:'Token has no HP% bar', 
+			disabledDescription: 'Token has a HP% bar'
+		},
+		{
 			name: 'revealname',
 			label: 'Show name to players',
 			enabledDescription: 'New tokens will have their name visible to players',
