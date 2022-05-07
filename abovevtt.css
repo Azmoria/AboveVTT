@@ -1448,9 +1448,8 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     background-color: #fff;
 }
 #conditions-flyout li.markers-icon {
-
     padding-left: 0.2em;
-    margin: 0.2em 0;
+    margin: 1px 0px;
 }
 #conditions-flyout li .color-condition {
     width: 75%;
@@ -1462,7 +1461,7 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     top: 50%;
     left: 0;
     width: 2em;
-        font-family: "Material Icons", sans-serif;
+    font-family: "Material Icons", sans-serif;
     font-size: 1em;
     font-style: normal;
     font-weight: normal;
@@ -1635,8 +1634,10 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
 .markers-icon:before,
 .context-menu-markers-icon:before {
     display: inline-block;
-    width: 16px;
-    height: 16px;
+    width: 19px;
+    height: 19px;
+    top: 4px;
+    position: relative;
     margin-right: 5px;
     content: "";
     background-size: 100%;
