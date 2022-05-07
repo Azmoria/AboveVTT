@@ -1448,14 +1448,20 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     background-color: #fff;
 }
 #conditions-flyout li.markers-icon {
-    padding-left: 0;
+    padding-left: 0.2em;
+    margin: 1px 0px;
+}
+#conditions-flyout li .color-condition {
+    width: 75%;
+    height: 75%;
+    position: absolute;
 }
 #conditions-flyout li.icon-condition::before {
     position: absolute;
     top: 50%;
     left: 0;
     width: 2em;
-    font-family: "context-menu-icons";
+    font-family: "Material Icons", sans-serif;
     font-size: 1em;
     font-style: normal;
     font-weight: normal;
@@ -1544,15 +1550,19 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     margin-top: -5px;
     margin-bottom: -10px;
 }
-[class^="icon"].single-active:after,
+
+.markers-icon.single-active:after,
+.icon-condition.single-active:after,
 .context-menu-icon-condition.single-active:after {
     content: "\e876";
 }
-[class^="icon"].all-active:after,
+.markers-icon.all-active:after,
+.icon-condition.all-active:after,
 .context-menu-icon-condition.all-active:after {
     content: "\e6b1";
 }
-[class^="icon"].some-active:after,
+.markers-icon.some-active:after,
+.icon-condition.some-active:after,
 .context-menu-icon-condition.some-active:after {
     content: "\f1c2";
 }
@@ -1624,8 +1634,10 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
 .markers-icon:before,
 .context-menu-markers-icon:before {
     display: inline-block;
-    width: 16px;
-    height: 16px;
+    width: 19px;
+    height: 19px;
+    top: 4px;
+    position: relative;
     margin-right: 5px;
     content: "";
     background-size: 100%;
@@ -2117,7 +2129,6 @@ h5.token-image-modal-footer-title:after {
 .token-image-modal-url-label-wrapper {
     display: flex;
     flex-direction: row;
-    margin-bottom: 6px;
     width: 100%;
 }
 .sidebar-panel-footer-horizontal-wrapper .sidebar-panel-footer-button {
@@ -2743,7 +2754,6 @@ button.avtt-roll-button {
 .menu-outer-aura,
 .menu-inner-aura {
     display: flex;
-    margin: 2px 2px;
     align-self: center;
     line-height: 20px;
 }   
@@ -3227,6 +3237,15 @@ button.avtt-roll-button {
 #tokenOptionsContainer button:hover {
     background-color: rgba(41, 128, 185);
     color: #ddd;
+}
+
+#conditions-flyout li{
+    font-size: 14px;
+}
+#conditions-flyout li.icon-close-red:before{
+    font-size: 24px;
+    margin: 0px;
+    left: -5px;
 }
 
 .flyout-from-menu-item:hover {

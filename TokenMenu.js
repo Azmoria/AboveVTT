@@ -1725,6 +1725,12 @@ function context_menu_flyout(id, hoverEvent, buildFunction) {
 		return;
 	}
 
+	try {
+		clearTimeout(window.context_menu_flyout_timer);
+	} catch (e) {
+		console.debug("failed to clear window.context_menu_flyout_timer", window.context_menu_flyout_timer);
+	}
+
 	if (hoverEvent.type === "mouseenter") {
 		let flyout = $(`<div id='${id}' class='context-menu-flyout'></div>`);
 		$(`.context-menu-flyout`).remove(); // never duplicate
@@ -1754,6 +1760,7 @@ function context_menu_flyout(id, hoverEvent, buildFunction) {
 			left: contextMenu.width(),
 			top: flyoutTop,
 		});
+
 		if ($(".context-menu-flyout")[0].getBoundingClientRect().top < 0) {
 			flyout.css("top", 0)
 		}
@@ -1860,188 +1867,22 @@ function token_context_menu_expanded(tokenIds, e) {
 		})
 	});
 	body.append(conditionsRow);
+	let adjustmentsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Adjustments</div></div>`);
+	adjustmentsRow.hover(function (hoverEvent) {
+		context_menu_flyout("adjustments-flyout", hoverEvent, function(flyout) {
+			flyout.append(build_adjustments_flyout_menu(tokenIds));
+		})
+	});
+	body.append(adjustmentsRow);
 
-
-	// name
-	let tokenNames = tokens.map(t => t.options.name);
-	let uniqueNames = [...new Set(tokenNames)];
-	let nameInput = $(`<input title="Token Name" placeholder="Token Name" name="name" type="text" />`);
-	if (uniqueNames.length === 1) {
-		nameInput.val(tokenNames[0]);
-	} else {
-		nameInput.attr("placeholder", "Multiple Values");
-	}
-
-	nameInput.on('keyup', function(event) {
-		let newName = event.target.value;
-		if (event.key == "Enter" && newName !== undefined && newName.length > 0) {
-			tokens.forEach(token => {
-				token.options.name = newName;
-				token.place_sync_persist();
-			});
-		}
-	});
-	nameInput.on('focusout', function(event) {
-		let newName = event.target.value;
-		if (newName !== undefined && newName.length > 0) {
-			tokens.forEach(token => {
-				token.options.name = newName;
-				token.place_sync_persist();
-			});
-		}
-	});
-	let nameWrapper = $(`
-		<div class="token-image-modal-url-label-wrapper">
-			<div class="token-image-modal-footer-title">Token Name</div>
-		</div>
-	`);
-	nameWrapper.append(nameInput); // input below label
-	body.append(nameWrapper);
-
-
-	// size
-	let tokenSizes = tokens.map(t => t.gridSize());
-	let uniqueSizes = [...new Set(tokenSizes)];
-	console.log("uniqueSizes", uniqueSizes);
-	let sizeInputs = build_token_size_input(1, function (newSize) {
-		tokens.forEach(token => {
-			if (newSize === 0) {
-				// tiny comes back as 0 but it's actually 0.5
-				token.size(Math.round(window.CURRENT_SCENE_DATA.hpps) * 0.5);
-			} else if (!isNaN(newSize)) {
-				token.size(Math.round(window.CURRENT_SCENE_DATA.hpps) * newSize);
-			} else {
-				console.log(`not updating tokens with size ${newSize}`); // probably undefined because we inject the "multiple" options below
-			}
-		});
-	});
-	if (uniqueSizes.length === 1) {
-		sizeInputs.find(`select > option[value="${uniqueSizes[0]}"]`).attr("selected", "selected");
-	} else {
-		sizeInputs.find("select").prepend(`<option value="multiple" selected>Multiple Values</option>`);
-	}
-	body.append(sizeInputs);
-
-	//image scaling size
-	let imageSizeInput = $(`<input class="image-scale-input-number" type="number" max="6" min="0.2" step="0.1" title="Token Image Scale" placeholder="1.0" name="Image Scale">`);
-	let imageSizeInputRange = $(`<input class="image-scale-input-range" type="range" value="1" min="0.2" max="6" step="0.1"/>`);
-	let tokenImageScales = tokens.map(t => t.options.imageSize);
-	if(tokenImageScales.length === 1) {
-		imageSizeInput.val(tokenImageScales[0] || 1);	
-		imageSizeInputRange.val(tokenImageScales[0] || 1);
-	}
-	imageSizeInput.on('keyup', function(event) {
-		var imageSize;
-		if(event.target.value <= 6 && event.target.value >= 0.2) { 
-			imageSize = event.target.value;
-		}
-		else if(event.target.value > 6){
-			imageSize = 6;
-		}
-		else if(event.target.value < 0.2){
-			imageSize = 0.2;
-		}
-		if (event.key == "Enter") {
-			imageSizeInput.val(imageSize);	
-			imageSizeInputRange.val(imageSize);
-			tokens.forEach(token => {
-				token.options.imageSize = imageSize;
-				token.place_sync_persist();
-			});
-		}
-		imageSizeInputRange.val(imageSizeInput.val());
-	});
-	imageSizeInput.on('focusout', function(event) {
-		var imageSize;
-		if(event.target.value <= 6 && event.target.value >= 0.2) { 
-			imageSize = event.target.value;
-		}
-		else if(event.target.value > 6){
-			imageSize = 6;
-			imageSizeInput.val(imageSize);	
-			imageSizeInputRange.val(imageSize);
-		}
-		else if(event.target.value < 0.2){
-			imageSize = 0.2;
-			imageSizeInput.val(imageSize);	
-			imageSizeInputRange.val(imageSize);
-		}	
-		tokens.forEach(token => {
-			token.options.imageSize = imageSize;
-			token.place_sync_persist();
-		});
-
-		imageSizeInputRange.val(imageSizeInput.val());
-	});
-	imageSizeInput.on(' input change', function(){
-   	 	imageSizeInputRange.val(imageSizeInput.val());
-	});
-	imageSizeInputRange.on(' input change', function(){
-   	 	imageSizeInput.val(imageSizeInputRange.val());
-	});
-	imageSizeInputRange.on('mouseup', function(){
-   	 	let imageSize = imageSizeInputRange.val();
-		tokens.forEach(token => {
-			token.options.imageSize = imageSize;
-			token.place_sync_persist();
-		});
-	});
-	let imageSizeWrapper = $(`
-		<div class="token-image-modal-url-label-wrapper image-size-wrapper">
-			<div class="token-image-modal-footer-title image-size-title">Token Image Scale</div>
-		</div>
-	`);
-	imageSizeWrapper.append(imageSizeInput); // Beside Label
-	imageSizeWrapper.append(imageSizeInputRange); // input below label
-	body.append(imageSizeWrapper);
-
-	//border color selections
-	let borderColorInput = $(`<input class="border-color-input" type="color" value="#ddd"/>`);
-	let tokenBorderColors = tokens.map(t => t.options.color);
-	if(tokenBorderColors.length === 1) {
-		borderColorInput.val(tokenBorderColors[0] || "#dddddd");	
-	}
-	let borderColorWrapper = $(`
-		<div class="token-image-modal-url-label-wrapper border-color-wrapper">
-			<div class="token-image-modal-footer-title border-color-title">Border Color</div>
-		</div>
-	`);
-	borderColorWrapper.append(borderColorInput); 
-	body.append(borderColorWrapper);
-	let colorPicker = $(".border-color-input");
-	colorPicker.spectrum({
-		type: "color",
-		showInput: true,
-		showInitial: true,
-		containerClassName: 'prevent-sidebar-modal-close',
-		clickoutFiresChange: true,
-		color: tokens[0].options.color
-	});
-	const borderColorPickerChange = function(event, tinycolor) {
-		let borderColor = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-		if (event.type === 'change') {
-			tokens.forEach(token => {
-				token.options.color = borderColor;
-				$("#combat_area tr[data-target='" + token.options.id + "'] img[class*='Avatar']").css("border-color", borderColor);
-				token.place_sync_persist();
-			});
-		}
-		else {
-			tokens.forEach(token => {
-				let selector = "div[data-id='" + token.options.id + "']";
-				let html = $("#tokens").find(selector);
-				let options = Object.assign({}, token.options);
-				token.options.color = borderColor;
-				
-				token.place_sync_persist();	
-			});
-		}
-	};
-	colorPicker.on('dragstop.spectrum', borderColorPickerChange);   // update the token as the player messes around with colors
-	colorPicker.on('change.spectrum', borderColorPickerChange); // commit the changes when the user clicks the submit button
-	colorPicker.on('hide.spectrum', borderColorPickerChange);   // the hide event includes the original color so let's change it back when we get it
 	// Auras (torch, lantern, etc)
-	body.append(build_token_auras_inputs(tokens));
+	let aurasRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Auras</div></div>`);
+	aurasRow.hover(function (hoverEvent) {
+		context_menu_flyout("adjustments-flyout", hoverEvent, function(flyout) {
+			flyout.append(build_token_auras_inputs(tokenIds));
+		})
+	});
+	body.append(aurasRow);
 
 	if(window.DM) {
 		let optionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Options</div></div>`);
@@ -2105,8 +1946,15 @@ function token_context_menu_expanded(tokenIds, e) {
  * @param tokens {Array<Token>} the token objects that the aura configuration HTML is for
  * @returns {*|jQuery|HTMLElement}
  */
-function build_token_auras_inputs(tokens) {
-
+function build_token_auras_inputs(tokenIds) {
+	let tokens = tokenIds.map(id => window.TOKEN_OBJECTS[id]).filter(t => t !== undefined);
+	let body = $("<div></div>");
+	body.css({
+		width: "290px", // once we add Markers, make this wide enough to contain them all
+		padding: "5px",
+		display: "flex",
+		"flex-direction": "row"
+	})
 
 	let auraVisibleValues = tokens.map(t => t.options.auraVisible);
 	let uniqueAuraVisibleValues = [...new Set(auraVisibleValues)];
@@ -2284,8 +2132,9 @@ function build_token_auras_inputs(tokens) {
 		console.log("removing sidebar modal!!!");
 		colorPickers.spectrum("destroy");
 	});
+	body.append(wrapper);
 
-	return wrapper;
+	return body;
 }
 
 function build_conditions_and_markers_flyout_menu(tokenIds) {
@@ -2300,23 +2149,26 @@ function build_conditions_and_markers_flyout_menu(tokenIds) {
 	})
 
 	const buildConditionItem = function(conditionName) {
-		let conditionItem = $(`
-			<li class="${determine_condition_item_classname(tokenIds, conditionName)} icon-${conditionName.toLowerCase().replaceAll("(", "-").replaceAll(")", "")}">
-				<span>${conditionName}</span>
-			</li>
-		`);
+
+		let conditionItem = $(`<li class="${determine_condition_item_classname(tokenIds, conditionName)} icon-${conditionName.toLowerCase().replaceAll("(", "-").replaceAll(")", "").replaceAll(" ", "-")}"></li>`);
+		if (conditionName.startsWith("#")) {
+			let colorItem = $(`<span class="color-condition"></span>`);
+			conditionItem.append(colorItem);
+			colorItem.css("background-color", conditionName);
+		} else {
+			conditionItem.append(`<span>${conditionName}</span>`);
+		}
+
 		conditionItem.on("click", function (clickEvent) {
 			let clickedItem = $(clickEvent.currentTarget);
 			let deactivateAll = clickedItem.hasClass("some-active");
 			tokens.forEach(token => {
-				if (!token.isPlayer()) { // unfortunately, we can't set conditions on player tokens
-					if (deactivateAll || token.hasCondition(conditionName)) {
-						token.removeCondition(conditionName)
-					} else {
-						token.addCondition(conditionName)
-					}
-					token.place_sync_persist();
+				if (deactivateAll || token.hasCondition(conditionName)) {
+					token.removeCondition(conditionName)
+				} else {
+					token.addCondition(conditionName)
 				}
+				token.place_sync_persist();
 			});
 			clickedItem.removeClass("single-active all-active some-active active-condition");
 			clickedItem.addClass(determine_condition_item_classname(tokenIds, conditionName));
@@ -2340,8 +2192,204 @@ function build_conditions_and_markers_flyout_menu(tokenIds) {
 		let conditionItem = buildConditionItem(conditionName);
 		conditionItem.addClass("markers-icon");
 		markersList.append(conditionItem);
+
 	});
 
+	let removeAllItem = $(`<li class="icon-condition icon-close-red"><span>Remove All</span></li>`);
+	removeAllItem.on("click", function () {
+		$(".active-condition").click(); // anything that is active should be deactivated.
+
+	});
+	conditionsList.prepend(removeAllItem);
+
+	return body;
+}
+
+function build_adjustments_flyout_menu(tokenIds) {
+	let tokens = tokenIds.map(id => window.TOKEN_OBJECTS[id]).filter(t => t !== undefined);
+	let body = $("<div></div>");
+	body.css({
+		width: "320px",
+		padding: "5px"
+	});
+	// name
+	let tokenNames = tokens.map(t => t.options.name);
+	let uniqueNames = [...new Set(tokenNames)];
+	let nameInput = $(`<input title="Token Name" placeholder="Token Name" name="name" type="text" />`);
+	if (uniqueNames.length === 1) {
+		nameInput.val(tokenNames[0]);
+	} else {
+		nameInput.attr("placeholder", "Multiple Values");
+	}
+
+	nameInput.on('keyup', function(event) {
+		let newName = event.target.value;
+		if (event.key == "Enter" && newName !== undefined && newName.length > 0) {
+			tokens.forEach(token => {
+				token.options.name = newName;
+				token.place_sync_persist();
+			});
+		}
+	});
+	nameInput.on('focusout', function(event) {
+		let newName = event.target.value;
+		if (newName !== undefined && newName.length > 0) {
+			tokens.forEach(token => {
+				token.options.name = newName;
+				token.place_sync_persist();
+			});
+		}
+	});
+	let nameWrapper = $(`
+		<div class="token-image-modal-url-label-wrapper">
+			<div class="token-image-modal-footer-title">Token Name</div>
+		</div>
+	`);
+	nameWrapper.append(nameInput); // input below label
+	body.append(nameWrapper);
+
+
+	// size
+	let tokenSizes = tokens.map(t => t.gridSize());
+	let uniqueSizes = [...new Set(tokenSizes)];
+	console.log("uniqueSizes", uniqueSizes);
+	let sizeInputs = build_token_size_input(1, function (newSize) {
+		tokens.forEach(token => {
+			if (newSize === 0) {
+				// tiny comes back as 0 but it's actually 0.5
+				token.size(Math.round(window.CURRENT_SCENE_DATA.hpps) * 0.5);
+			} else if (!isNaN(newSize)) {
+				token.size(Math.round(window.CURRENT_SCENE_DATA.hpps) * newSize);
+			} else {
+				console.log(`not updating tokens with size ${newSize}`); // probably undefined because we inject the "multiple" options below
+			}
+		});
+	});
+	if (uniqueSizes.length === 1) {
+		sizeInputs.find(`select > option[value="${uniqueSizes[0]}"]`).attr("selected", "selected");
+	} else {
+		sizeInputs.find("select").prepend(`<option value="multiple" selected>Multiple Values</option>`);
+	}
+	body.append(sizeInputs);
+
+	//image scaling size
+	let imageSizeInput = $(`<input class="image-scale-input-number" type="number" max="6" min="0.2" step="0.1" title="Token Image Scale" placeholder="1.0" name="Image Scale">`);
+	let imageSizeInputRange = $(`<input class="image-scale-input-range" type="range" value="1" min="0.2" max="6" step="0.1"/>`);
+	let tokenImageScales = tokens.map(t => t.options.imageSize);
+	if(tokenImageScales.length === 1) {
+		imageSizeInput.val(tokenImageScales[0] || 1);	
+		imageSizeInputRange.val(tokenImageScales[0] || 1);
+	}
+	imageSizeInput.on('keyup', function(event) {
+		var imageSize;
+		if(event.target.value <= 6 && event.target.value >= 0.2) { 
+			imageSize = event.target.value;
+		}
+		else if(event.target.value > 6){
+			imageSize = 6;
+		}
+		else if(event.target.value < 0.2){
+			imageSize = 0.2;
+		}
+		if (event.key == "Enter") {
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+			tokens.forEach(token => {
+				token.options.imageSize = imageSize;
+				token.place_sync_persist();
+			});
+		}
+		imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInput.on('focusout', function(event) {
+		var imageSize;
+		if(event.target.value <= 6 && event.target.value >= 0.2) { 
+			imageSize = event.target.value;
+		}
+		else if(event.target.value > 6){
+			imageSize = 6;
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+		}
+		else if(event.target.value < 0.2){
+			imageSize = 0.2;
+			imageSizeInput.val(imageSize);	
+			imageSizeInputRange.val(imageSize);
+		}	
+		tokens.forEach(token => {
+			token.options.imageSize = imageSize;
+			token.place_sync_persist();
+		});
+
+		imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInput.on(' input change', function(){
+   	 	imageSizeInputRange.val(imageSizeInput.val());
+	});
+	imageSizeInputRange.on(' input change', function(){
+   	 	imageSizeInput.val(imageSizeInputRange.val());
+	});
+	imageSizeInputRange.on('mouseup', function(){
+   	 	let imageSize = imageSizeInputRange.val();
+		tokens.forEach(token => {
+			token.options.imageSize = imageSize;
+			token.place_sync_persist();
+		});
+	});
+	let imageSizeWrapper = $(`
+		<div class="token-image-modal-url-label-wrapper image-size-wrapper">
+			<div class="token-image-modal-footer-title image-size-title">Token Image Scale</div>
+		</div>
+	`);
+	imageSizeWrapper.append(imageSizeInput); // Beside Label
+	imageSizeWrapper.append(imageSizeInputRange); // input below label
+	body.append(imageSizeWrapper);
+
+	//border color selections
+	let borderColorInput = $(`<input class="border-color-input" type="color" value="#ddd"/>`);
+	let tokenBorderColors = tokens.map(t => t.options.color);
+	if(tokenBorderColors.length === 1) {
+		borderColorInput.val(tokenBorderColors[0] || "#dddddd");	
+	}
+	let borderColorWrapper = $(`
+		<div class="token-image-modal-url-label-wrapper border-color-wrapper">
+			<div class="token-image-modal-footer-title border-color-title">Border Color</div>
+		</div>
+	`);
+	borderColorWrapper.append(borderColorInput); 
+	body.append(borderColorWrapper);
+	let colorPicker = $(borderColorInput);
+	colorPicker.spectrum({
+		type: "color",
+		showInput: true,
+		showInitial: true,
+		containerClassName: 'prevent-sidebar-modal-close',
+		clickoutFiresChange: true,
+		color: tokens[0].options.color
+	});
+	const borderColorPickerChange = function(event, tinycolor) {
+		let borderColor = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
+		if (event.type === 'change') {
+			tokens.forEach(token => {
+				token.options.color = borderColor;
+				$("#combat_area tr[data-target='" + token.options.id + "'] img[class*='Avatar']").css("border-color", borderColor);
+				token.place_sync_persist();
+			});
+		}
+		else {
+			tokens.forEach(token => {
+				let selector = "div[data-id='" + token.options.id + "']";
+				let html = $("#tokens").find(selector);
+				let options = Object.assign({}, token.options);
+				token.options.color = borderColor;
+				
+				token.place_sync_persist();	
+			});
+		}
+	};
+	colorPicker.on('dragstop.spectrum', borderColorPickerChange);   // update the token as the player messes around with colors
+	colorPicker.on('change.spectrum', borderColorPickerChange); // commit the changes when the user clicks the submit button
+	colorPicker.on('hide.spectrum', borderColorPickerChange);   // the hide event includes the original color so let's change it back when we get it
 	return body;
 }
 
