@@ -2210,10 +2210,10 @@ function build_menu_stat_inputs(tokenIds) {
 	let elev = '';
 
 	if(tokens.length == 1){
-		hp = tokens[0].options.hp;
-		max_hp = tokens[0].options.max_hp;
-		ac = tokens[0].options.ac;
-		elev = tokens[0].options.elev;
+		hp = (typeof tokens[0].options.hp !== 'undefined') ? tokens[0].options.hp : '';
+		max_hp = (typeof tokens[0].options.max_hp !==  'undefined') ? tokens[0].options.max_hp : '';
+		ac = (typeof tokens[0].options.ac !== 'undefined') ? tokens[0].options.ac : '';
+		elev = (typeof tokens[0].options.elev !== 'undefined') ? tokens[0].options.elev : '';
 	}
 
 	let hpMenuInput = $(`<label class='menu-input-label'>HP<input value='${hp}' class='menu-input' type="text"></label>`);
