@@ -1967,7 +1967,7 @@ function token_context_menu_expanded(tokenIds, e) {
 	}
 
 	if(window.DM) {
-		let deleteTokenMenuButton = $("<button class='deleteMenuButton'>Delete</button>")
+		let deleteTokenMenuButton = $("<button class='deleteMenuButton icon-close-red material-icons'>Delete</button>")
 	 	body.append(deleteTokenMenuButton);
 	 	deleteTokenMenuButton.off().on("click", function(){
 	 		if(!$(e.target).hasClass("tokenselected")){
@@ -2242,73 +2242,122 @@ function build_menu_stat_inputs(tokenIds) {
 	body.append(hpMenuInput);
 	body.append(maxHpMenuInput);
 
-	
+
+
 
 	hpMenuInput.on('keyup', function(event) {
 		let newValue = event.target.value;
+		let newHP = newValue;
+
 		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
 			tokens.forEach(token => {
-				token.options.hp = newValue;
+				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+					newHP = parseInt(token.options.hp) + parseInt(newValue);
+				}
+				token.options.hp = newHP;
 				token.place_sync_persist();
+				$(".hpMenuInput").val(newHP);
 			});
 		}
 	});
 	hpMenuInput.on('focusout', function(event) {
 		let newValue = event.target.value;
+		let newHP = newValue;
+
 		tokens.forEach(token => {
-			token.options.hp = newValue;
+			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+				newHP = parseInt(token.options.hp) + parseInt(newValue);
+			}
+			token.options.hp = newHP;
 			token.place_sync_persist();
+			$(".hpMenuInput").val(newHP);
 		});
 	});
 
 	maxHpMenuInput.on('keyup', function(event) {
 		let newValue = event.target.value;
+		let newMaxHP = newValue;
+
 		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
 			tokens.forEach(token => {
-				token.options.max_hp = newValue;
+				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+					newMaxHP = parseInt(token.options.max_hp) + parseInt(newValue);
+				}
+				token.options.max_hp = newMaxHP;
 				token.place_sync_persist();
+				$(".maxHpMenuInput").val(newMaxHP);
 			});
 		}
 	});
 	maxHpMenuInput.on('focusout', function(event) {
 		let newValue = event.target.value;
+		let newMaxHP = newValue;
+
 		tokens.forEach(token => {
-			token.options.max_hp = newValue;
+			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+				newMaxHP = parseInt(token.options.max_hp) + parseInt(newValue);
+			}
+			token.options.max_hp = newMaxHP;
 			token.place_sync_persist();
+			$(".maxHpMenuInput").val(newMaxHP);
 		});
 	});
 
 	acMenuInput.on('keyup', function(event) {
 		let newValue = event.target.value;
+		let newAC = newValue;
+
 		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
 			tokens.forEach(token => {
-				token.options.ac = newValue;
+				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+					newAC = parseInt(token.options.ac) + parseInt(newValue);
+				}
+				token.options.ac = newAC;
 				token.place_sync_persist();
+				$(".acMenuInput").val(newAC);
 			});
 		}
 	});
 	acMenuInput.on('focusout', function(event) {
 		let newValue = event.target.value;
+		let newAC = newValue;
+
 		tokens.forEach(token => {
-			token.options.ac = newValue;
+			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+				newAC = parseInt(token.options.ac) + parseInt(newValue);
+			}
+			token.options.ac = newAC;
 			token.place_sync_persist();
+			$(".acMenuInput").val(newAC);
 		});
 	});
 
 	elevMenuInput.on('keyup', function(event) {
 		let newValue = event.target.value;
+		let newElev = newValue;
+
 		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
 			tokens.forEach(token => {
-				token.options.elev = newValue;
+				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+					newElev = parseInt(token.options.elev) + parseInt(newValue);
+				}
+				token.options.elev = newElev;
 				token.place_sync_persist();
+				$(".elevMenuInput").val(newElev);
 			});
 		}
 	});
 	elevMenuInput.on('focusout', function(event) {
 		let newValue = event.target.value;
+		let newElev = newValue;
+
 		tokens.forEach(token => {
-			token.options.elev = newValue;
+			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
+				newElev = parseInt(token.options.elev) + parseInt(newValue);
+			}
+			token.options.elev = newElev;
 			token.place_sync_persist();
+			$(".elevMenuInput").val(newElev);
 		});
 	});
 
@@ -2326,13 +2375,13 @@ function build_notes_flyout_menu(tokenIds) {
 		padding: "5px",
 		"flex-direction": "row"
 	});
-	let editNoteButton = $(`<button>Create Note</button>`)
+	let editNoteButton = $(`<button class="icon-note material-icons">Create Note</button>`)
 	if(tokenIds.length=1){
 		let has_note=id in window.JOURNAL.notes;
 		if(has_note){
-			let viewNoteButton = $(`<button>View Note</button>`)		
-			let deleteNoteButton = $(`<button>Delete Note</button>`)
-			editNoteButton = $(`<button>Edit Note</button>`)
+			let viewNoteButton = $(`<button class="icon-view-note material-icons">View Note</button>`)		
+			let deleteNoteButton = $(`<button class="icon-note-delete material-icons">Delete Note</button>`)
+			editNoteButton = $(`<button class="icon-note material-icons">Edit Note</button>`)
 			body.append(viewNoteButton);
 			body.append(editNoteButton);		
 			body.append(deleteNoteButton);	
@@ -2624,7 +2673,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 	colorPicker.on('hide.spectrum', borderColorPickerChange);   // the hide event includes the original color so let's change it back when we get it
 	
 
-	let changeImageMenuButton = $("<button>Change Token Image</button>")
+	let changeImageMenuButton = $("<button id='changeTokenImage' class='material-icons'>Change Token Image</button>")
 	if(tokens.length == 1 && window.DM){
 		body.append(changeImageMenuButton)
 	}

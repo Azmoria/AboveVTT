@@ -1485,10 +1485,15 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     font-family: "Material Icons", sans-serif !important;
     font-size: 20px !important;
 }
-#tokenOptionsContainer .material-icons:before {
-    right: 8px;
+#tokenOptionsContainer .material-icons:before,
+#adjustments-flyout .material-icons:before {
+    left: 9px;
     position: absolute;
     font-size: 20px;
+    line-height: 20px;
+    font-family: "Material Icons", sans-serif !important;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+
 }
 
 .icon-edit:before,
@@ -1513,6 +1518,13 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
 .context-menu-icon-person:before {
     content: "\e7fd" !important;
 }
+.icon-note-delete:before{
+    content: "\e16c" !important;
+}
+.icon-view-note:before{
+    content: "\e873" !important;
+}
+
 .icon-person-add:before,
 .context-menu-icon-person-add:before {
     content: "\e7fe" !important;
@@ -2757,6 +2769,10 @@ button.avtt-roll-button {
     align-self: center;
     line-height: 20px;
 }   
+.menu-outer-aura,
+.menu-inner-aura{
+    margin: 2px 0px;
+}
 #tokenOptionsContainer div.token-image-modal-url-label-wrapper{
     display: flex;
     align-self: center;
@@ -2788,6 +2804,7 @@ button.avtt-roll-button {
 .menu-outer-aura h3,
 .menu-inner-aura h3{
     min-width: 50px;
+    margin-top: 0px;menu-inner-aura
 }
 
 #round_number_label{
@@ -3228,6 +3245,7 @@ button.avtt-roll-button {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
+    padding-left: 26px;
     height: 24px;
     color: #738694;
     font-family: Roboto,Open Sans,Helvetica,sans-serif;
@@ -3285,6 +3303,25 @@ button.avtt-roll-button {
 #tokenOptionsContainer>button.deleteMenuButton:hover{
     background-color: #D33;
 }
+
+
+#tokenOptionsContainer>button.deleteMenuButton:before{
+    color: #738694 !important;;
+}
+#tokenOptionsContainer>button.deleteMenuButton:hover:before{
+    filter: drop-shadow(0px 0px 2px #000d);
+    color: #ddd !important;
+}
+
+#tokenOptionsContainer button:before{
+    width: 20px;
+    height: 20px;
+}
+
+#adjustments-flyout button#changeTokenImage:before{
+   content: "\e413"; 
+}
+
 
 #conditions-flyout li{
     font-size: 14px;
