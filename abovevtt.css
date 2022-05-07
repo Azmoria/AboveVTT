@@ -1448,20 +1448,14 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     background-color: #fff;
 }
 #conditions-flyout li.markers-icon {
-    padding-left: 0.2em;
-    margin: 1px 0px;
-}
-#conditions-flyout li .color-condition {
-    width: 75%;
-    height: 75%;
-    position: absolute;
+    padding-left: 0;
 }
 #conditions-flyout li.icon-condition::before {
     position: absolute;
     top: 50%;
     left: 0;
     width: 2em;
-    font-family: "Material Icons", sans-serif;
+    font-family: "context-menu-icons";
     font-size: 1em;
     font-style: normal;
     font-weight: normal;
@@ -1550,19 +1544,15 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     margin-top: -5px;
     margin-bottom: -10px;
 }
-
-.markers-icon.single-active:after,
-.icon-condition.single-active:after,
+[class^="icon"].single-active:after,
 .context-menu-icon-condition.single-active:after {
     content: "\e876";
 }
-.markers-icon.all-active:after,
-.icon-condition.all-active:after,
+[class^="icon"].all-active:after,
 .context-menu-icon-condition.all-active:after {
     content: "\e6b1";
 }
-.markers-icon.some-active:after,
-.icon-condition.some-active:after,
+[class^="icon"].some-active:after,
 .context-menu-icon-condition.some-active:after {
     content: "\f1c2";
 }
@@ -1634,10 +1624,8 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
 .markers-icon:before,
 .context-menu-markers-icon:before {
     display: inline-block;
-    width: 19px;
-    height: 19px;
-    top: 4px;
-    position: relative;
+    width: 16px;
+    height: 16px;
     margin-right: 5px;
     content: "";
     background-size: 100%;
@@ -3239,14 +3227,6 @@ button.avtt-roll-button {
 #tokenOptionsContainer button:hover {
     background-color: rgba(41, 128, 185);
     color: #ddd;
-}
-
-#conditions-flyout li{
-    font-size: 14px;
-}
-#conditions-flyout li.icon-close-red:before{
-    font-size: 20px;
-    margin: 0px;
 }
 
 .flyout-from-menu-item:hover {

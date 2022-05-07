@@ -1725,12 +1725,6 @@ function context_menu_flyout(id, hoverEvent, buildFunction) {
 		return;
 	}
 
-	try {
-		clearTimeout(window.context_menu_flyout_timer);
-	} catch (e) {
-		console.debug("failed to clear window.context_menu_flyout_timer", window.context_menu_flyout_timer);
-	}
-
 	if (hoverEvent.type === "mouseenter") {
 		let flyout = $(`<div id='${id}' class='context-menu-flyout'></div>`);
 		$(`.context-menu-flyout`).remove(); // never duplicate
@@ -1760,7 +1754,6 @@ function context_menu_flyout(id, hoverEvent, buildFunction) {
 			left: contextMenu.width(),
 			top: flyoutTop,
 		});
-
 		if ($(".context-menu-flyout")[0].getBoundingClientRect().top < 0) {
 			flyout.css("top", 0)
 		}
@@ -2307,26 +2300,23 @@ function build_conditions_and_markers_flyout_menu(tokenIds) {
 	})
 
 	const buildConditionItem = function(conditionName) {
-
-		let conditionItem = $(`<li class="${determine_condition_item_classname(tokenIds, conditionName)} icon-${conditionName.toLowerCase().replaceAll("(", "-").replaceAll(")", "").replaceAll(" ", "-")}"></li>`);
-		if (conditionName.startsWith("#")) {
-			let colorItem = $(`<span class="color-condition"></span>`);
-			conditionItem.append(colorItem);
-			colorItem.css("background-color", conditionName);
-		} else {
-			conditionItem.append(`<span>${conditionName}</span>`);
-		}
-
+		let conditionItem = $(`
+			<li class="${determine_condition_item_classname(tokenIds, conditionName)} icon-${conditionName.toLowerCase().replaceAll("(", "-").replaceAll(")", "")}">
+				<span>${conditionName}</span>
+			</li>
+		`);
 		conditionItem.on("click", function (clickEvent) {
 			let clickedItem = $(clickEvent.currentTarget);
 			let deactivateAll = clickedItem.hasClass("some-active");
 			tokens.forEach(token => {
-				if (deactivateAll || token.hasCondition(conditionName)) {
-					token.removeCondition(conditionName)
-				} else {
-					token.addCondition(conditionName)
+				if (!token.isPlayer()) { // unfortunately, we can't set conditions on player tokens
+					if (deactivateAll || token.hasCondition(conditionName)) {
+						token.removeCondition(conditionName)
+					} else {
+						token.addCondition(conditionName)
+					}
+					token.place_sync_persist();
 				}
-				token.place_sync_persist();
 			});
 			clickedItem.removeClass("single-active all-active some-active active-condition");
 			clickedItem.addClass(determine_condition_item_classname(tokenIds, conditionName));
@@ -2350,15 +2340,7 @@ function build_conditions_and_markers_flyout_menu(tokenIds) {
 		let conditionItem = buildConditionItem(conditionName);
 		conditionItem.addClass("markers-icon");
 		markersList.append(conditionItem);
-
 	});
-
-	let removeAllItem = $(`<li class="icon-condition icon-close-red"><span>Remove All</span></li>`);
-	removeAllItem.on("click", function () {
-		$(".active-condition").click(); // anything that is active should be deactivated.
-
-	});
-	conditionsList.prepend(removeAllItem);
 
 	return body;
 }
