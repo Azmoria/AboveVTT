@@ -3209,7 +3209,8 @@ button.avtt-roll-button {
 }
 .flyout-from-menu-item,
 #tokenOptionsContainer>button,
-#notes-flyout button   {
+#notes-flyout button,
+#adjustments-flyout button {
     line-height: 24px;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -3217,7 +3218,8 @@ button.avtt-roll-button {
 }
 
 #tokenOptionsContainer>button,
-#notes-flyout button  {
+#notes-flyout button,
+#adjustments-flyout button  {
     background: none;
     font-size: 10px;
     display: flex;
@@ -3230,6 +3232,35 @@ button.avtt-roll-button {
     color: #738694;
     font-family: Roboto,Open Sans,Helvetica,sans-serif;
 }
+#tokenOptionsContainer .menu-input {
+    width: 50px;
+    text-align: center;
+    margin: 5px;
+}
+.menu-input-label{
+    text-align: center;
+    background: none;
+    font-size: 10px;   
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    height: 24px;
+    color: #738694;
+    font-family: Roboto,Open Sans,Helvetica,sans-serif;
+}
+
+#menuStatDiv {
+    width: 100%; 
+    padding: 5px;
+    display: flex;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    margin-bottom: 15px;
+}
+
 #tokenOptionsContainer .material-icons{
     color: #738694;
 }
@@ -3237,13 +3268,14 @@ button.avtt-roll-button {
     color: #ddd;
 }
 #tokenOptionsContainer>button:hover,
-#notes-flyout button:hover {
+#notes-flyout button:hover,
+#adjustments-flyout button:hover   {
     background-color: rgba(41, 128, 185);
     color: #ddd;
 }
-
-
- 
+#tokenOptionsContainer>button.deleteMenuButton:hover{
+    background-color: #D33;
+}
 
 #conditions-flyout li{
     font-size: 14px;

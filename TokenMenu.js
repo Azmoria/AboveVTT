@@ -1879,6 +1879,11 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	body.append(hiddenMenuButton);
 
+	if (tokens.length === 1) {
+		body.append(build_menu_stat_inputs(tokenIds));
+	}
+
+
 
 	let conditionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Conditions / Markers</div></div>`);
 	conditionsRow.hover(function (hoverEvent) {
@@ -1935,6 +1940,35 @@ function token_context_menu_expanded(tokenIds, e) {
         	"top": e.pageY + 'px',
         });
 	}
+
+	let deleteTokenMenuButton = $("<button class='deleteMenuButton'>Delete</button>")
+ 	body.append(deleteTokenMenuButton);
+ 	deleteTokenMenuButton.off().on("click", function(){
+ 		tokens.forEach(token => {
+ 			let id = token.options.id;
+ 			$(`#tokens [data-id='${id}']`).toggleClass("tokenselected", true);
+ 		});
+		$("#tokens .tokenselected").each(function() {
+			id = $(this).attr('data-id');
+			$(this).remove();
+			delete window.ScenesHandler.scene.tokens[id];
+			delete window.TOKEN_OBJECTS[id];
+			$("#aura_" + id.replaceAll("/", "")).remove();
+			
+			if($("#combat_area tr[data-target='"+id+"']").length>0){
+				if( $("#combat_area tr[data-target='"+id+"']").attr('data-current')=="1"){
+					$("#combat_next_button").click();
+				}
+				$("#combat_area tr[data-target='"+id+"']").remove(); // delete token from the combat tracker if it's there
+			}
+	  	draw_selected_token_bounding_box(); // clean up the rotation if needed
+		});
+		ct_persist();
+		
+		window.ScenesHandler.persist();
+		window.ScenesHandler.sync();
+ 	});
+
 
 	$("#tokenOptionsPopup").addClass("moveableWindow");
 	$("#tokenOptionsPopup").draggable({
@@ -2165,6 +2199,104 @@ function build_token_auras_inputs(tokenIds) {
 	body.append(wrapper);
 
 	return body;
+}
+
+function build_menu_stat_inputs(tokenIds) {
+	let tokens = tokenIds.map(id => window.TOKEN_OBJECTS[id]).filter(t => t !== undefined);
+	let body = $("<div id='menuStatDiv'></div>");
+	let hp = '';
+	let max_hp = '';
+	let ac = '';
+	let elev = '';
+
+	if(tokens.length == 1){
+		hp = tokens[0].options.hp;
+		max_hp = tokens[0].options.max_hp;
+		ac = tokens[0].options.ac;
+		elev = tokens[0].options.elev;
+	}
+
+	let hpMenuInput = $(`<label class='menu-input-label'>HP<input value='${hp}' class='menu-input' type="text"></label>`);
+	let maxHpMenuInput = $(`<label class='menu-input-label'>Max HP<input value='${max_hp}' class='menu-input' type="text"></label>`);
+	let acMenuInput = $(`<label class='menu-input-label'>AC<input value='${ac}' class='menu-input' type="text"></label>`);
+	let elevMenuInput = $(`<label class='menu-input-label'>Elevation<input value='${elev}' class='menu-input' type="text"></label>`);
+
+	body.append(elevMenuInput);
+	body.append(acMenuInput);
+	body.append(hpMenuInput);
+	body.append(maxHpMenuInput);
+
+	hpMenuInput.on('keyup', function(event) {
+		let newValue = event.target.value;
+		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
+			tokens.forEach(token => {
+				token.options.hp = newValue;
+				token.place_sync_persist();
+			});
+		}
+	});
+	hpMenuInput.on('focusout', function(event) {
+		let newValue = event.target.value;
+		tokens.forEach(token => {
+			token.options.hp = newValue;
+			token.place_sync_persist();
+		});
+	});
+
+	maxHpMenuInput.on('keyup', function(event) {
+		let newValue = event.target.value;
+		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
+			tokens.forEach(token => {
+				token.options.max_hp = newValue;
+				token.place_sync_persist();
+			});
+		}
+	});
+	maxHpMenuInput.on('focusout', function(event) {
+		let newValue = event.target.value;
+		tokens.forEach(token => {
+			token.options.max_hp = newValue;
+			token.place_sync_persist();
+		});
+	});
+
+	acMenuInput.on('keyup', function(event) {
+		let newValue = event.target.value;
+		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
+			tokens.forEach(token => {
+				token.options.ac = newValue;
+				token.place_sync_persist();
+			});
+		}
+	});
+	acMenuInput.on('focusout', function(event) {
+		let newValue = event.target.value;
+		tokens.forEach(token => {
+			token.options.ac = newValue;
+			token.place_sync_persist();
+		});
+	});
+
+	elevMenuInput.on('keyup', function(event) {
+		let newValue = event.target.value;
+		if (event.key == "Enter" && newValue !== undefined && newValue.length > 0) {
+			tokens.forEach(token => {
+				token.options.elev = newValue;
+				token.place_sync_persist();
+			});
+		}
+	});
+	elevMenuInput.on('focusout', function(event) {
+		let newValue = event.target.value;
+		tokens.forEach(token => {
+			token.options.elev = newValue;
+			token.place_sync_persist();
+		});
+	});
+
+	return body;
+
+
 }
 
 function build_notes_flyout_menu(tokenIds) {
@@ -2472,6 +2604,32 @@ function build_adjustments_flyout_menu(tokenIds) {
 	colorPicker.on('dragstop.spectrum', borderColorPickerChange);   // update the token as the player messes around with colors
 	colorPicker.on('change.spectrum', borderColorPickerChange); // commit the changes when the user clicks the submit button
 	colorPicker.on('hide.spectrum', borderColorPickerChange);   // the hide event includes the original color so let's change it back when we get it
+	
+
+	let changeImageMenuButton = $("<button>Change Token Image</button>")
+	if(tokens.length == 1){
+		body.append(changeImageMenuButton)
+	}
+
+	changeImageMenuButton.off().on("click", function(){	
+		id = tokens[0].options.id;
+		if (!(id in window.TOKEN_OBJECTS)) {
+			return;
+		}
+		let tok = window.TOKEN_OBJECTS[id];
+		let monsterId = tokens[0].options.monster;
+		let name = tokens[0].options.name;
+		if (tok.isPlayer()) {
+			display_player_token_customization_modal(id, tok);
+		} else if (monsterId !== undefined) {
+			window.StatHandler.getStat(monsterId, function(stat) {
+				display_monster_customization_modal(tok, monsterId, name, stat.data.avatarUrl);
+			});
+		} else {
+			display_placed_token_customization_modal(tok);
+		}
+	});
+
 	return body;
 }
 
