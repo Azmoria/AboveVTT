@@ -1878,11 +1878,21 @@ function token_context_menu_expanded(tokenIds, e) {
 	// Auras (torch, lantern, etc)
 	let aurasRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Auras</div></div>`);
 	aurasRow.hover(function (hoverEvent) {
-		context_menu_flyout("adjustments-flyout", hoverEvent, function(flyout) {
+		context_menu_flyout("auras-flyout", hoverEvent, function(flyout) {
 			flyout.append(build_token_auras_inputs(tokenIds));
 		})
 	});
 	body.append(aurasRow);
+
+	if (tokens.length === 1) {
+		let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Note</div></div>`);
+		notesRow.hover(function (hoverEvent) {
+			context_menu_flyout("notes-flyout", hoverEvent, function(flyout) {
+				flyout.append(build_notes_flyout_menu(tokenIds));
+			})
+		});
+		body.append(notesRow);
+	}
 
 	if(window.DM) {
 		let optionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Options</div></div>`);
@@ -2136,6 +2146,58 @@ function build_token_auras_inputs(tokenIds) {
 
 	return body;
 }
+
+function build_notes_flyout_menu(tokenIds) {
+	let tokens = tokenIds.map(id => window.TOKEN_OBJECTS[id]).filter(t => t !== undefined);
+	let body = $("<div></div>");
+	let id = tokens[0].options.id;
+	body.css({
+		width: "200px", // once we add Markers, make this wide enough to contain them all
+		padding: "5px",
+		"flex-direction": "row"
+	});
+	let editNoteButton = $(`<button>Create Note</button>`)
+	if(tokenIds.length=1){
+		let has_note=id in window.JOURNAL.notes;
+		if(has_note){
+			let viewNoteButton = $(`<button>View Note</button>`)		
+			let deleteNoteButton = $(`<button>Delete Note</button>`)
+			editNoteButton = $(`<button>Edit Note</button>`)
+			body.append(viewNoteButton);
+			body.append(editNoteButton);		
+			body.append(deleteNoteButton);	
+			viewNoteButton.off().on("click", function(){
+				window.JOURNAL.display_note(id);
+			});
+			deleteNoteButton.off().on("click", function(){
+				if(id in window.JOURNAL.notes){
+					delete window.JOURNAL.notes[id];
+					window.JOURNAL.persist();
+					window.TOKEN_OBJECTS[id].place();
+				}
+			});
+		}
+		else {
+			body.append(editNoteButton);
+		}
+
+		editNoteButton.off().on("click", function(){
+			if (!(id in window.JOURNAL.notes)) {
+				window.JOURNAL.notes[id] = {
+					title: window.TOKEN_OBJECTS[id].options.name,
+					text: '',
+					plain: '',
+					player: false
+				}
+			}
+			window.JOURNAL.edit_note(id);
+		});		
+	}
+
+	return body;
+}
+
+	
 
 function build_conditions_and_markers_flyout_menu(tokenIds) {
 

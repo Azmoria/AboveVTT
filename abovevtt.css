@@ -3208,14 +3208,16 @@ button.avtt-roll-button {
     width: 100%;
 }
 .flyout-from-menu-item,
-#tokenOptionsContainer>button  {
+#tokenOptionsContainer>button,
+#notes-flyout button   {
     line-height: 24px;
     border: 1px solid #ddd;
     border-radius: 5px;
     margin-top: 2px;
 }
 
-#tokenOptionsContainer>button {
+#tokenOptionsContainer>button,
+#notes-flyout button  {
     background: none;
     font-size: 10px;
     display: flex;
@@ -3230,14 +3232,16 @@ button.avtt-roll-button {
 #tokenOptionsContainer .material-icons{
     color: #738694;
 }
-#tokenOptionsContainer>button:hover .material-icons,
-#tokenOptionsContainer>button:hover {
+#tokenOptionsContainer>button:hover .material-icons {
     color: #ddd;
 }
-#tokenOptionsContainer button:hover {
+#tokenOptionsContainer>button:hover,
+#notes-flyout button:hover {
     background-color: rgba(41, 128, 185);
     color: #ddd;
 }
+
+
 
 #conditions-flyout li{
     font-size: 14px;
