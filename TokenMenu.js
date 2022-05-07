@@ -1918,7 +1918,9 @@ function token_context_menu_expanded(tokenIds, e) {
 			flyout.append(build_adjustments_flyout_menu(tokenIds));
 		})
 	});
-	body.append(adjustmentsRow);
+	if(window.DM || (tokens.length == 1 && (tokens[0].options.player_owned == true || tokens[0].isPlayer()))){
+		body.append(adjustmentsRow);
+	}
 
 	// Auras (torch, lantern, etc)
 	let aurasRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Auras</div></div>`);
@@ -1927,7 +1929,9 @@ function token_context_menu_expanded(tokenIds, e) {
 			flyout.append(build_token_auras_inputs(tokenIds));
 		})
 	});
-	body.append(aurasRow);
+	if(window.DM || (tokens.length == 1 && (tokens[0].options.player_owned == true || tokens[0].isPlayer()))){
+		body.append(aurasRow);
+	}
 	if(window.DM) {
 		if (tokens.length === 1) {
 			let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Note</div></div>`);
@@ -2621,7 +2625,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 	
 
 	let changeImageMenuButton = $("<button>Change Token Image</button>")
-	if(tokens.length == 1){
+	if(tokens.length == 1 && window.DM){
 		body.append(changeImageMenuButton)
 	}
 
