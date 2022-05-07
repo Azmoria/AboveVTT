@@ -3228,6 +3228,7 @@ button.avtt-roll-button {
     letter-spacing: 1px;
     height: 24px;
     color: #738694;
+    font-family: Roboto,Open Sans,Helvetica,sans-serif;
 }
 #tokenOptionsContainer .material-icons{
     color: #738694;
@@ -3242,6 +3243,7 @@ button.avtt-roll-button {
 }
 
 
+ 
 
 #conditions-flyout li{
     font-size: 14px;

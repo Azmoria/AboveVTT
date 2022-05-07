@@ -128,8 +128,10 @@ class Token {
 		this.update_from_page();
 		this.options.hidden = true;
 		this.options.ct_show = false;
-		$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.closedEye").css('display', 'block');
-		$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.openEye").css('display', 'none');
+		if(this.options.monster) {
+			$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.closedEye").css('display', 'block');
+			$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.openEye").css('display', 'none');
+		}
 		this.place_sync_persist()
 		this.update_and_sync()
 		ct_persist();
@@ -138,8 +140,10 @@ class Token {
 		this.update_from_page();
 		delete this.options.hidden;
 		this.options.ct_show = true;
-		$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.openEye").css('display', 'block');
-		$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.closedEye").css('display', 'none');
+		if(this.options.monster) {
+			$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.openEye").css('display', 'block');
+			$("#"+this.options.id+"hideCombatTrackerInput ~ button svg.closedEye").css('display', 'none');
+		}
 		this.place_sync_persist()
 		this.update_and_sync()
 		ct_persist();

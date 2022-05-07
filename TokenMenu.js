@@ -1860,6 +1860,26 @@ function token_context_menu_expanded(tokenIds, e) {
 	body.append(combatButton);
 
 
+	let hiddenMenuButton = $(`<button class="`+determine_hidden_classname(tokenIds) + `context-menu-icon-condition icon-invisible material-icons">Hide/Reveal Token</button>`)
+
+	hiddenMenuButton.off().on("click", function(tokenIds){
+		let clickedItem = $(this);
+		let hideAll = clickedItem.hasClass("some-active");
+		tokens.forEach(token => {
+			if (hideAll || token.options.hidden !== true) {
+				token.hide();
+			} else {
+				token.show();
+			}
+			token.place_sync_persist();
+		});
+		clickedItem.removeClass("single-active all-active some-active active-condition");
+		clickedItem.addClass(determine_hidden_classname(tokenIds));
+	});
+
+	body.append(hiddenMenuButton);
+
+
 	let conditionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Conditions / Markers</div></div>`);
 	conditionsRow.hover(function (hoverEvent) {
 		context_menu_flyout("conditions-flyout", hoverEvent, function(flyout) {
