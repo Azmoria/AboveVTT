@@ -1462,7 +1462,7 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     top: 50%;
     left: 0;
     width: 2em;
-    font-family: "context-menu-icons";
+        font-family: "Material Icons", sans-serif;
     font-size: 1em;
     font-style: normal;
     font-weight: normal;
@@ -3238,6 +3238,14 @@ button.avtt-roll-button {
 #tokenOptionsContainer button:hover {
     background-color: rgba(41, 128, 185);
     color: #ddd;
+}
+
+#conditions-flyout li{
+    font-size: 14px;
+}
+#conditions-flyout li.icon-close-red:before{
+    font-size: 20px;
+    margin: 0px;
 }
 
 .flyout-from-menu-item:hover {
