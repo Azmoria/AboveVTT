@@ -1893,7 +1893,7 @@ function token_context_menu_expanded(tokenIds, e) {
 		});
 		body.append(optionsRow);
 	}
-	moveableTokenOptions.css("left", e.pageX - 310 + 'px');
+	moveableTokenOptions.css("left", e.pageX - 245 + 'px');
 
 	if($(moveableTokenOptions).height() > window.innerHeight - e.pageY - 20) {
 		moveableTokenOptions.css({
