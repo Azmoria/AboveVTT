@@ -1944,29 +1944,13 @@ function token_context_menu_expanded(tokenIds, e) {
 	let deleteTokenMenuButton = $("<button class='deleteMenuButton'>Delete</button>")
  	body.append(deleteTokenMenuButton);
  	deleteTokenMenuButton.off().on("click", function(){
+ 		if(!$(e.target).hasClass("tokenselected")){
+ 			deselect_all_tokens();
+ 		}
  		tokens.forEach(token => {
- 			let id = token.options.id;
- 			$(`#tokens [data-id='${id}']`).toggleClass("tokenselected", true);
+ 			token.selected = true;
  		});
-		$("#tokens .tokenselected").each(function() {
-			id = $(this).attr('data-id');
-			$(this).remove();
-			delete window.ScenesHandler.scene.tokens[id];
-			delete window.TOKEN_OBJECTS[id];
-			$("#aura_" + id.replaceAll("/", "")).remove();
-			
-			if($("#combat_area tr[data-target='"+id+"']").length>0){
-				if( $("#combat_area tr[data-target='"+id+"']").attr('data-current')=="1"){
-					$("#combat_next_button").click();
-				}
-				$("#combat_area tr[data-target='"+id+"']").remove(); // delete token from the combat tracker if it's there
-			}
-	  	draw_selected_token_bounding_box(); // clean up the rotation if needed
-		});
-		ct_persist();
-		
-		window.ScenesHandler.persist();
-		window.ScenesHandler.sync();
+		delete_selected_tokens()
  	});
 
 
