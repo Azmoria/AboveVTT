@@ -1814,7 +1814,7 @@ function token_context_menu_expanded(tokenIds, e) {
 	// stat block / character sheet
 	if (tokens.length === 1) {
 		let token = tokens[0];
-		if (token.isPlayer()) {
+		if (token.isPlayer() && window.DM) {
 			let button = $(`<button>Open Character Sheet<span class="material-icons icon-view"></span></button>`);
 			button.on("click", function() {
 				open_player_sheet(token.options.id);
@@ -1824,65 +1824,85 @@ function token_context_menu_expanded(tokenIds, e) {
 			let button = $(`<button>Open Monster Stat Block<span class="material-icons icon-view"></span></button>`);
 			button.on("click", function() {
 				open_monster_stat_block_with_id(token.options.monster, token.options.id);
-				// load_monster_stat(token.options.monster, token.options.id);
+				load_monster_stat(token.options.monster, token.options.id);
 			});
-			body.append(button);
-		}
-	}
-
-
-	let addButtonInternals = `Add to Combat Tracker<span class="material-icons icon-person-add"></span>`;
-	let removeButtonInternals = `Remove From Combat Tracker<span class="material-icons icon-person-remove"></span>`;
-	let combatButton = $(`<button></button>`);
-	let inCombatStatuses = [...new Set(tokens.map(t => t.options.combat))];
-	if (inCombatStatuses.length === 1 && inCombatStatuses[0] === true) {
-		// they are all in the combat tracker. Make it a remove button
-		combatButton.addClass("remove-from-ct");
-		combatButton.html(removeButtonInternals);
-	} else {
-		// if any are not in the combat tracker, make it an add button.
-		combatButton.addClass("add-to-ct");
-		combatButton.html(addButtonInternals);
-	}
-	combatButton.on("click", function(clickEvent) {
-		let clickedButton = $(clickEvent.currentTarget);
-		if (clickedButton.hasClass("remove-from-ct")) {
-			clickedButton.removeClass("remove-from-ct").addClass("add-to-ct");
-			clickedButton.html(addButtonInternals);
-			tokens.forEach(t => ct_remove_token(t, false));
-		} else {
-			clickedButton.removeClass("add-to-ct").addClass("remove-from-ct");
-			clickedButton.html(removeButtonInternals);
-			tokens.forEach(t => ct_add_token(t, false));
-		}
-		ct_persist();
-	});
-	body.append(combatButton);
-
-
-	let hiddenMenuButton = $(`<button class="`+determine_hidden_classname(tokenIds) + `context-menu-icon-condition icon-invisible material-icons">Hide/Reveal Token</button>`)
-
-	hiddenMenuButton.off().on("click", function(tokenIds){
-		let clickedItem = $(this);
-		let hideAll = clickedItem.hasClass("some-active");
-		tokens.forEach(token => {
-			if (hideAll || token.options.hidden !== true) {
-				token.hide();
-			} else {
-				token.show();
+			if(token.options.player_owned || window.DM){
+				body.append(button);
 			}
-			token.place_sync_persist();
-		});
-		clickedItem.removeClass("single-active all-active some-active active-condition");
-		clickedItem.addClass(determine_hidden_classname(tokenIds));
-	});
+		}
+	}
 
-	body.append(hiddenMenuButton);
+	if(window.DM){
+		let addButtonInternals = `Add to Combat Tracker<span class="material-icons icon-person-add"></span>`;
+		let removeButtonInternals = `Remove From Combat Tracker<span class="material-icons icon-person-remove"></span>`;
+		let combatButton = $(`<button></button>`);
+		let inCombatStatuses = [...new Set(tokens.map(t => t.options.combat))];
+		if (inCombatStatuses.length === 1 && inCombatStatuses[0] === true) {
+			// they are all in the combat tracker. Make it a remove button
+			combatButton.addClass("remove-from-ct");
+			combatButton.html(removeButtonInternals);
+		} else {
+			// if any are not in the combat tracker, make it an add button.
+			combatButton.addClass("add-to-ct");
+			combatButton.html(addButtonInternals);
+		}
+		combatButton.on("click", function(clickEvent) {
+			let clickedButton = $(clickEvent.currentTarget);
+			if (clickedButton.hasClass("remove-from-ct")) {
+				clickedButton.removeClass("remove-from-ct").addClass("add-to-ct");
+				clickedButton.html(addButtonInternals);
+				tokens.forEach(t => ct_remove_token(t, false));
+			} else {
+				clickedButton.removeClass("add-to-ct").addClass("remove-from-ct");
+				clickedButton.html(removeButtonInternals);
+				tokens.forEach(t => ct_add_token(t, false));
+			}
+			ct_persist();
+		});
+		body.append(combatButton);
+
+	
+		let hiddenMenuButton = $(`<button class="`+determine_hidden_classname(tokenIds) + `context-menu-icon-condition icon-invisible material-icons">Hide/Reveal Token</button>`)
+
+		hiddenMenuButton.off().on("click", function(tokenIds){
+			let clickedItem = $(this);
+			let hideAll = clickedItem.hasClass("some-active");
+			tokens.forEach(token => {
+				if (hideAll || token.options.hidden !== true) {
+					token.hide();
+				} else {
+					token.show();
+				}
+				token.place_sync_persist();
+			});
+			clickedItem.removeClass("single-active all-active some-active active-condition");
+			clickedItem.addClass(determine_hidden_classname(tokenIds));
+		});
+
+		body.append(hiddenMenuButton);
+	}
+	
 
 	if (tokens.length === 1) {
 		body.append(build_menu_stat_inputs(tokenIds));
 	}
 
+	
+	if(tokens[0].isPlayer()){ 
+		$(".maxHpMenuInput").prop('disabled', true);
+		$(".acMenuInput").prop('disabled', true);
+		$(".hpMenuInput").prop('disabled', true);
+	}
+	if(!window.DM){ 
+		$(".maxHpMenuInput").prop('disabled', true);
+		$(".acMenuInput").prop('disabled', true);
+		$(".hpMenuInput").prop('disabled', true);
+	}	
+	if(tokens[0].options.player_owned && !tokens[0].isPlayer()){ 
+		$(".maxHpMenuInput").prop('disabled', false);
+		$(".acMenuInput").prop('disabled', false);
+		$(".hpMenuInput").prop('disabled', false);
+	}
 
 
 	let conditionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Conditions / Markers</div></div>`);
@@ -1908,15 +1928,16 @@ function token_context_menu_expanded(tokenIds, e) {
 		})
 	});
 	body.append(aurasRow);
-
-	if (tokens.length === 1) {
-		let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Note</div></div>`);
-		notesRow.hover(function (hoverEvent) {
-			context_menu_flyout("notes-flyout", hoverEvent, function(flyout) {
-				flyout.append(build_notes_flyout_menu(tokenIds));
-			})
-		});
-		body.append(notesRow);
+	if(window.DM) {
+		if (tokens.length === 1) {
+			let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Note</div></div>`);
+			notesRow.hover(function (hoverEvent) {
+				context_menu_flyout("notes-flyout", hoverEvent, function(flyout) {
+					flyout.append(build_notes_flyout_menu(tokenIds));
+				})
+			});
+			body.append(notesRow);
+		}
 	}
 
 	if(window.DM) {
@@ -1941,17 +1962,19 @@ function token_context_menu_expanded(tokenIds, e) {
         });
 	}
 
-	let deleteTokenMenuButton = $("<button class='deleteMenuButton'>Delete</button>")
- 	body.append(deleteTokenMenuButton);
- 	deleteTokenMenuButton.off().on("click", function(){
- 		if(!$(e.target).hasClass("tokenselected")){
- 			deselect_all_tokens();
- 		}
- 		tokens.forEach(token => {
- 			token.selected = true;
- 		});
-		delete_selected_tokens()
- 	});
+	if(window.DM) {
+		let deleteTokenMenuButton = $("<button class='deleteMenuButton'>Delete</button>")
+	 	body.append(deleteTokenMenuButton);
+	 	deleteTokenMenuButton.off().on("click", function(){
+	 		if(!$(e.target).hasClass("tokenselected")){
+	 			deselect_all_tokens();
+	 		}
+	 		tokens.forEach(token => {
+	 			token.selected = true;
+	 		});
+			delete_selected_tokens()
+	 	});
+	 }
 
 
 	$("#tokenOptionsPopup").addClass("moveableWindow");
@@ -2193,22 +2216,29 @@ function build_menu_stat_inputs(tokenIds) {
 	let ac = '';
 	let elev = '';
 
-	if(tokens.length == 1){
+	if(tokens.length == 1 && (tokens[0].options.player_owned || (!tokens[0].options.hidestat && tokens[0].isPlayer()) || window.DM)){
 		hp = (typeof tokens[0].options.hp !== 'undefined') ? tokens[0].options.hp : '';
 		max_hp = (typeof tokens[0].options.max_hp !==  'undefined') ? tokens[0].options.max_hp : '';
 		ac = (typeof tokens[0].options.ac !== 'undefined') ? tokens[0].options.ac : '';
 		elev = (typeof tokens[0].options.elev !== 'undefined') ? tokens[0].options.elev : '';
 	}
+	else{
+		hp = "????";
+		max_hp = "????";
+		ac = "????";
+		elev = (typeof tokens[0].options.elev !== 'undefined') ? tokens[0].options.elev : '';
+	}
 
-	let hpMenuInput = $(`<label class='menu-input-label'>HP<input value='${hp}' class='menu-input' type="text"></label>`);
-	let maxHpMenuInput = $(`<label class='menu-input-label'>Max HP<input value='${max_hp}' class='menu-input' type="text"></label>`);
-	let acMenuInput = $(`<label class='menu-input-label'>AC<input value='${ac}' class='menu-input' type="text"></label>`);
-	let elevMenuInput = $(`<label class='menu-input-label'>Elevation<input value='${elev}' class='menu-input' type="text"></label>`);
-
+	let hpMenuInput = $(`<label class='menu-input-label'>HP<input value='${hp}' class='menu-input hpMenuInput' type="text"></label>`);
+	let maxHpMenuInput = $(`<label class='menu-input-label'>Max HP<input value='${max_hp}' class='menu-input maxHpMenuInput' type="text"></label>`);
+	let acMenuInput = $(`<label class='menu-input-label'>AC<input value='${ac}' class='menu-input acMenuInput' type="text"></label>`);
+	let elevMenuInput = $(`<label class='menu-input-label'>Elevation<input value='${elev}' class='menu-input elevMenuInput' type="text"></label>`);
 	body.append(elevMenuInput);
 	body.append(acMenuInput);
 	body.append(hpMenuInput);
 	body.append(maxHpMenuInput);
+
+	
 
 	hpMenuInput.on('keyup', function(event) {
 		let newValue = event.target.value;
