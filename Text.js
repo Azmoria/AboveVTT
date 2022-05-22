@@ -51,7 +51,7 @@ function apply_settings_to_boxes(){
         "color": window.TEXTDATA.text_color,
         "background-color": window.TEXTDATA.text_background_color,
         "font-family": window.TEXTDATA.text_font,
-        "font-size": `${window.TEXTDATA.text_size}px`,
+        "font-size": `calc(${window.TEXTDATA.text_size}px * var(--window-zoom))`,
         "font-weight": window.TEXTDATA.text_bold ? "bold" : "normal",
         "font-style": window.TEXTDATA.text_italic ? "italic" : "normal",
         "text-decoration": window.TEXTDATA.text_underline ? "underline" : "none",
@@ -427,8 +427,8 @@ function handle_draw_text_submit(event) {
     );
     // textbox doesn't have left or top so use the wrapper
     // with 25 being the bar height
-    const rectX = Math.round(((parseInt($(textBox).parent().css("left")))  * (1.0 / window.ZOOM)));
-    const rectY = Math.round(((parseInt($(textBox).parent().css("top")))  * (1.0 / window.ZOOM)));
+    const rectX = Math.round(((parseInt($(textBox).parent().css("left"))) * (1.0 / window.ZOOM)));
+    const rectY = Math.round(((parseInt($(textBox).parent().css("top"))) * (1.0 / window.ZOOM)));
     const rectColor = $(textBox).css("background-color")
 
     const text = textBox.val();
@@ -437,7 +437,7 @@ function handle_draw_text_submit(event) {
 
     const font = {
         font: $(textBox).css("font-family"),
-        size: parseInt($(textBox).css("font-size")),
+        size: parseInt($(textBox).css("font-size")) / window.ZOOM,
         weight: fontWeight,
         style: fontStyle,
         underline: $(textBox).css("text-decoration")?.includes("underline"),
@@ -512,7 +512,7 @@ function get_x_start_and_width_of_text(x, width, text, font, stroke) {
     placeholder.css({
         "text-align": font.align,
         "font-family": font.font,
-        "font-size": `${font.size}px`,
+        "font-size": `${font.size}px ` ,
         "font-weight": font.bold || "normal",
         "font-style": font.italic || "normal",
         // this text shadow is shit
