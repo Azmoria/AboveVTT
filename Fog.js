@@ -895,6 +895,18 @@ function drawing_mousemove(e) {
 		}
 
 		if (window.DRAWSHAPE == "rect") {
+			if(window.DRAWFUNCTION == "draw_text")
+			{
+				drawRect(context,
+					 Math.round(((window.BEGIN_MOUSEX - 200) * (1.0 / window.ZOOM))),
+				 	 Math.round(((window.BEGIN_MOUSEY - 200) * (1.0 / window.ZOOM))),
+				   mouseX - Math.round(((window.BEGIN_MOUSEX - 200) * (1.0 / window.ZOOM))),
+				   mouseY - Math.round(((window.BEGIN_MOUSEY - 200) * (1.0 / window.ZOOM))),
+					 window.DRAWCOLOR,
+					 isFilled,
+					 window.LINEWIDTH);
+			}
+			else{
 			drawRect(context,
 					 window.BEGIN_MOUSEX,
 				 	 window.BEGIN_MOUSEY,
@@ -903,6 +915,7 @@ function drawing_mousemove(e) {
 					 window.DRAWCOLOR,
 					 isFilled,
 					 window.LINEWIDTH);
+			}
 		}
 		if (window.DRAWSHAPE === "text_erase") {
 			// draw a rect that will be removed and replaced with an input box
