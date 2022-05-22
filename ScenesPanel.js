@@ -278,18 +278,7 @@ function edit_scene_dialog(scene_id) {
 						form_toggle("dm_map_usable",null, false, handle_basic_form_toggle_click)
 						)
 				);
-	form.append(form_row(null, 'Snap to Grid',form_toggle("snap", null, false, function(event) {
-		if ($(event.currentTarget).hasClass("rc-switch-checked")) {
-			// it was checked. now it is no longer checked
-			$(event.currentTarget).removeClass("rc-switch-checked");
-			window.CURRENT_SCENE_DATA.snap = "0";		
-		} else {
-			// it was not checked. now it is checked
-			$(event.currentTarget).removeClass("rc-switch-unknown");
-			$(event.currentTarget).addClass("rc-switch-checked");
-			window.CURRENT_SCENE_DATA.snap = "1";
-		}
-	})));
+	form.append(form_row(null, 'Snap to Grid',form_toggle("snap",null, true, handle_basic_form_toggle_click)))
 
 
 	const showGridControls = $("<div id='show_grid_controls'/>");
@@ -299,7 +288,7 @@ function edit_scene_dialog(scene_id) {
 		type="range" min="0.5" max="10" step="0.5" value="${scene["grid_line_width"] || 0.5}">`)
 	gridStroke.on("change input", handle_form_grid_on_change)
 	showGridControls.append(
-		form_toggle("grid", null, false, function(event) {
+		form_toggle("grid", null, true, function(event) {
 			if ($(event.currentTarget).hasClass("rc-switch-checked")) {
 				// it was checked. now it is no longer checked
 				$(event.currentTarget).removeClass("rc-switch-checked");
@@ -627,7 +616,6 @@ function edit_scene_dialog(scene_id) {
 				const color = "rgba(255, 0, 0,0.5)";
 				// nulls will take the window.current_scene_data from above
 				redraw_grid(null,null,null,null,color,width,null,dash)
-				redraw_canvas();
 			};
 
 			let click2 = {
@@ -637,7 +625,8 @@ function edit_scene_dialog(scene_id) {
 			aligner2.draggable({
 				stop: regrid,
 				start: function(event) {
-					reset_canvas(); redraw_canvas();
+					window.CURRENT_SCENE_DATA.grid = 0;
+					reset_canvas(); redraw_fog();
 					click2.x = event.clientX;
 					click2.y = event.clientY;
 					$("#aligner2").attr('original-top', parseInt($("#aligner2").css("top")));
@@ -696,7 +685,9 @@ function edit_scene_dialog(scene_id) {
 			aligner1.draggable({
 				stop: regrid,
 				start: function(event) {
-					reset_canvas(); redraw_canvas();
+					window.CURRENT_SCENE_DATA.grid = 0;
+					reset_canvas();
+					redraw_fog();
 					click1.x = event.clientX;
 					click1.y = event.clientY;
 					$("#aligner1").attr('original-top', parseInt($(event.target).css("top")));
@@ -796,7 +787,7 @@ function edit_scene_dialog(scene_id) {
 			scene.scale_factor=1;
 
 			if(window.CLOUD)
-				window.ScenesHandler.persist_current_scene(true);
+				window.ScenesHandler.persist_current_scene();
 			else
 				window.ScenesHandler.persist();
 			window.ScenesHandler.switch_scene(scene_id);
@@ -868,7 +859,7 @@ function edit_scene_dialog(scene_id) {
 			scene.reveals = [];
 			if (scene_id == window.ScenesHandler.current_scene_id) {
 				window.REVEALED = [];
-				redraw_canvas();
+				redraw_fog();
 			}
 			window.ScenesHandler.persist();
 			window.ScenesHandler.sync();

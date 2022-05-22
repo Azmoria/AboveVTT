@@ -436,24 +436,26 @@ class MessageBroker {
 
 			if (msg.eventType == "custom/myVTT/reveal") {
 				window.REVEALED.push(msg.data);
-				redraw_canvas();
+				redraw_fog();
 				check_token_visibility(); // CHECK FOG OF WAR VISIBILITY OF TOKEN
 			}
 
 			if(msg.eventType== "custom/myVTT/fogdata"){ // WE RESEND ALL THE FOG EVERYTIME NOW
 				window.REVEALED=msg.data;
-				redraw_canvas();
+				redraw_fog();
 				check_token_visibility();
 			}
 
 			if (msg.eventType == "custom/myVTT/drawing") {
 				window.DRAWINGS.push(msg.data);
 				redraw_drawings();
+				redraw_text();
 			}
 
 			if(msg.eventType=="custom/myVTT/drawdata"){
 				window.DRAWINGS=msg.data;
 				redraw_drawings();
+				redraw_text();
 			}
 			if (msg.eventType == "custom/myVTT/chat") { // DEPRECATED!!!!!!!!!
 				if(!window.NOTIFIEDOLDVERSION){
@@ -1037,8 +1039,9 @@ class MessageBroker {
 				$("#scene_map").height(oheight * window.CURRENT_SCENE_DATA.scale_factor);
 			}
 			reset_canvas();
-			redraw_canvas();
+			redraw_fog();
 			redraw_drawings();
+			redraw_text();
 			apply_zoom_from_storage();
 
 			set_default_vttwrapper_size()
@@ -1067,7 +1070,7 @@ class MessageBroker {
 			window.FOG_OF_WAR = true;
 			window.REVEALED = data.reveals;
 			reset_canvas();
-			redraw_canvas();
+			redraw_fog();
 			//$("#fog_overlay").show();
 		}
 		else {
@@ -1083,6 +1086,7 @@ class MessageBroker {
 			window.DRAWINGS = [];
 		}
 		redraw_drawings();
+		redraw_text();
 
 
 		
@@ -1184,20 +1188,20 @@ class MessageBroker {
 	}
 
 
-	sendMessage(eventType, data,skipSceneId=false) {
+	sendMessage(eventType, data) {
 		var self = this;
 
 		//this.sendDDBMB(eventType,data); 
 
 		if(eventType.startsWith("custom")){
-			this.sendAboveMB(eventType,data,skipSceneId);
+			this.sendAboveMB(eventType,data);
 		}
 		else{
 			this.sendDDBMB(eventType,data);
 		}
 	}
 
-	sendAboveMB(eventType,data,skipSceneId=false){
+	sendAboveMB(eventType,data){
 		var self=this;
 		var message = {
 			action: "sendmessage",
@@ -1210,19 +1214,18 @@ class MessageBroker {
 		if(window.CLOUD)
 			message.cloud=1;
 
-		if(!["custom/myVTT/switch_scene","custom/myVTT/update_scene"].includes(eventType))
+		if(!["custom/myVTT/switch_scene"].includes(eventType))
 			message.sequence=this.above_sequence++;
 
-		if(window.CURRENT_SCENE_DATA && !skipSceneId)
+		if(window.CURRENT_SCENE_DATA)
 			message.sceneId=window.CURRENT_SCENE_DATA.id;
-		if(window.PLAYER_SCENE_ID)
-			message.playersSceneId = window.PLAYER_SCENE_ID;
-
+		
 		const jsmessage=JSON.stringify(message);
 		if(jsmessage.length > (128000)){
 			alert("YOU REACHED THE MAXIMUM MESSAGE SIZE. PROBABLY SOMETHING IS WRONG WITH YOUR SCENE. You may have some tokens with embedded images that takes up too much space. Please delete them and refresh the scene");
 			return;
 		}
+
 
 		if (this.abovews.readyState == this.ws.OPEN) {
 			this.abovews.send(JSON.stringify(message));

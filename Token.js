@@ -371,7 +371,7 @@ class Token {
 	}
 
 	/**
-	 * updates the colour of the health aura if enabled
+	 * updates the color of the health aura if enabled
 	 * @param token jquery selected div with the class "token"
 	 */
 	update_health_aura(token){
@@ -1144,6 +1144,10 @@ class Token {
 					function (event) {
 						//remove cover for smooth drag
 						$('.iframeResizeCover').remove();
+
+						tok.removeAttr("data-dragging")
+						tok.removeAttr("data-drag-x")
+						tok.removeAttr("data-drag-y")
 			
 						// this should be a XOR... (A AND !B) OR (!A AND B)
 						let shallwesnap=  (window.CURRENT_SCENE_DATA.snap == "1"  && !(window.toggleSnap)) || ((window.CURRENT_SCENE_DATA.snap != "1") && window.toggleSnap);
@@ -1234,12 +1238,18 @@ class Token {
 
 						draw_selected_token_bounding_box();
 						window.toggleSnap=false;
+
 					},
 
 				start: function (event) {
 					window.DRAGGING = true;
 					click.x = event.clientX;
 					click.y = event.clientY;
+					// these data attrs are used in fog to measure while dragging
+					tok.attr("data-dragging", "true")
+					tok.attr("data-drag-x", click.x)
+					tok.attr("data-drag-y", click.y)
+
 					if(tok.is(":animated")){
 						self.stopAnimation();
 					}
@@ -1280,12 +1290,7 @@ class Token {
 						el.attr("data-top", el.css("top").replace("px", ""));
 					}
 
-					// Setup waypoint manager
-
-
-					window.BEGIN_MOUSEX = (event.pageX - 200) * (1.0 / window.ZOOM);
-					window.BEGIN_MOUSEY = (event.pageY - 200) * (1.0 / window.ZOOM);
-
+				
 					remove_selected_token_bounding_box();
 				},
 
@@ -1297,6 +1302,7 @@ class Token {
 						left: Math.round((event.clientX - click.x + original.left) / zoom),
 						top: Math.round((event.clientY - click.y + original.top) / zoom)
 					};
+
 					//console.log("Changing to " +ui.position.left+ " "+ui.position.top);
 					// HACK TEST 
 					/*$(event.target).css("left",ui.position.left);

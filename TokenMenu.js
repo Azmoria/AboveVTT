@@ -309,8 +309,7 @@ function token_context_menu_expanded(tokenIds, e) {
 	 		tokens.forEach(token => {
 	 			token.selected = true;
 	 		});
-			delete_selected_tokens();
-			$("#tokenOptionsClickCloseDiv").click();
+			delete_selected_tokens()
 	 	});
 	 }
 

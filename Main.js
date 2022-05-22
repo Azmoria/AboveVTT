@@ -800,7 +800,7 @@ function init_splash() {
 	cont = $("<div id='splash'></div>");
 	cont.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
-	cont.append("<h1 style='padding-bottom:2px;margin-bottom:2px; text-align:center'><img width='250px' src='" + window.EXTENSION_PATH + "assets/logo.png'><div style='margin-left:20px; display:inline;vertical-align:bottom;'>0.76.2</div></h1>");
+	cont.append("<h1 style='padding-bottom:2px;margin-bottom:2px; text-align:center'><img width='250px' src='" + window.EXTENSION_PATH + "assets/logo.png'><div style='margin-left:20px; display:inline;vertical-align:bottom;'>0.76RC3</div></h1>");
 	cont.append("<div style='font-style: italic;padding-left:80px;font-size:20px;margin-bottom:10px;margin-top:2px; margin-left:50px;'>Fine.. We'll do it ourselves..</div>");
 
 	s=$("<div/>");
@@ -842,15 +842,15 @@ function init_splash() {
 	ul.append("<li><a style='font-weight:bold;text-decoration: underline;' target='_blank' href='https://www.patreon.com/AboveVTT'>Patreon</a></li>");
 	cont.append(ul);*/
 	cont.append("");
-	cont.append("<br>Contributors: <b>SnailDice (Nadav),Stumpy, Palad1N, KuzKuz, Coryphon, Johnno, Hypergig, JoshBrodieNZ, Kudolpf, Koals, Mikedave, Jupi Taru, Limping Ninja, Turtle_stew, Etus12, Cyelis1224, Ellasar, DotterTrotter, Mosrael, Bain, Faardvark, Azmoria, Natemoonlife</b>");
+	cont.append("<br>Contributors: <b>SnailDice (Nadav),Stumpy, Palad1N, KuzKuz, Coryphon, Johnno, Hypergig, JoshBrodieNZ, Kudolpf, Koals, Mikedave, Jupi Taru, Limping Ninja, Turtle_stew, Etus12, Cyelis1224, Ellasar, DotterTrotter, Mosrael, Bain, Faardvark, Azmoria</b>");
 
 	cont.append("<br>AboveVTT is an hobby opensource project. It's completely free (like in Free Speech). The resources needed to pay for the infrastructure are kindly donated by the supporters through <a style='font-weight:bold;text-decoration: underline;' target='_blank' href='https://www.patreon.com/AboveVTT'>Patreon</a> , what's left is used to buy wine for cyruzzo");
 
 	patreons = $("<div id='patreons'/>");
 
-	l1 = ["Max Puplett","Jordan Cohen","Michael Saint Gregory","ZorkFox","Josh Downing","John Curran","Nathan Wilhelm","The Dread Pirate Mittens","Dennis Andree","Eric Invictus","VerintheCrow","Matthew Bennett","Tobias Ates","Nomad CLL","Pete Posey","Mike Miller","D Martinez"];
-	l2 = ["Iain Russell","Lukas Edelmann","Oliver","Jordan Innerarity","Phillip Geurtz","Virginia Lancianese","Daniel Levitus","TheDigifire","Ryan Purcell","Kris Scott","Brendan Shane","Pucas McDookie","Elmer Senson","Adam Connor","Kim Dargeou","Scott Moore","Starving Actor","Kurt Piersol","Joaquin Atwood-Ward","Tittus","Rooster","Michael Palm","Robert Henry","Cynthia Complese","Wilko Rauert","Blaine Landowski","Cameron Patterson 康可","Joe King","Kyle Kroeker","Rodrigo Carril","E Lee Broyles","Ronen Gregory","Ben S","Steven Sheeley","Avilar","Bain .","ZetsumeiGaming","Cyril Sneer","Mark Otten","Vince Hamilton","Rollin Newcomb"];
-	l3 = ["Daniel Wall","Cameron Warner","Martin Brandt","Julia Hoffmann","Amata (she_her)","Alexander Engel","Fini Plays","nategonz","Jason Osterbind","Adam Nothnagel","Miguel  Garcia Jr.","Kat","Cobalt Blue","Cody Vegas Rothwell","damian tier","CraftyHobo","CrazyPitesh","aaron hamilton","Eduardo Villela","Paul Maloney","David Meese","Chris Cannon","Johan Surac","Chris Sells","Sarah (ExpQuest)","Randy Zuendel","Invictus92","Robert J Correa","Cistern","its Bonez","BelowtheDM","Unlucky Archer","Michael Crane","Alexander Glass","Steve Vlaminck","Blake Thomas","Cheeky Sausage Games","Jerry Jones","Kevin Young","aDingoAteMyBaby","Rennie","Chris Meece","Victor Martinez","Michael Gisby","Arish Rustomji","Christian Johansson","Kat Wells","DH Ford","Dirk Wynkoop","Michael Augusteijn","Jake Tiffany","LegalMegumin","Nicholas Phillips","Patrick Wolfer","Mage","Robert Sanderson","Michael Huffman","Rennan Whittington","Åsmund Gravem","Joseph Pecor","Bjscuba135","Erik Wilson","Luke Young","Scott Ganz","Brian Gabin","Rojo","ajay","Michael Boughey","Mischa","AnyxKrypt","Keith Richard-Thompson","Torben Schwank","Unix Wizard","Andrew Thomas","Yavor Vlaskov","Ciara McCumiskey","Daniel Long","Adam Caldicott","Chealse Williams","Simon Brumby","Thomas Edwards","David Meier","Thomas Thurner","Scott Anderson","Casanova1986","Paul V Roundy IV","Jay Holt","Don Whitaker","Craig Liliefisher","BereanHeart Gaming","Gabriel Alves","Sylvain Gaudreau","Ben","Aaron Wilker","Roger Villeneuve","Alan Pollard","Oliver Kent","David Bonderoff","Sparty92","Raffi Minassian","Jon","Vlad Batory","glenn boardman","Urchin Prince","Nickolas Olmanson","Duncan Clyborne","Daisy Gonzalez","Rick Anderson","Steven Van Eckeren","Stellar5","Jack Posey","ThaFreaK","Stephen Morrey","Christian Fish","Cinghiale Frollo","The Pseudo Nerd","Shawn Morriss","Tomi Skibinski","Eric VanSingel","Joey Lalor","Jeffrey Weist","Stumpt","Gabby Alexander","John Ramsburg","David Feig","xinara7","Kallas Thenos","Troy Knoell","Rob Parr","Jeff Jackson","Nunya Bidness","Christopher Davis","Marshall Súileabáin","Vandalo","Sky Gewant","Simon Perkins","Reid Bollinger","Konrad Scheffel","Thomas Thomas","Joseph Hensley","Chris Avis","Christian Weckwert","Titus France","Fabrizio Tronci","Michael Whittington","Simon Haldon","Thiago Neves","Brandin Steiner","Simone Anedda","Julian Bailey","Troy Hillier","Quinton Cooper","Angelus Drake","Richart Nopé","SalsaBeard","Eric Weberg","Xiax","BridgeWatch","Taking a cigarette","Santiago Mosqueda","Arpad","Gareth Welch","Daniel Cass","Luis Teixeira","shadowd","Jim Mapes"];
+	l1 = ["Max Puplett","Jordan Cohen","Michael Saint Gregory","ZorkFox","Josh Downing","John Curran","Nathan Wilhelm","The Dread Pirate Mittens","Dennis Andree","Eric Invictus","VerintheCrow","Matthew Bennett","Tobias Ates","Nomad CLL","Pete Posey","Mike Miller"];
+	l2 = ["Iain Russell","Lukas Edelmann","Oliver","Jordan Innerarity","Phillip Geurtz","Virginia Lancianese","Daniel Levitus","TheDigifire","Ryan Purcell","adam williams","Kris Scott","Brendan Shane","Pucas McDookie","Elmer Senson","Adam Connor","Kim Dargeou","Scott Moore","Starving Actor","Kurt Piersol","Joaquin Atwood-Ward","Tittus","Rooster","Michael Palm","Robert Henry","Cynthia Complese","Wilko Rauert","Blaine Landowski","Cameron Patterson 康可","Joe King","Kyle Kroeker","Rodrigo Carril","E Lee Broyles","Ronen Gregory","Ben S","Steven Sheeley","Avilar","Bain .","ZetsumeiGaming","Cyril Sneer","Mark Otten","Vince Hamilton","Rollin Newcomb"];
+	l3 = ["Daniel Wall","Cameron Warner","Martin Brandt","Julia Hoffmann","Amata (she_her)","Alexander Engel","Fini Plays","nategonz","Jason Osterbind","Adam Nothnagel","Miguel  Garcia Jr.","Kat","Cobalt Blue","Cody Vegas Rothwell","damian tier","CraftyHobo","CrazyPitesh","aaron hamilton","Eduardo Villela","Paul Maloney","David Meese","Chris Cannon","Johan Surac","Chris Sells","Sarah (ExpQuest)","Randy Zuendel","Invictus92","Robert J Correa","Cistern","its Bonez","BelowtheDM","Unlucky Archer","Michael Crane","Alexander Glass","Steve Vlaminck","Blake Thomas","Cheeky Sausage Games","Jerry Jones","Kevin Young","aDingoAteMyBaby","Rennie","Chris Meece","Victor Martinez","Michael Gisby","Arish Rustomji","Christian Johansson","Kat Wells","DH Ford","Dirk Wynkoop","Michael Augusteijn","Jake Tiffany","LegalMegumin","Nicholas Phillips","Patrick Wolfer","Mage","Robert Sanderson","Michael Huffman","Rennan Whittington","Åsmund Gravem","Joseph Pecor","Bjscuba135","Erik Wilson","Luke Young","Scott Ganz","Brian Gabin","Rojo","ajay","Michael Boughey","Mischa","AnyxKrypt","Keith Richard-Thompson","Torben Schwank","Unix Wizard","Andrew Thomas","Yavor Vlaskov","Ciara McCumiskey","Daniel Long","Adam Caldicott","Chealse Williams","Simon Brumby","Thomas Edwards","David Meier","Thomas Thurner","Scott Anderson","Casanova1986","Paul V Roundy IV","Jay Holt","Don Whitaker","Craig Liliefisher","BereanHeart Gaming","Gabriel Alves","Sylvain Gaudreau","Ben","Aaron Wilker","Roger Villeneuve","Alan Pollard","Oliver Kent","David Bonderoff","Sparty92","Raffi Minassian","Jon","Vlad Batory","glenn boardman","Urchin Prince","Nickolas Olmanson","Duncan Clyborne","Daisy Gonzalez","Dave Franklyn","Rick Anderson","Steven Van Eckeren","Stellar5","Jack Posey","ThaFreaK","Stephen Morrey","Christian Fish","Matt Nantais","Cinghiale Frollo","The Pseudo Nerd","Shawn Morriss","Tomi Skibinski","Eric VanSingel","Joey Lalor","Jeffrey Weist","Stumpt","Gabby Alexander","John Ramsburg","David Feig","xinara7","Kallas Thenos","Troy Knoell","Rob Parr","Jeff Jackson","Nunya Bidness","Christopher Davis","Marshall Súileabáin","Vandalo","Sky Gewant","Simon Perkins","Reid Bollinger","Konrad Scheffel","Thomas Thomas","Joseph Hensley","Chris Avis","Christian Weckwert","Jacob Moore","Titus France","Fabrizio Tronci","Michael Whittington","Simon Haldon","Thiago Neves","Garry Pettigrew","Brandin Steiner","Simone Anedda","Julian Bailey","Troy Hillier","Quinton Cooper","Angelus Drake","Richart Nopé","SalsaBeard","Staz","Michael Bonnett","Skrinch","Eric Weberg","Xiax","BridgeWatch","Taking a cigarette","Santiago Mosqueda","Arpad"];
 
 	l1div = $("<div class='patreons-title'>Masters of the Realms</div>");
 	l1ul = $("<ul/>");
@@ -1707,7 +1707,7 @@ function init_things() {
 			}
 			init_ui();
 			if (is_encounters_page()) {
-
+			
 				// This brings in the styles that are loaded on the character sheet to support the "send to gamelog" feature.
 				$("body").append(`<link rel="stylesheet" type="text/css" href="https://media.dndbeyond.com/character-tools/styles.bba89e51f2a645f81abb.min.css" >`);
 
@@ -2177,6 +2177,12 @@ function init_ui() {
 	draw_overlay.css("left", "0");
 	draw_overlay.css("z-index", "18");
 
+	text_overlay = $("<canvas id='text_overlay'></canvas>");
+	text_overlay.css("position", "absolute");
+	text_overlay.css("top", "0");
+	text_overlay.css("left", "0");
+	text_overlay.css("z-index", "18");
+
 	grid = $("<canvas id='grid_overlay'></canvas>");
 	grid.css("position", "absolute");
 	grid.css("top", "0");
@@ -2191,8 +2197,17 @@ function init_ui() {
 	fog.css("position", "absolute");
 	fog.css("z-index", "20");
 
+	// this overlay sits above all other canvases
+	// we draw to this and then bake the image into the corresponding
+	// canvas, based on the drawing function
+	temp_overlay = $("<canvas id='temp_overlay'></canvas>");
+	temp_overlay.css("position", "absolute");
+	temp_overlay.css("top", "0");
+	temp_overlay.css("left", "0");
+	temp_overlay.css("z-index", "25");
 
-	fog.dblclick(function(e) {
+
+	temp_overlay.dblclick(function(e) {
 		e.preventDefault();
 
 		var mousex = Math.round((e.pageX - 200) * (1.0 / window.ZOOM));
@@ -2247,6 +2262,8 @@ function init_ui() {
 	VTT.append(fog);
 	VTT.append(grid);
 	VTT.append(draw_overlay);
+	VTT.append(text_overlay);
+	VTT.append(temp_overlay);
 
 	wrapper = $("<div id='VTTWRAPPER'/>");
 	wrapper.css("margin-left", "200px");
@@ -2416,7 +2433,7 @@ function init_ui() {
 	$(window).mousedown(mousedown);
 	$(window).mouseup(mouseup);
 
-	$("#fog_overlay").bind("contextmenu", function (e) {
+	$("#temp_overlay").bind("contextmenu", function (e) {
 		return false;
 	});
 
@@ -2458,237 +2475,29 @@ function init_buttons() {
 	if ($("#fog_menu").length > 0) {
 		return; // only need to do this once
 	}
-
-	var clear_button = $("<div class='ddbc-tab-options__header-heading'>ALL</div>");
-	clear_button.click(function() {
-
-		r = confirm("This will delete all FOG zones and REVEAL ALL THE MAP to the player. THIS CANNOT BE UNDONE. Are you sure?");
-		if (r == true) {
-			window.REVEALED = [[0, 0, $("#scene_map").width(), $("#scene_map").height()]];
-			redraw_canvas();
-			if(window.CLOUD){
-				sync_fog();
-			}
-			else{
-				window.ScenesHandler.persist();
-				window.ScenesHandler.sync();
-			}
-		}
-	});
-
-	var hide_all_button = $("<div class='ddbc-tab-options__header-heading'>ALL</div>");
-	hide_all_button.click(function() {
-		r = confirm("This will delete all FOG zones and HIDE ALL THE MAP to the player. THIS CANNOT BE UNDONE. Are you sure?");
-		if (r == true) {
-			window.REVEALED = [];
-			redraw_canvas();
-			if(window.CLOUD){
-				sync_fog();
-			}
-			else{
-				window.ScenesHandler.persist();
-				window.ScenesHandler.sync();
-			}
-		}
-	});
-
-
-	fog_menu = $("<div id='fog_menu' class='top_menu'></div>");
-	fog_menu.append("<div class='menu-subtitle'>Reveal</div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_square-r' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option remembered-selection' data-shape='rect' data-type=0>Square</div></div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_circle_r' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option' data-shape='arc'  data-type=0>Circle</div></div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_polygon_r' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option' data-shape='polygon' data-type=0>Polygon</div></div>");
-	fog_menu.append($("<div class='ddbc-tab-options--layout-pill' />").append(clear_button));
-	fog_menu.append("<div class='menu-subtitle'>Hide</div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_square_h' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option' data-shape='rect' data-type=1>Square</div></div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_circle_h' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option' data-shape='arc' data-type=1>Circle</div></div>");
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='fog_polygon_h' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option' data-shape='polygon' data-type=1>Polygon</div></div>");
-	fog_menu.append($("<div class='ddbc-tab-options--layout-pill' />").append(hide_all_button));
-	fog_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='ddbc-tab-options__header-heading' id='fog_undo'>UNDO</div></div>")
-	fog_menu.css("position", "fixed");
-	fog_menu.css("top", "25px");
-	fog_menu.css("width", "75px");
-	fog_menu.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')")
-	$("body").append(fog_menu);
-	fog_menu.find("#fog_undo").click(function(){
-		window.REVEALED.pop();
-		redraw_canvas();
-		if(window.CLOUD){
-			sync_fog();
-		}
-		else{
-			window.ScenesHandler.persist();
-			window.ScenesHandler.sync();
-		}
-	});
-
-
 	buttons = $(`<div class="ddbc-tab-options--layout-pill"></div>`);
 	$("body").append(buttons);
 
+	buttons.append($("<button style='display:inline; width:75px;' id='select-button' class='drawbutton hideable ddbc-tab-options__header-heading' data-shape='rect' data-function='select'><u>S</u>ELECT</button>"));
 	
-	buttons.append($("<div style='display:inline; width:75px;' id='select-button' class='drawbutton hideable ddbc-tab-options__header-heading' data-shape='select'><u>S</u>ELECT</div>"));
-
-	buttons.append($("<div style='display:inline;width:75px;' id='measure-button' class='drawbutton hideable ddbc-tab-options__header-heading' data-shape='measure'><u>R</u>ULER</div>"));
+	buttons.append($("<button style='display:inline;width:75px;' id='measure-button' class='drawbutton hideable ddbc-tab-options__header-heading' data-shape='line' data-function='measure'><u>R</u>ULER</button>"));
 	
 	if (window.DM) {
-		fog_button = $("<div style='display:inline;width:75px;' id='fog_button' class='drawbutton menu-button hideable ddbc-tab-options__header-heading'><u>F</u>OG</div>");
-
-		buttons.append(fog_button);
-		if (!window.DM) {
-			fog_button.hide();
-		}
-		fog_menu.css("left",fog_button.position().left);
-
-		draw_menu = $("<div id='draw_menu' class='top_menu'></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_square' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading remembered-selection' data-shape='rect' data-type='draw'>Square</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_circle' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='arc' data-type='draw'>Circle</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_cone' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='cone' data-type='draw'>Cone</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_line' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='line' data-type='draw'>Line</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_brush' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='brush' data-type='draw'>Brush</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_polygon' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='polygon' data-type='draw'>Polygon</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div id='draw_erase' class='drawbutton menu-option draw-option ddbc-tab-options__header-heading' data-shape='rect' data-type='eraser'>Erase</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='ddbc-tab-options__header-heading' id='draw_undo'>UNDO</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='ddbc-tab-options__header-heading' id='delete_drawing'>CLEAR</div></div>");
-
-		draw_menu.find("#delete_drawing").click(function() {
-			r = confirm("DELETE ALL DRAWINGS? (cannot be undone!)");
-			if (r === true) {
-				window.DRAWINGS = [];
-				redraw_drawings();
-				if(window.CLOUD){
-					sync_drawings();
-				} else {
-					window.ScenesHandler.persist();
-					window.ScenesHandler.sync();
-				}
-			}
-		});
-
-		draw_menu.find("#draw_undo").click(function() {
-			console.log("undo once")
-			window.DRAWINGS.pop();
-			redraw_drawings();
-			if(window.CLOUD){
-				sync_drawings();
-			}
-			else{
-				window.ScenesHandler.persist();
-				window.ScenesHandler.sync();
-			}
-		}
-	);
-
-		colors = $("<div class='ccpicker' style='background: #D32F2F;' />");
-			
-		colors.prepend("<div><input type='color' id='cpick' name='cpick' value='#E29393' style='width: 48px;'></div>");
-
-		colors.find("#cpick").click(function(e)	{ //open the color picker
-			$('body').append("<div id='cpicker_overlay'></div>");
-			$('#cpicker_overlay').click(function(e){
-				$('#cpicker_overlay').remove();
-			});
-			$("#cpick").change(function () { // run when color changed
-				cPick = $("#cpick").val();
-				console.log("cPicked! " + cPick);
-				cc.remove(); //remove previous picked color
-				cc = $("<div class='coloroption'/>");
-				cc.width(27);
-				cc.height(27);
-				cc.css("background", cPick); //set color from cPick
-				cc.css("float", "left");
-				colors.prepend(cc); //Place new color selector
-				$(".coloroption").css('border', '').removeClass('colorselected'); //deselect previous
-				cc.css('border', '2px solid black'); //highlight new color
-				cc.addClass('colorselected'); //select new color
-				$('#cpicker_overlay').remove();
-
-				cc.click(function(e) {
-					$(".coloroption").css('border', '').removeClass('colorselected');
-					$(e.currentTarget).css('border', '2px solid black');
-					$(e.currentTarget).addClass('colorselected');
-				});
-			});
-		});
-
-		for (i = 0; i < 20; i++){
-			var colorOp = $("<div class='coloroption'/>");//create Class for coloroption
-			c = colorOp;
-			c.width(15);
-			c.height(15);
-			c.css("background", DRAW_COLORS[i]);
-			c.css("float", "left");
-			colors.append(c);
-
-			c.click(function(e) {
-				$(".coloroption").css('border', '').removeClass('colorselected');
-				$(e.currentTarget).css('border', '2px solid black');
-				$(e.currentTarget).addClass('colorselected');
-			});
-		}
-
-		//create default cPick coloroption
-		cPick = "#E29393";
-		cc = $("<div class='coloroption'/>");
-		cc.width(27);
-		cc.height(27);
-		cc.css("background", cPick); //set color from cPick
-		cc.css("float", "left");
-		colors.prepend(cc); //Place new color selector in front of colorpicker
-		cc.css('border', '2px solid black'); //highlight new color
-		cc.addClass('colorselected'); //select new color
-		cc.click(function(e) {
-			$(".coloroption").css('border', '').removeClass('colorselected');
-			$(e.currentTarget).css('border', '2px solid black');
-			$(e.currentTarget).addClass('colorselected');
-		});
-
-		draw_menu.append(colors);
-		draw_menu.append("<div class='menu-subtitle'>Type</div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='drawType ddbc-tab-options__header-heading' data-value='transparent'>TRANSP</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='drawType ddbc-tab-options__header-heading' data-value='border'>BORDER</div></div>");
-		draw_menu.append("<div class='ddbc-tab-options--layout-pill'><div class='drawType ddbc-tab-options__header-heading' data-value='filled'>FILLED</div></div>");
-
-		draw_menu.find(".drawType").click(function(e) {
-			$(".drawType").removeClass('drawTypeSelected');
-			$(".drawType").removeClass('ddbc-tab-options__header-heading--is-active');
-			$(".drawType").css('background', '');
-			$(e.currentTarget).addClass('drawTypeSelected');
-			$(e.currentTarget).addClass('ddbc-tab-options__header-heading--is-active');
-			// $(e.currentTarget).css('background', '-webkit-linear-gradient(270deg, #e29393, #f37a7a)');
-		});
-
-		draw_menu.append("<div class='menu-subtitle'>Line Width</div>");
-		draw_menu.append("<div><input id='draw_line_width' type='range' style='width:90%' min='1' max='60' value='6' class='drawWidthSlider'></div>");
-
-		draw_menu.css("position", "fixed");
-		draw_menu.css("top", "25px");
-		draw_menu.css("width", "75px");
-		draw_menu.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')")
-
-		$("body").append(draw_menu);
-
-		draw_button = $("<div style='display:inline;width:75px' id='draw_button' class='drawbutton menu-button hideable ddbc-tab-options__header-heading'><u>D</u>RAW</div>");
-
-		buttons.append(draw_button);
-		draw_menu.css("left",draw_button.position().left);	
-
-		draw_menu.find(".drawType").first().click();
-		draw_menu.find(".coloroption").first().click();
+		init_fog_menu(buttons)
+		init_draw_menu(buttons)
+		init_text_button(buttons)
 
 	}
 
 	setup_aoe_button();
-	setup_draw_buttons();
+	handle_drawing_button_click();
 
-	buttons.append("<div style='display:inline;width:75px' id='help_button' class='hideable ddbc-tab-options__header-heading'>HELP</div>");
+	buttons.append("<button style='display:inline;width:75px' id='help_button' class='hideable ddbc-tab-options__header-heading'>HELP</button>");
 
 	buttons.css("position", "fixed");
 	buttons.css("top", '5px');
 	buttons.css("left", '5px');
 	buttons.css("z-index", '57000');
-
-
 
 	// HIDE default SEND TO functiontality in the campaign page:
 
@@ -2699,8 +2508,6 @@ function init_buttons() {
 	window.STREAMPEERS={};
 	window.MYSTREAMID=uuid();
 	window.JOINTHEDICESTREAM=false;
-
-
 
 	init_keypress_handler();
 
