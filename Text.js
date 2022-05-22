@@ -56,7 +56,7 @@ function apply_settings_to_boxes(){
         "font-style": window.TEXTDATA.text_italic ? "italic" : "normal",
         "text-decoration": window.TEXTDATA.text_underline ? "underline" : "none",
         "-webkit-text-stroke-color": window.TEXTDATA.stroke_color,
-        "-webkit-text-stroke-width": `${window.TEXTDATA.stroke_size}px`,
+        "-webkit-text-stroke-width": `calc(${window.TEXTDATA.stroke_size}px * var(--window-zoom))`,
         "text-shadow": window.TEXTDATA.text_shadow ? "black 5px 5px 5px" : "none"
     })
     
@@ -447,7 +447,7 @@ function handle_draw_text_submit(event) {
     };
 
     const stroke = {
-        size: parseInt($(textBox).css("-webkit-text-stroke-width")),
+        size: parseInt($(textBox).css("-webkit-text-stroke-width")) / window.ZOOM,
         color: $(textBox).css("-webkit-text-stroke-color"),
     };
     // only draw a rect if it's not fully transparent
