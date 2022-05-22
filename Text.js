@@ -303,10 +303,10 @@ function create_text_controller() {
 function create_moveable_text_box(x, y, width, height) {
     const textInputInside = $(`<div class="text-input-inside"/>`);
     textInputInside.css({
-        "position": "absolute",
+        "position": "fixed",
         "z-index": 1000,
-        "left": `${x - 200}px`,
-        "top": `${y - 200}px`,
+        "left": `${x}px`,
+        "top": `${y}px`,
         "width": width,
         "height": height,
         "min-height": "55px",
@@ -427,8 +427,8 @@ function handle_draw_text_submit(event) {
     );
     // textbox doesn't have left or top so use the wrapper
     // with 25 being the bar height
-    const rectX = Math.round(((parseInt($(textBox).parent().css("left"))) * (1.0 / window.ZOOM)));
-    const rectY = Math.round(((parseInt($(textBox).parent().css("top"))) * (1.0 / window.ZOOM)));
+    const rectX = Math.round(((parseInt($(textBox).parent().css("left"))-200+window.scrollX))) * (1.0 / window.ZOOM);
+    const rectY = Math.round(((parseInt($(textBox).parent().css("top"))-200+window.scrollY)) + 25) * (1.0 / window.ZOOM);
     const rectColor = $(textBox).css("background-color")
 
     const text = textBox.val();
