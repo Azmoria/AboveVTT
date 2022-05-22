@@ -303,16 +303,16 @@ function create_text_controller() {
 function create_moveable_text_box(x, y, width, height) {
     const textInputInside = $(`<div class="text-input-inside"/>`);
     textInputInside.css({
-        "position": "fixed",
+        "position": "absolute",
         "z-index": 1000,
-        "left": `${x}px`,
-        "top": `${y - 25}px`,
+        "left": `${x - 200}px`,
+        "top": `${y - 200}px`,
         "width": width,
         "height": height,
         "min-height": "55px",
         "min-width": "55px"
     });
-    $('#VTT').append(textInputInside);
+    $('#VTTWRAPPER').append(textInputInside);
     const titleBar = $("<div class='text-input-title-bar'></div>");
     const closeCross = $(
         `<div class='text-input-title-bar-exit'>
@@ -418,17 +418,17 @@ function handle_draw_text_submit(event) {
     if (!textBox.val()) return;
 
     const height = Math.max(
-        parseInt($(textBox).css("height")) + 25,
-        parseInt($(textBox).css("min-height"))
+        parseInt($(textBox).css("height")) * (1.0 / window.ZOOM),
+        parseInt($(textBox).css("min-height")) * (1.0 / window.ZOOM)
     );
     const width = Math.max(
-        parseInt($(textBox).css("width")),
-        parseInt($(textBox).css("min-width"))
+        parseInt($(textBox).css("width")) * (1.0 / window.ZOOM),
+        parseInt($(textBox).css("min-width"))  * (1.0 / window.ZOOM)
     );
     // textbox doesn't have left or top so use the wrapper
     // with 25 being the bar height
-    const rectX = parseInt($(textBox).parent().css("left"));
-    const rectY = parseInt($(textBox).parent().css("top")) + 25;
+    const rectX = Math.round(((parseInt($(textBox).parent().css("left")))  * (1.0 / window.ZOOM)));
+    const rectY = Math.round(((parseInt($(textBox).parent().css("top")))  * (1.0 / window.ZOOM)));
     const rectColor = $(textBox).css("background-color")
 
     const text = textBox.val();
@@ -469,7 +469,7 @@ function handle_draw_text_submit(event) {
     // push the starting position of y south based on the font size
     data = ["text",
         rectX,
-        rectY + font.size - 25,
+        rectY + font.size,
         width,
         height,
         text,

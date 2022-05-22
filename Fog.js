@@ -781,6 +781,10 @@ function drawing_mousedown(e) {
 			$("#temp_overlay").css('cursor', 'crosshair');
 		}		
 	}
+	if (window.DRAWFUNCTION === "draw_text"){
+		window.BEGIN_MOUSEX = event.pageX;
+		window.BEGIN_MOUSEY = event.pageY;
+	}
 // figure out what these 3 returns are supposed to be for.
 	if ($(".context-menu-list.context-menu-root ~ .context-menu-list.context-menu-root:visible, .body-rpgcharacter-sheet .context-menu-list.context-menu-root").length>0){
 		return;
@@ -839,13 +843,17 @@ function drawing_mousedown(e) {
 		drawClosingArea(context, window.BEGIN_MOUSEX[0], window.BEGIN_MOUSEY[0]);
 		
 	}
+	else if (window.DRAWFUNCTION === "draw_text")
+	{
+		window.MOUSEDOWN = true;
+		window.MOUSEMOVEWAIT = false;
+	}
 	else{
 		window.BEGIN_MOUSEX = pointX
 		window.BEGIN_MOUSEY = pointY
 		window.MOUSEDOWN = true;
 		window.MOUSEMOVEWAIT = false;
 	}
-
 
 }
 
@@ -1034,6 +1042,7 @@ function drawing_mouseup(e) {
 	const width = mouseX - window.BEGIN_MOUSEX;
 	const height = mouseY - window.BEGIN_MOUSEY;
 	// data is modified by each shape/function but as a starting point fill it up
+
 	let data = ['',
 		 window.DRAWTYPE,
 		 window.DRAWCOLOR,
@@ -1107,10 +1116,10 @@ function drawing_mouseup(e) {
 			window.MB.sendMessage('custom/myVTT/drawing', data);
 	}
 	else if (window.DRAWFUNCTION === "draw_text"){
-		data[0] = "text"
-		data[3] = e.clientX
-		data[4] = e.clientY
-		add_text_drawing_input(data)
+		data[0] = "text";
+		data[5] = event.pageX - data[3];
+		data[6] =  event.pageY - data[4];
+		add_text_drawing_input(data);
 	}
 	else if (window.DRAWFUNCTION == "hide" || window.DRAWFUNCTION == "reveal"){
 		finalise_drawing_fog(mouseX, mouseY, width, height)
