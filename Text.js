@@ -402,8 +402,14 @@ function create_moveable_text_box(x, y, width, height) {
         type="text" autocomplete="off"/>`
     );
     textInputInside.append(input)
+    $(input).css({
+        "white-space": "nowrap",
+        "overflow": "hidden"
+    });
+
+  
     apply_settings_to_boxes()
-    $(input).on("keyup", handle_key_press);
+    $(input).on("keyup input onchange", handle_key_press);
     $(input).focus();
 }
 
@@ -512,6 +518,8 @@ function handle_draw_text_submit(event) {
  */
 function handle_key_press(e) {
     if (e.key == "Escape") $(this).parent().remove();
+    $(this).parent().css("height", this.scrollHeight +25 + "px")
+    $(this).parent().css("width", this.scrollWidth + "px")
 }
 
 /**
