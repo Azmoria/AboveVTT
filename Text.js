@@ -518,8 +518,8 @@ function handle_draw_text_submit(event) {
  */
 function handle_key_press(e) {
     if (e.key == "Escape") $(this).parent().remove();
-    $(this).parent().css("height", this.scrollHeight +25 + "px")
-    $(this).parent().css("width", this.scrollWidth + "px")
+    $(this).parent().css("height", this.scrollHeight + 25 + 2 + "px")
+    $(this).parent().css("width", this.scrollWidth + 2 + "px")
 }
 
 /**
