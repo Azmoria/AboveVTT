@@ -274,9 +274,29 @@ function create_text_controller() {
         stop: function () {
             $('.iframeResizeCover').remove();
         },
+        resize: function (event) {
+            let controllerWidth = parseInt($(this).css("width"));
+            if(controllerWidth<301) {
+                $(this).css("min-height", "165px")
+            }
+            else if(controllerWidth<378){
+                $(this).css("min-height", "140px")
+            }
+            else if(controllerWidth<527){
+                $(this).css("min-height", "113px")
+            }
+            else if(controllerWidth<975){
+                $(this).css("min-height", "81px")
+            }
+            else{
+                $(this).css("min-height", "55px")
+            }
+        },
         minWidth: 80,
         minHeight: 55
     });
+
+    $("#text_controller_inside").css("min-width", "227px")
 
     $("#text_controller_inside").mousedown(function () {
         frame_z_index_when_click($(this));
