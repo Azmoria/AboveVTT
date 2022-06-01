@@ -20,34 +20,84 @@ const AOE_TEMPLATES = {
 }
 
 
+
+
 function setup_aoe_button() {
-    aoe_button = $("<div style='display:inline;width:75px' id='aoe_button' class='drawbutton menu-button hideable ddbc-tab-options__header-heading'><u>A</u>OE</div>");
-    aoe_menu = $("<div id='aoe_menu' class='top_menu'></div>");
+    const availabllStyle = [
+        "Acid",
+        "Bludgeoning",
+        "Fire",
+        "Force",
+        "Ice",
+        "Lightning",
+        "Nature",
+        "Necrotic",
+        "Piercing",
+        "Poison",
+        "Psychic",
+        "Radiant",
+        "Slashing",
+        "Thunder",
+        "Water"
+    ]
+    const aoeButton = $("<div style='display:inline;width:75px' id='aoe_button' class='drawbutton menu-button hideable ddbc-tab-options__header-heading'><u>A</u>OE</div>");
+    const aoeMenu = $("<div id='aoe_menu' class='top_menu'></div>");
 
-    aoe_menu.append("<div class='menu-subtitle'>Size</div>");
-    aoe_menu.append("<div><input tabindex='2' id='aoe_feet' value='20' style='width:75px;margin:0px;text-align:center' maxlength='10' type='number' step='5'></div>");
+    aoeMenu.append("<div class='menu-subtitle'>Size</div>");
+    
+    aoeMenu.append(`<div><input min='5' tabindex='2' id='aoe_feet_height' value='20' style='width:75px;margin:0px;text-align:center' maxlength='10' type='number' step='5'></div>`);
 
-    aoe_menu.append("<div class='menu-subtitle'>Color</div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='3' id='aoe_default' class='ddbc-tab-options__header-heading drawbutton menu-option aoe-option aoecolor remembered-selection ddbc-tab-options__header-heading--is-active'>Default</div></div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='3' id='aoe_fire' class='ddbc-tab-options__header-heading drawbutton menu-option aoe-option aoecolor'>Fire</div></div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='3' id='aoe_dark' class='ddbc-tab-options__header-heading drawbutton menu-option aoe-option aoecolor'>Dark</div></div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='3' id='aoe_green' class='ddbc-tab-options__header-heading drawbutton menu-option aoe-option aoecolor'>Green</div></div>");
+    aoeMenu.append("<div class='menu-subtitle'>Style</div>");
+    aoeMenu.append(
+        `<div class='ddbc-tab-options--layout-pill'>
+            <select id='aoe_styles' class="ddbc-select ddbc-tab-options__header-heading" >
+                ${availabllStyle.map((aoeStyle) => {
+                    return `<option class="ddbc-tab-options__header-heading" value="${aoeStyle}">${aoeStyle}</option>`;
+                })}
+            </select>
+        </div>
+            `)
+    aoeMenu.append("<div class='menu-subtitle'>Shape</div>");
 
-    aoe_menu.append("<div class='menu-subtitle'>Shape</div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='1' id='aoe_cone' class='aoeshape ddbc-tab-options__header-heading'>Cone</div></div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='1' id='aoe_square' class='aoeshape ddbc-tab-options__header-heading'>Square</div></div>");
-    aoe_menu.append("<div class='ddbc-tab-options--layout-pill'><div tabindex='1' id='aoe_circle'class='aoeshape ddbc-tab-options__header-heading'>Circle</div></div>");
+    aoeMenu.append(`
+        <div class='ddbc-tab-options--layout-pill'>
+            <button id='aoe_square' data-shape='square' class='ddbc-tab-options__header-heading'>
+                Square
+                <span class="material-icons aoe-button-moveable">open_with</span>
+            </button>
+        </div>`);
+    aoeMenu.append(`
+        <div class='ddbc-tab-options--layout-pill'>
+            <button id='aoe_line' data-shape='line' class='ddbc-tab-options__header-heading'>
+                Line
+                <span class="material-icons aoe-button-moveable">open_with</span>
+            </button>
+        </div>`);
+    aoeMenu.append(`
+        <div class='ddbc-tab-options--layout-pill'>
+            <button id='aoe_circle' data-shape='circle' class='ddbc-tab-options__header-heading'>
+                Circle
+                <span class="material-icons aoe-button-moveable">open_with</span>
+            </button>
+        </div>`);
+    aoeMenu.append(`
+        <div class='ddbc-tab-options--layout-pill'>
+            <button id='aoe_cone' data-shape='cone' class='ddbc-tab-options__header-heading'>
+                Cone 
+                <span class="material-icons aoe-button-moveable">open_with</span>
+            </button>
+        </div>`);
+    aoeMenu.find("button, select").css("width", "69px")
+    aoeMenu.css("position", "fixed");
+    aoeMenu.css("top", "25px");
+    aoeMenu.css("width", "75px");
+    aoeMenu.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
-    aoe_menu.css("position", "fixed");
-    aoe_menu.css("top", "25px");
-    aoe_menu.css("width", "75px");
-    aoe_menu.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
-
-    $("body").append(aoe_menu);
+    $("body").append(aoeMenu);
 
 
-    buttons.append(aoe_button);
-    aoe_menu.css("left", aoe_button.position().left);
+    buttons.append(aoeButton);
+    aoeMenu.css("left", aoeButton.position().left);
 
 
     $("#aoe_feet").keydown(function(e) {
@@ -56,18 +106,13 @@ function setup_aoe_button() {
         }
     });
 
-    $(".aoeshape").click(function (e) {
-        const color = $(".aoe-option.remembered-selection").attr('id').split('_')[1];
-        const shape = this.id.split("_")[1];
-        let feet = document.getElementById("aoe_feet").value
+    $("#aoe_menu button").click(function (e) {
+       
+        const feet = $("#aoe_feet_height").val()
 
-        // refocus size box if size is 0
-        if (!is_feet_valid(feet)) {
-            $("#aoe_feet").focus();
-            return;
-        }
-
-        drop_aoe_token(color, shape, feet);
+        const shape = $(e.currentTarget).attr("data-shape") 
+        const style = $("#aoe_styles").val().toLowerCase()
+        drop_aoe_token(style, shape, feet);
 
         if(window.DM){
             $('#select-button').click();
@@ -76,58 +121,78 @@ function setup_aoe_button() {
             $('#aoe_button').click();
         }
     });
+    $("#aoe_menu button").draggable({
+        appendTo: "#VTTWRAPPER",
+        zIndex: 100000,
+        cursorAt: {top: 0, left: 0},
+        // cancel:false is required when dragging buttons
+        cancel:false,
+        helper: function(event) {
+            console.log("enable_draggable_token_creation helper");
+            // let draggedRow = $(event.target).closest(".list-item-identifier");
+            // let draggedItem = find_sidebar_list_item(draggedRow);
+            // let helper = draggedRow.find("img.token-image").clone();
+            // if (specificImage !== undefined) {
+            //     helper.attr("src", specificImage);
+            // } else {
+            //     let randomImage = random_image_for_item(draggedItem);
+            //     helper.attr("src", randomImage);
+            // }
+            // let helper = $(`
+            // <div class="token-image" style="max-width:50px; max-height:50px" >
+            //     <div data-image="true" class=aoe-token-tileable aoe-style-acid aoe-shape-cone />
+            // </div>`)
+            let helper = $(`<div style=background-color:white; width:50px; height:50px>`)
+            helper.addClass("draggable-token-creation");
+
+            return helper;
+        },
+        start: function (event, ui) {
+            console.log("enable_draggable_token_creation start");
+            $(ui.helper).css('width', `50px`);
+            $(this).draggable('instance').offset.click = {
+                left: Math.floor(ui.helper.width() / 2),
+                top: Math.floor(ui.helper.height() / 2)
+            };
+        },
+        drag: function (event, ui) {
+            if (event.shiftKey) {
+                $(ui.helper).css("opacity", 0.5);
+            } else {
+                $(ui.helper).css("opacity", 1);
+            }
+        },
+        stop: function (event, ui) {
+            event.stopPropagation(); // prevent the mouseup event from closing the modal
+            // if ($(ui.helper).hasClass("drag-cancelled")) {
+            //     console.log("enable_draggable_token_creation cancelled");
+            //     return;
+            // }
+
+            let droppedOn = document.elementFromPoint(event.clientX, event.clientY);
+            console.log("droppedOn", droppedOn);
+            // if (droppedOn?.closest("#VTT")) {
+            //     // place a token where this was dropped
+            //     console.log("enable_draggable_token_creation stop");
+            //     let draggedRow = $(event.target).closest(".list-item-identifier");
+            //     let draggedItem = find_sidebar_list_item(draggedRow);
+            //     let hidden = event.shiftKey || window.TOKEN_SETTINGS["hidden"];
+            //     let src = $(ui.helper).attr("src");
+            //     create_and_place_token(draggedItem, hidden, src, event.pageX, event.pageY);
+            // } else {
+            //     console.log("Not dropping over element", droppedOn);
+            // }
+            drop_aoe_token( 
+                $("#aoe_styles").val().toLowerCase(),
+                $(event.target).attr("data-shape"),
+                $("#aoe_feet_height").val())
+        }
+    })
+
 }
 
-function is_feet_valid(feet) {
-    return parseInt(feet) > 0;
-}
-
-function drop_aoe_token(color, shape, feet) {
-
-    // support 13 damage types, for now most things will be default,
-    // but this should make it easier to add more template colors as they come in
-    switch(color) {
-        case "slashing":
-            color = "default";
-            break;
-        case "piercing":
-            color = "default";
-            break;
-        case "bludgeoning":
-            color = "default";
-            break;
-        case "poison":
-            color = "green";
-            break;
-        case "acid":
-            color = "green";
-            break;
-        case "fire":
-            color = "fire";
-            break;
-        case "cold":
-            color = "default";
-            break;
-        case "radiant":
-            color = "fire";
-            break;
-        case "necrotic":
-            color = "dark";
-            break;
-        case "lightning":
-            color = "default";
-            break;
-        case "thunder":
-            color = "default";
-            break;
-        case "force":
-            color = "default";
-            break;
-        case "psychic":
-            color = "default";
-            break;
-    }
-
+function drop_aoe_token(style, shape, feet) {
+   
     // normalize shape
     switch(shape) {
         case "cube":
@@ -139,29 +204,25 @@ function drop_aoe_token(color, shape, feet) {
         case "cylinder":
             shape = "circle";
     }
-
-    // don't create a token if the size isn't valid
-    if (!is_feet_valid(feet)) {
-        throw "failed to create aoe token, feet is invalid: " + feet;
-    }
-
-    // convert feet into pixels
     let size = window.CURRENT_SCENE_DATA.hpps * (feet / window.CURRENT_SCENE_DATA.fpsq);
 
+    const height =  parseInt(feet / window.CURRENT_SCENE_DATA.fpsq);
     // circles are always by radius
     if (shape == 'circle') {
         size = size * 2;
     }
 
-    console.log(`dropping aoe token: color ${color}, shape ${shape}, feet ${feet}`);
+    const image = `class=aoe-token-tileable aoe-style-${style} aoe-shape-${shape}`
 
     let atts = {
         disablestat: true,
         hidestat: true,
         disableborder: true,
         square: true,
-        imgsrc: AOE_TEMPLATES[`${color}-${shape}`],
-        size: Math.round(size),
+        imgsrc: image,
+        size: shape !== "line" ? size : "",
+        gridHeight: shape === "line" ? Math.round(height) : "",
+        gridWidth: shape === "line" ? 1 : "",
         restrictPlayerMove: false,
         hidden: false,
         locked: false,
@@ -179,4 +240,22 @@ function drop_aoe_token(color, shape, feet) {
         atts.top = center.y;
         window.MB.sendMessage("custom/myVTT/createtoken",atts);
     }
+}
+
+function build_aoe_token_image(token){
+    tokenImageContainer = $(`<div class=token-image>`)
+    tokenImage = $(
+        `<div data-img="true" style='transform:scale(1) rotate(0)'; 
+         class='${token.options.imgsrc.replace("class=","").trim()}'>
+         </div>
+        `)
+
+    if (token.options.imgsrc.includes("cone")){
+        tokenImageContainer.append(`<div class='aoe-border aoe-border-cone'></div>`)
+    }
+    else {
+        $(tokenImage).addClass("aoe-border-basic")
+    }
+    tokenImageContainer.append(tokenImage)
+    return tokenImageContainer
 }
