@@ -1188,8 +1188,7 @@ class Token {
 					width: this.sizeWidth(),
 					height: this.sizeHeight()
 				}, { duration: 1000, queue: false });
-				
-				var zindexdiff=(typeof this.options.zindexdiff == 'number') ? this.options.zindexdiff : Math.round(17/ (this.options.size/window.CURRENT_SCENE_DATA.hpps)); // width vs height here?
+				var zindexdiff=(typeof this.options.zindexdiff == 'number') ? this.options.zindexdiff : Math.round(17/(this.sizeWidth()/window.CURRENT_SCENE_DATA.hpps));
 				this.options.zindexdiff = Math.max(zindexdiff, -5000);
 				old.css("z-index", "calc(5000 + var(--z-index-diff))");
 				old.css("--z-index-diff", zindexdiff);
@@ -1338,7 +1337,7 @@ class Token {
 
 
 
-			var zindexdiff=(typeof this.options.zindexdiff == 'number') ? this.options.zindexdiff : Math.round(17/ (this.options.size/window.CURRENT_SCENE_DATA.hpps)); // sizeHeight() or sizeWidth() here?
+			var zindexdiff=(typeof this.options.zindexdiff == 'number') ? this.options.zindexdiff : Math.round(17/(this.sizeWidth()/window.CURRENT_SCENE_DATA.hpps)); 
 			this.options.zindexdiff = Math.max(zindexdiff, -5000);
 			console.log("Diff: "+zindexdiff);
 			
@@ -1524,7 +1523,16 @@ class Token {
 					window.DRAGGING = true;
 					click.x = event.pageX;
 					click.y = event.pageY;
+					if(self.selected == false && $(".token.tokenselected").length>0){
+						for (let tok of $(".token.tokenselected")){
+							let id = $(tok).attr("data-id");
+							window.TOKEN_OBJECTS[id].selected = false;
+							$("#tokens [data-id='" + id + "']").toggleClass("tokenselected", false)
+						}
+					}
 
+					self.selected = true;
+					$("#tokens [data-id='" + self.options.id + "']").toggleClass("tokenselected", true);
 					if(tok.is(":animated")){
 						self.stopAnimation();
 					}

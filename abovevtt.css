@@ -1964,7 +1964,8 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
 }
 .token.isAoe .token-image,
 .token.isAoe .token-image *,
-.token.isAoe:before{
+.token.isAoe:before,
+.token.isAoe div#note {
     visibility: visible;
 }
 .aoe-token-tileable {
@@ -2134,6 +2135,10 @@ ul.context-menu-list > li {
 	position: absolute;
 	left: -32px;
     top: -3px;
+}
+
+#site .mfp-wrap {
+    z-index: 100000;
 }
 
 .soundpad-section-title{
@@ -2398,7 +2403,7 @@ body {
     right: 0px;
     width: 340px;
     z-index: -1;
-    height: calc(-30px + 100vh);
+    height: calc(-45px + 100vh);
 }
 div.sidebar__pane-content > div.selected-tab,
 div.ct-sidebar__pane-content > div.selected-tab {
@@ -3142,7 +3147,10 @@ h5.token-image-modal-footer-title:after {
     width: fit-content;
     white-space: nowrap;
 }
-
+.ct-sidebar{
+    inset: 0px 0px 0px auto !important;
+    right: 0px !important;
+ }
 .chat-text-wrapper.sidebar-hovertext:before{
  bottom: 100px;
  text-align: left;
@@ -3225,6 +3233,7 @@ button.avtt-roll-button {
     width: 100%;
 }
 
+
 #sounds-panel .volume-control {
     width: 50%;
     float: right;
@@ -3266,7 +3275,10 @@ button.avtt-roll-button {
     height: 100%;
 }
 
-.MuiModal-root{
+
+.MuiModal-root,
+div#selectedTokensBorder,
+div#selectedTokensBorderRotationGrabberConnector  {
     pointer-events: none;
 }
 

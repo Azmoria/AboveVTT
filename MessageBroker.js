@@ -60,28 +60,29 @@ function addVideo(stream,streamerid) {
 	
 	let canvas=dicecanvas.get(0);
 	let ctx=canvas.getContext('2d');
+	let tmpcanvas = document.createElement("canvas");
+  video.addEventListener("resize", function(){
+  		let videoAspectRatio = video.videoWidth / video.videoHeight
+			if (video.videoWidth > video.videoHeight)
+			{
+				tmpcanvas.width = Math.min(video.videoWidth, window.innerWidth);
+				tmpcanvas.height = Math.min(video.videoHeight, window.innerWidth / videoAspectRatio);		
+			}
+			else {
+				tmpcanvas.width = Math.min(video.videoWidth, window.innerHeight / (1 / videoAspectRatio));
+				tmpcanvas.height = Math.min(video.videoHeight, window.innerHeight);		
+			}
+			dicecanvas.attr("width", tmpcanvas.width + "px");
+			dicecanvas.attr("height", tmpcanvas.height  + "px");
+			dicecanvas.css("height",tmpcanvas.height);
+			dicecanvas.css("width",tmpcanvas.width );
+  });
+
 	let updateCanvas=function(){
-		delayedClear();
+		//resize canvas due to Chrome bug - this may be fixed in chrome later
+		resizeCanvasChromeBug()
 		
-		let tmpcanvas = document.createElement("canvas");
-		let videoAspectRatio = video.videoWidth / video.videoHeight
-		if (video.videoWidth > video.videoHeight)
-		{
-			tmpcanvas.width = Math.min(video.videoWidth, window.innerWidth);
-			tmpcanvas.height = Math.min(video.videoHeight, window.innerWidth / videoAspectRatio);		
-		}
-		else {
-			tmpcanvas.width = Math.min(video.videoWidth, window.innerHeight / (1 / videoAspectRatio));
-			tmpcanvas.height = Math.min(video.videoHeight, window.innerHeight);		
-		}
-		
-		video.setAttribute("width", tmpcanvas.width)
-		video.setAttribute("height", tmpcanvas.height)
 		let tmpctx = tmpcanvas.getContext("2d");
-		dicecanvas.attr("width", tmpcanvas.width + "px");
-		dicecanvas.attr("height", tmpcanvas.height  + "px");
-		dicecanvas.css("height",tmpcanvas.height);
-		dicecanvas.css("width",tmpcanvas.width );
 		window.requestAnimationFrame(updateCanvas);
 		tmpctx.drawImage(video, 0, 0, tmpcanvas.width, tmpcanvas.height);
 		if(tmpcanvas.width>0)
@@ -92,9 +93,9 @@ function addVideo(stream,streamerid) {
 				const red = frame.data[i + 0];
 				const green = frame.data[i + 1];
 				const blue = frame.data[i + 2];
-				/*if ((red < 24) && (green < 24) && (blue < 24))
-					frame.data[i + 3] = 128;*/
-				if ((red < 14) && (green < 14) && (blue < 14))
+				if ((red < 5) && (green < 5) && (blue < 5))
+					frame.data[i + 3] = 128;
+				if ((red == 0) && (green == 0) && (blue == 0))
 					frame.data[i + 3] = 0;
 				
 			}
@@ -102,6 +103,16 @@ function addVideo(stream,streamerid) {
 		}
 	};
 	updateCanvas();
+}
+
+function resizeCanvasChromeBug(){
+	let diceRollCanvas = $(".dice-rolling-panel__container");
+	if(parseInt(diceRollCanvas.attr("width")) % 2 != 0){
+		diceRollCanvas.attr("width", parseInt(diceRollCanvas.attr("width"))+1);
+	}
+	if(parseInt(diceRollCanvas.attr("height")) % 2 != 0){
+		diceRollCanvas.attr("height", parseInt(diceRollCanvas.attr("height"))+1);
+	}
 }
 
 class MessageBroker {
@@ -478,6 +489,9 @@ class MessageBroker {
 			if (msg.eventType == "custom/myVTT/syncmeup") {
 				self.handleSyncMeUp(msg);
 			}
+			if (msg.eventType == "custom/myVTT/audioPlayingSyncMe") {
+				self.handleAudioPlayingSync(msg);
+			}
 			if(msg.eventType == "character-sheet/character-update/fulfilled"){
 				if(window.DM)
 					self.handleCharacterUpdate(msg);
@@ -637,7 +651,7 @@ class MessageBroker {
 				handle_mixer_event(msg.data);
 			}
 			if(msg.eventType=="custom/myVTT/soundpad"){
-				build_soundpad(msg.data.soundpad);
+				build_soundpad(msg.data.soundpad, msg.data.playing);
 			}
 
 			if(msg.eventType=="custom/myVTT/playchannel"){
@@ -1167,11 +1181,11 @@ class MessageBroker {
 
 		if(window.all_token_objects != undefined){
 			if (data.id in window.all_token_objects) {
-				for (var property in data) {		
+				for (var property in window.all_token_objects[data.id].options) {		
 					if(msg.loading && property != "left" && property != "top"){
 						data[property] = window.all_token_objects[data.id].options[property];
 					}
-					else{
+					else if(property in data){
 					 window.all_token_objects[data.id].options[property] = data[property]; 
 					}
 				}
@@ -1378,13 +1392,36 @@ class MessageBroker {
 			window.ScenesHandler.sync();
 			ct_persist(); // force refresh of combat tracker for late users
 			if (window.CURRENT_SOUNDPAD) {
+				let audioPlaying;
+				for(i in $("audio")){
+			    if($("audio")[i].paused == false){
+			    		audioPlaying = true;
+			        break;
+			    }
+				}
 				var data = {
-					soundpad: window.CURRENT_SOUNDPAD
+					soundpad: window.CURRENT_SOUNDPAD,
+					playing: audioPlaying
 				}
 				window.MB.sendMessage("custom/myVTT/soundpad", data); // refresh soundpad
 			}
 			// also sync the journal
 			window.JOURNAL.sync();
+		}
+	}
+
+	handleAudioPlayingSync(msg){
+		if(window.DM){
+			for(i in $("audio")){
+		    if($("audio")[i].paused == false){
+		    	var data={
+						channel: i,
+						time: $("audio")[i].currentTime,
+						volume: $("audio")[i].volume,
+					}
+					window.MB.sendMessage("custom/myVTT/playchannel",data);
+		    }
+			}
 		}
 	}
 
