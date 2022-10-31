@@ -381,7 +381,7 @@ function is_token_under_fog(tokenid){
 	var left = parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2);
 	var top = parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2);
 	var pixeldata = ctx.getImageData(left, top, 1, 1).data;
-	if (pixeldata[3] == 255)
+	if (pixeldata[3] == 255 && !window.TOKEN_OBJECTS[tokenid].options.revealInFog)
 		return true;
 	else
 		return false;
@@ -422,8 +422,8 @@ function check_single_token_visibility(id){
 			let auraSelector = ".aura-element[id='aura_" + auraSelectorId + "']";
 			let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
 			let playerTokenAuraIsLight = (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraislight;
-			
-			if (is_token_under_fog(id) || (playerTokenAuraIsLight && !is_token_under_light_aura(id))) {
+						
+			if (is_token_under_fog(id) || (playerTokenAuraIsLight && !is_token_under_light_aura(id) && !window.TOKEN_OBJECTS[id].options.revealInFog)) {
 				$(selector).hide();
 				if(window.TOKEN_OBJECTS[id].options.hideaurafog)
 				{
@@ -478,11 +478,11 @@ function do_check_token_visibility() {
 		var auraSelectorId = $(".token[data-id='" + id + "']").attr("data-id").replaceAll("/", "");
 		var selector = "div[data-id='" + id + "']";
 		let auraSelector = ".aura-element[id='aura_" + auraSelectorId + "']";
+
 		let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
 		let playerTokenAuraIsLight = (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraislight;
 			
-		if (pixeldata[3] == 255 || (playerTokenAuraIsLight && !is_token_under_light_aura(id))) {
-
+		if ((pixeldata[3] == 255 || (playerTokenAuraIsLight && !is_token_under_light_aura(id))) && !window.TOKEN_OBJECTS[id].options.revealInFog) {
 			$(selector).hide();
 			if(window.TOKEN_OBJECTS[id].options.hideaurafog)
 			{
