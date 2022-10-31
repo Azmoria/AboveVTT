@@ -517,6 +517,34 @@ class Token {
 		console.group("update_health_aura")
 		// set token data to the player if this token is a player token, otherwise just use this tokens data
 		let tokenData = this.munge_token_data()
+		if($(`.token[data-id='${this.options.id}']>.hpvisualbar`).length<1){
+			let hpvisualbar = $(`<div class='hpvisualbar'></div>`);
+			$(`.token[data-id='${this.options.id}']`).append(hpvisualbar);
+		}
+
+
+		if(this.options.healthauratype == undefined){
+			if(this.options.disableaura){
+				this.options.healthauratype = "none"
+			}
+			if(this.options.enablepercenthpbar){
+				this.options.healthauratype = "bar"
+			}
+		}
+		else{
+			if(this.options.healthauratype == "none"){
+				this.options.disableaura = true;
+				this.options.enablepercenthpbar = false;
+			} else if(this.options.healthauratype == "bar"){
+				this.options.disableaura = true;
+				this.options.enablepercenthpbar = true;
+			} else if(this.options.healthauratype == "aura"){
+				this.options.disableaura = false;
+				this.options.enablepercenthpbar = false;
+			}
+		}
+
+
 		if (tokenData.max_hp > 0) {
 			if(window.PLAYER_STATS[this.options.id] || !tokenData.temp_hp) {	
 				var tokenHpAuraColor = token_health_aura(
@@ -1171,6 +1199,7 @@ class Token {
 			old.find(".token-image").css("transition", "max-height 0.2s linear, max-width 0.2s linear, transform 0.2s linear")
 			old.find(".token-image").css("transform", "scale(" + imageScale + ") rotate("+rotation+"deg)");
 			old.css("--token-rotation", rotation+"deg");
+			old.css("--token-scale", imageScale);
 			setTimeout(function() {old.find(".token-image").css("transition", "")}, 200);		
 			
 			var selector = "tr[data-target='"+this.options.id+"']";
@@ -1345,6 +1374,7 @@ class Token {
 					imgClass = 'token-image preserve-aspect-ratio';
 				}
 				tokenImage = $("<img style='transform:scale(" + imageScale + ") rotate(" + rotation + "deg)' class='"+imgClass+"'/>");
+				tok.css("--token-scale", imageScale)
 				if(!(this.options.square)){
 					tokenImage.addClass("token-round");
 				}
@@ -2297,6 +2327,7 @@ function setTokenBase(token, options) {
 	}
 	if (options.tokenStyleSelect !== "noConstraint") {
 		token.children("img").toggleClass("freeform", false);
+		token.toggleClass("freeform", false);
 	}
 
 	if (options.tokenStyleSelect === "circle") {
@@ -2305,6 +2336,7 @@ function setTokenBase(token, options) {
 		options.legacyaspectratio = true;
 		token.children("img").css("border-radius", "50%")
 		token.children("img").removeClass("preserve-aspect-ratio");
+		token.toggleClass("square", false);
 	}
 	else if(options.tokenStyleSelect === "square"){
 		//Square
@@ -2312,6 +2344,7 @@ function setTokenBase(token, options) {
 		options.legacyaspectratio = true;
 		token.children("img").css("border-radius", "0");
 		token.children("img").removeClass("preserve-aspect-ratio");
+		token.toggleClass("square", true);
 	}
 	else if(options.tokenStyleSelect === "noConstraint" || options.tokenStyleSelect === "definitelyNotAToken") {
 		//Freeform
@@ -2328,7 +2361,7 @@ function setTokenBase(token, options) {
 		token.children("img").css("border-radius", "0");
 		token.children("img").addClass("preserve-aspect-ratio");
 		token.children("img").toggleClass("freeform", true);
-
+		token.toggleClass("freeform", true);
 	}
 	else if(options.tokenStyleSelect === "virtualMiniCircle"){
 		$(`.token[data-id='${options.id}']`).prepend(base);
