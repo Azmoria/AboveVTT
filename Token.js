@@ -1461,68 +1461,6 @@ class Token {
 						tok.removeAttr("data-dragging")
 						tok.removeAttr("data-drag-x")
 						tok.removeAttr("data-drag-y")
-			
-						// this should be a XOR... (A AND !B) OR (!A AND B)
-						let shallwesnap=  (window.CURRENT_SCENE_DATA.snap == "1"  && !(window.toggleSnap)) || ((window.CURRENT_SCENE_DATA.snap != "1") && window.toggleSnap);
-						console.log("shallwesnap",shallwesnap);
-						console.log("toggleSnap",window.toggleSnap);					
-						if (shallwesnap) {
-
-							// calculate offset in real coordinates
-							const startX = window.CURRENT_SCENE_DATA.offsetx;
-							const startY = window.CURRENT_SCENE_DATA.offsety;
-
-							const selectedOldTop = parseInt($(event.target).css("top"));
-							const selectedOldleft = parseInt($(event.target).css("left"));
-							
-
-							const selectedNewtop =  Math.round(Math.round( (selectedOldTop - startY) / window.CURRENT_SCENE_DATA.vpps)) * window.CURRENT_SCENE_DATA.vpps + startY;
-							const selectedNewleft = Math.round(Math.round( (selectedOldleft - startX) / window.CURRENT_SCENE_DATA.hpps)) * window.CURRENT_SCENE_DATA.hpps + startX;
-
-							console.log("Snapping from "+selectedOldleft+ " "+selectedOldTop + " -> "+selectedNewleft + " "+selectedNewtop);
-							console.log("params startX " + startX + " startY "+ startY + " vpps "+window.CURRENT_SCENE_DATA.vpps + " hpps "+window.CURRENT_SCENE_DATA.hpps);
-
-							$(event.target).css("top", selectedNewtop + "px");
-							$(event.target).css("left", selectedNewleft + "px");
-
-							///GET
-							const token = $(event.target);
-							const el = token.parent().parent().find("#aura_" + token.attr("data-id").replaceAll("/", ""));
-							if (el.length > 0) {
-								const auraSize = parseInt(el.css("width"));
-
-								el.css("top", `${selectedNewtop - ((auraSize - self.sizeHeight()) / 2)}px`);
-								el.css("left", `${selectedNewleft - ((auraSize - self.sizeWidth()) / 2)}px`);
-							}
-
-							for (let tok of $(".token.tokenselected")){
-								let id = $(tok).attr("data-id");
-								var curr = window.TOKEN_OBJECTS[id];
-								$("[data-id='"+id+"']").removeClass("pause_click");
-								console.log($("[data-id='"+id+"']"));
-
-								if (id != self.options.id) {
-
-									const oldtop = parseInt($(tok).css("top"));
-									const oldleft = parseInt($(tok).css("left"));
-
-									const newtop = Math.round((oldtop - startY) / window.CURRENT_SCENE_DATA.vpps) * window.CURRENT_SCENE_DATA.vpps + startY;
-									const newleft = Math.round((oldleft - startX) / window.CURRENT_SCENE_DATA.hpps) * window.CURRENT_SCENE_DATA.hpps + startX;
-
-									$(tok).css("top", newtop + "px");
-									$(tok).css("left", newleft + "px");
-
-									const selEl = $(tok).parent().parent().find("#aura_" + id.replaceAll("/", ""));
-									if (selEl.length > 0) {
-										const auraSize = parseInt(selEl.css("width"));
-
-										selEl.css("top", `${newtop - ((auraSize - window.TOKEN_OBJECTS[id].sizeHeight()) / 2)}px`);
-										selEl.css("left", `${newleft - ((auraSize - window.TOKEN_OBJECTS[id].sizeWidth()) / 2)}px`);
-									}
-								}
-								
-							}
-						}					
 				
 						// finish measuring
 						// drop the temp overlay back down so selection works correctly
@@ -1950,13 +1888,19 @@ function should_snap_to_grid() {
 function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 	if (forceSnap || should_snap_to_grid()) {
 		// adjust to the nearest square coordinate
-		const startX = window.CURRENT_SCENE_DATA.offsetx;
-		const startY = window.CURRENT_SCENE_DATA.offsety;
+		let startX = window.CURRENT_SCENE_DATA.offsetx;
+		let startY = window.CURRENT_SCENE_DATA.offsety;
 
 		const gridWidth = window.CURRENT_SCENE_DATA.hpps;
 		const gridHeight = window.CURRENT_SCENE_DATA.vpps;
 		const currentGridX = Math.floor((mapX - startX) / gridWidth);
 		const currentGridY = Math.floor((mapY - startY) / gridHeight);
+		if(window.hexGridColumn && currentGridX % 2 == 0){
+			startY = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.vpps/2)
+		}
+		if(window.hexGridRow  && currentGridY % 2 == 0){
+			startX = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.hpps/2)
+		}
 		return {
 			x: (currentGridX * gridWidth) + startX,
 			y: (currentGridY * gridHeight) + startY
