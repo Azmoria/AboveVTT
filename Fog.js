@@ -167,8 +167,8 @@ class WaypointManagerClass {
 		// Add in scene offset
 		snapPointXStart += window.CURRENT_SCENE_DATA.offsetx;
 		snapPointYStart += window.CURRENT_SCENE_DATA.offsety;
-		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
 		const a = 2 * Math.PI / 6;
+		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
 		if(window.hexGridColumn){
 			return {
 				x: (currGridX * hexGridWidth) + window.CURRENT_SCENE_DATA.offsetx,
