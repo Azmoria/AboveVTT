@@ -1891,15 +1891,22 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 		let startX = window.CURRENT_SCENE_DATA.offsetx;
 		let startY = window.CURRENT_SCENE_DATA.offsety;
 
-		const gridWidth = window.CURRENT_SCENE_DATA.hpps;
-		const gridHeight = window.CURRENT_SCENE_DATA.vpps;
-		const currentGridX = Math.floor((mapX - startX) / gridWidth);
-		const currentGridY = Math.floor((mapY - startY) / gridHeight);
+		let gridWidth = window.CURRENT_SCENE_DATA.hpps;
+		let gridHeight = window.CURRENT_SCENE_DATA.vpps;
+		let currentGridX = Math.floor((mapX - startX) / gridWidth);
+		let currentGridY = Math.floor((mapY - startY) / gridHeight);
+		const a = 2 * Math.PI / 6;
 		if(window.hexGridColumn){
-			startY = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.vpps/1.6/(1+currentGridX%2));
+			return {
+				x: (currentGridX * gridWidth) + startX,
+				y: (currentGridY * gridHeight) + startY + (gridHeight/(1+(currentGridX % 2)))
+			}
 		}
 		if(window.hexGridRow){
-			startX = window.CURRENT_SCENE_DATA.offsetx - (window.CURRENT_SCENE_DATA.hpps/1.6/(1+currentGridY%2));
+			return {
+				x: (currentGridX * gridWidth) + startX + (gridHeight/(1+(currentGridY % 2))),
+				y: (currentGridY * gridHeight) + startY
+			}
 		}
 		return {
 			x: (currentGridX * gridWidth) + startX,
