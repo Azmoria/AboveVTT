@@ -167,18 +167,28 @@ class WaypointManagerClass {
 		// Add in scene offset
 		snapPointXStart += window.CURRENT_SCENE_DATA.offsetx;
 		snapPointYStart += window.CURRENT_SCENE_DATA.offsety;
+
+
 		const a = 2 * Math.PI / 6;
-		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
+		const hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a));
+		const startX = window.CURRENT_SCENE_DATA.offsetx;
+		const startY = window.CURRENT_SCENE_DATA.offsety;
+
 		if(window.hexGridColumn){
+			const hexCurrentGridY = Math.floor(y / gridSize * 1.5 / Math.sqrt(3));
+			const hexCurrentGridX = Math.floor(x / hexGridWidth);
 			return {
-				x: (currGridX * hexGridWidth) + window.CURRENT_SCENE_DATA.offsetx,
-				y: (currGridY * gridSize / 1.5 * Math.sqrt(3)) + window.CURRENT_SCENE_DATA.offsety + (gridSize / 1.5 * Math.sqrt(3) / (1+(currGridX % 2)))
+				x: (hexCurrentGridX * hexGridWidth) + startX,
+				y: (hexCurrentGridY * gridSize / 1.5 * Math.sqrt(3)) + startY + (gridSize / 1.5 * Math.sqrt(3) / (1+(hexCurrentGridX % 2)))
 			}
 		}
 		if(window.hexGridRow){
-			return {
-				x: (currGridX * gridSize / 1.5 * Math.sqrt(3)) + window.CURRENT_SCENE_DATA.offsetx + (gridSize / 1.5 * Math.sqrt(3) / (1+(currGridY % 2))),
-				y: (currGridY * hexGridWidth) + window.CURRENT_SCENE_DATA.offsety
+			const hexCurrentGridY = Math.floor(y / hexGridWidth);
+			const hexCurrentGridX = Math.floor(x / gridSize * 1.5 / Math.sqrt(3));
+			return {			
+				x: (hexCurrentGridX * gridSize / 1.5 * Math.sqrt(3)) + startX + (gridSize / 1.5 * Math.sqrt(3) / (1+(hexCurrentGridY % 2))),
+				y: (hexCurrentGridY * hexGridWidth) + startY
+				
 			}
 		}
 

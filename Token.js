@@ -1894,25 +1894,29 @@ function should_snap_to_grid() {
 function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 	if (forceSnap || should_snap_to_grid()) {
 		// adjust to the nearest square coordinate
-		let startX = window.CURRENT_SCENE_DATA.offsetx;
-		let startY = window.CURRENT_SCENE_DATA.offsety;
+		const startX = window.CURRENT_SCENE_DATA.offsetx;
+		const startY = window.CURRENT_SCENE_DATA.offsety;
 
-		let gridWidth = window.CURRENT_SCENE_DATA.hpps;
-		let gridHeight = window.CURRENT_SCENE_DATA.vpps;
-		let currentGridX = Math.floor((mapX - startX) / gridWidth);
-		let currentGridY = Math.floor((mapY - startY) / gridHeight);
+		const gridWidth = window.CURRENT_SCENE_DATA.hpps;
+		const gridHeight = window.CURRENT_SCENE_DATA.vpps;
+		const currentGridX = Math.floor((mapX - startX) / gridWidth);
+		const currentGridY = Math.floor((mapY - startY) / gridHeight);
 		const a = 2 * Math.PI / 6;
-		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
+		const hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
 		if(window.hexGridColumn){
+			const hexCurrentGridY = Math.floor((mapY - startY) / gridWidth * 1.5 / Math.sqrt(3));
+			const hexCurrentGridX = Math.floor((mapX - startX) / hexGridWidth);
 			return {
-				x: (currentGridX * hexGridWidth) + startX,
-				y: (currentGridY * gridWidth / 1.5 * Math.sqrt(3)) + startY + (gridWidth / 1.5 * Math.sqrt(3) / (1+(currentGridX % 2)))
+				x: (hexCurrentGridX * hexGridWidth) + startX,
+				y: (hexCurrentGridY * gridWidth / 1.5 * Math.sqrt(3)) + startY + (gridWidth / 1.5 * Math.sqrt(3) / (1+(hexCurrentGridX % 2)))
 			}
 		}
 		if(window.hexGridRow){
+			const hexCurrentGridY = Math.floor((mapY - startY) / hexGridWidth);
+			const hexCurrentGridX = Math.floor((mapX - startX) / gridWidth * 1.5 / Math.sqrt(3));
 			return {			
-				x: (currentGridX * gridWidth / 1.5 * Math.sqrt(3)) + startX + (gridWidth / 1.5 * Math.sqrt(3) / (1+(currentGridY % 2))),
-				y: (currentGridY * hexGridWidth) + startY
+				x: (hexCurrentGridX * gridWidth / 1.5 * Math.sqrt(3)) + startX + (gridWidth / 1.5 * Math.sqrt(3) / (1+(hexCurrentGridY % 2))),
+				y: (hexCurrentGridY * hexGridWidth) + startY
 				
 			}
 		}
