@@ -447,6 +447,7 @@ function check_single_token_visibility(id){
 	
 function drawHexGrid(width, height, sizeX, sizeY, startX, startY, linewidth, color) {
   	const a = 2 * Math.PI / 6;
+  	sizeY = sizeX;
   	if(window.hexGridColumn){
   		sizeX = sizeX / 1.5;
   		sizeY = sizeY / 1.75;
