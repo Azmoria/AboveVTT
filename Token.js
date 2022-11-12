@@ -1895,11 +1895,11 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 		const gridHeight = window.CURRENT_SCENE_DATA.vpps;
 		const currentGridX = Math.floor((mapX - startX) / gridWidth);
 		const currentGridY = Math.floor((mapY - startY) / gridHeight);
-		if(window.hexGridColumn && currentGridX % 2 == 0){
-			startY = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.vpps/2)
+		if(window.hexGridColumn){
+			startY = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.vpps/1.6/(1+currentGridX%2));
 		}
-		if(window.hexGridRow  && currentGridY % 2 == 0){
-			startX = window.CURRENT_SCENE_DATA.offsety - (window.CURRENT_SCENE_DATA.hpps/2)
+		if(window.hexGridRow){
+			startX = window.CURRENT_SCENE_DATA.offsetx - (window.CURRENT_SCENE_DATA.hpps/1.6/(1+currentGridY%2));
 		}
 		return {
 			x: (currentGridX * gridWidth) + startX,

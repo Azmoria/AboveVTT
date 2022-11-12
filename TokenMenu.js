@@ -527,8 +527,9 @@ function build_token_auras_inputs(tokenIds) {
 	let auraIsLightInput = build_toggle_input(auraIsLightOption, auraIsLightEnabled, function(name, newValue) {
 		console.log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
-			token.options[name] = newValue;
-			token.place_sync_persist();
+			token.options[name] = newValue;		
+			token.place();
+			window.MB.sendMessage('custom/myVTT/token', token.options)
 		});
 		check_token_visibility();
 	});	

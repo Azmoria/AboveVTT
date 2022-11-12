@@ -444,6 +444,53 @@ function check_single_token_visibility(id){
 			}
 }
 
+	
+function drawHexGrid(width, height, sizeX, sizeY, startX, startY, linewidth, color) {
+  	const a = 2 * Math.PI / 6;
+  	console.log(`SizeX = ${sizeX}; SizeY = ${sizeY}`);
+  	console.log(`SizeX to: ${sizeX}; SizeY to: ${sizeY}`);
+  	sizeX = sizeX / 1.6;
+  	sizeY = sizeY / 1.6;
+
+	for (let y = sizeY -startY, j = 0; y + sizeY < height; y += 2 ** ((j + 1) % 2) * sizeY * Math.sin(a), j = 0) {
+		for (let x = sizeX -startX; x + sizeX < width; x += sizeX * (1 + Math.cos(a)), y += (-1) ** j++ * sizeY * Math.sin(a)) {
+			if(window.hexGridColumn){
+				colHexagon(x, y, sizeX, sizeY, linewidth, color);
+			}
+			else if(window.hexGridRow){
+				rowHex(x, y, sizeX, sizeY, linewidth, color);
+			}
+		}
+	}
+}
+
+function colHexagon(x, y, sizeX, sizeY, linewidth, color) {
+	const canvas = document.getElementById('grid_overlay');
+	const ctx = canvas.getContext('2d');
+	const a = 2 * Math.PI / 6;
+	ctx.strokeStyle = color;
+	ctx.lineWidth = linewidth;
+	ctx.beginPath();
+	for (let i = 0; i < 6; i++) {
+		ctx.lineTo(x + sizeX * Math.cos(a * i), y + sizeY * Math.sin(a * i));
+	}
+	ctx.closePath();
+	ctx.stroke();
+}
+
+function rowHex(x, y, sizeX, sizeY, linewidth, color) { //x&y are positions
+	const canvas = document.getElementById('grid_overlay');
+	const ctx = canvas.getContext('2d');
+	const a = 2 * Math.PI / 6;
+	ctx.strokeStyle = color;
+	ctx.lineWidth = linewidth;
+	ctx.beginPath();
+	for (var i = 0; i < 6; i++) {
+	  ctx.lineTo(y+Math.cos((i*a-(Math.PI*2)/4))*sizeY,x+Math.sin((i*a-(Math.PI*2)/4))*sizeX)
+	}
+	ctx.closePath();
+	ctx.stroke();
+}
 
 // if it was not executed in the last 1 second, execute it immediately and asynchronously
 // if it's already scheduled to be executed, return
@@ -603,35 +650,40 @@ function redraw_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=nul
 	gridContext.strokeStyle = color || window.CURRENT_SCENE_DATA.grid_color;
 	let isSubdivided = subdivide === "1" || window.CURRENT_SCENE_DATA.grid_subdivided === "1"
 	let skip = true;
-
-	gridContext.beginPath();
-	for (var i = startX; i < $("#scene_map").width(); i = i + incrementX) {
-		if (isSubdivided && skip) {
-			skip = false;
-			continue;
-		}
-		else {
-			skip = true;
-		}
-		gridContext.moveTo(i, 0);
-		gridContext.lineTo(i, $("#scene_map").height());
+	if(window.hexGridColumn || window.hexGridRow){
+		drawHexGrid($("#scene_map").width(), $("#scene_map").height(), incrementX, incrementY, startX, startY, gridContext.lineWidth, gridContext.strokeStyle);
 	}
-	gridContext.stroke();
-	skip = true;
+	else{
+		gridContext.beginPath();
+		for (var i = startX; i < $("#scene_map").width(); i = i + incrementX) {
+			if (isSubdivided && skip) {
+				skip = false;
+				continue;
+			}
+			else {
+				skip = true;
+			}
+			gridContext.moveTo(i, 0);
+			gridContext.lineTo(i, $("#scene_map").height());
+		}
+		gridContext.stroke();
+		skip = true;
 
-	gridContext.beginPath();
-	for (var i = startY; i < $("#scene_map").height(); i = i + incrementY) {
-		if (isSubdivided && skip) {
-			skip = false;
-			continue;
+		gridContext.beginPath();
+		for (var i = startY; i < $("#scene_map").height(); i = i + incrementY) {
+			if (isSubdivided && skip) {
+				skip = false;
+				continue;
+			}
+			else {
+				skip = true;
+			}
+			gridContext.moveTo(0, i);
+			gridContext.lineTo($("#scene_map").width(), i);
 		}
-		else {
-			skip = true;
-		}
-		gridContext.moveTo(0, i);
-		gridContext.lineTo($("#scene_map").width(), i);
+		gridContext.stroke();
 	}
-	gridContext.stroke();
+	
 }
 
 function draw_wizarding_box() {
