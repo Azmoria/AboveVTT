@@ -1603,6 +1603,12 @@ class Token {
 					
 					// this was copied the place function in this file. We should make this a single function to be used in other places
 					let tokenPosition = snap_point_to_grid(tokenX, tokenY);
+					if(window.hexGridColumn){
+						tokenPosition.x += self.options.size/2
+					}
+					if(window.hexGridRow){
+						tokenPosition.y += self.options.size/2
+					}
 
 					// Constrain token within scene
 					tokenPosition.x = clamp(tokenPosition.x, self.walkableArea.left, self.walkableArea.right);
@@ -1898,14 +1904,14 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 		const a = 2 * Math.PI / 6;
 		if(window.hexGridColumn){
 			return {
-				x: (currentGridX * gridWidth) + startX,
-				y: (currentGridY * gridHeight) + startY + (gridHeight/(1+(currentGridX % 2)))
+				x: (currentGridX * window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))) + startX,
+				y: (currentGridY * window.CURRENT_SCENE_DATA.vpps) + startY + (gridHeight/(1+(currentGridX % 2)))
 			}
 		}
 		if(window.hexGridRow){
 			return {
-				x: (currentGridX * gridWidth) + startX + (gridHeight/(1+(currentGridY % 2))),
-				y: (currentGridY * gridHeight) + startY
+				x: (currentGridX * window.CURRENT_SCENE_DATA.hpps) + startX + (gridWidth/(1+(currentGridY % 2))),
+				y: (currentGridY * window.CURRENT_SCENE_DATA.vpps / 1.5 * (1 + Math.cos(a))) + startY
 			}
 		}
 		return {

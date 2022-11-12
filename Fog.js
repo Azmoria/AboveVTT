@@ -447,11 +447,18 @@ function check_single_token_visibility(id){
 	
 function drawHexGrid(width, height, sizeX, sizeY, startX, startY, linewidth, color) {
   	const a = 2 * Math.PI / 6;
-  	sizeX = sizeX / 1.72;
-  	sizeY = sizeY / 1.72;
+  	if(window.hexGridColumn){
+  		sizeX = sizeX / 1.5;
+  		sizeY = sizeY / 1.75;
+  	}
+  	else{
+  		sizeX = sizeX / 1.5;
+  		sizeY = sizeY / 1.73;
+  	}
 
-	for (let y = sizeY + startY, j = 0; y < height; y += 2 ** ((j + 1) % 2) * sizeY * Math.sin(a), j = 0) {
-		for (let x = sizeX + startX; x < width; x += sizeX * (1 + Math.cos(a)), y += (-1) ** j++ * sizeY * Math.sin(a)) {
+
+	for (let y = (-1 * sizeY * Math.sin(a)) + startY, j = 0; y < height; y += 2 ** ((j + 1) % 2) * sizeY * Math.sin(a), j = 0) {
+		for (let x = (-1* sizeX * (1 + Math.cos(a))) + startX; x < width; x += sizeX * (1 + Math.cos(a)), y += (-1) ** j++ * sizeY * Math.sin(a)) {
 			if(window.hexGridColumn){
 				colHexagon(x, y, sizeX, sizeY, linewidth, color);
 			}
