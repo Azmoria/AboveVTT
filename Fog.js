@@ -165,8 +165,22 @@ class WaypointManagerClass {
 		var snapPointYStart = (currGridY * gridSize) + (gridSize / 2);
 
 		// Add in scene offset
-		snapPointXStart += window.window.CURRENT_SCENE_DATA.offsetx;
-		snapPointYStart += window.window.CURRENT_SCENE_DATA.offsety;
+		snapPointXStart += window.CURRENT_SCENE_DATA.offsetx;
+		snapPointYStart += window.CURRENT_SCENE_DATA.offsety;
+		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
+		const a = 2 * Math.PI / 6;
+		if(window.hexGridColumn){
+			return {
+				x: (currGridX * hexGridWidth) + window.CURRENT_SCENE_DATA.offsetx,
+				y: (currGridY * gridSize / 1.5 * Math.sqrt(3)) + window.CURRENT_SCENE_DATA.offsety + (gridSize / 1.5 * Math.sqrt(3) / (1+(currGridX % 2)))
+			}
+		}
+		if(window.hexGridRow){
+			return {
+				x: (currGridX * gridSize / 1.5 * Math.sqrt(3)) + window.CURRENT_SCENE_DATA.offsetx + (gridSize / 1.5 * Math.sqrt(3) / (1+(currGridY % 2))),
+				y: (currGridY * hexGridWidth) + window.CURRENT_SCENE_DATA.offsety
+			}
+		}
 
 		return { x: snapPointXStart, y: snapPointYStart }
 	}
@@ -447,15 +461,9 @@ function check_single_token_visibility(id){
 	
 function drawHexGrid(width, height, sizeX, sizeY, startX, startY, linewidth, color) {
   	const a = 2 * Math.PI / 6;
+  	sizeX = sizeX / 1.5;
   	sizeY = sizeX;
-  	if(window.hexGridColumn){
-  		sizeX = sizeX / 1.5;
-  		sizeY = sizeY / 1.75;
-  	}
-  	else{
-  		sizeX = sizeX / 1.5;
-  		sizeY = sizeY / 1.73;
-  	}
+
 
 
 	for (let y = (-1 * sizeY * Math.sin(a)) + startY, j = 0; y < height; y += 2 ** ((j + 1) % 2) * sizeY * Math.sin(a), j = 0) {

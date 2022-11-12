@@ -1902,16 +1902,18 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false) {
 		let currentGridX = Math.floor((mapX - startX) / gridWidth);
 		let currentGridY = Math.floor((mapY - startY) / gridHeight);
 		const a = 2 * Math.PI / 6;
+		let hexGridWidth = window.CURRENT_SCENE_DATA.hpps / 1.5 * (1 + Math.cos(a))
 		if(window.hexGridColumn){
 			return {
-				x: (currentGridX * gridWidth) + startX,
-				y: (currentGridY * gridHeight) + startY + (gridWidth/(1+(currentGridX % 2)))
+				x: (currentGridX * hexGridWidth) + startX,
+				y: (currentGridY * gridWidth / 1.5 * Math.sqrt(3)) + startY + (gridWidth / 1.5 * Math.sqrt(3) / (1+(currentGridX % 2)))
 			}
 		}
 		if(window.hexGridRow){
-			return {
-				x: (currentGridX * gridWidth) + startX + (gridWidth/(1+(currentGridY % 2))),
-				y: (currentGridY * gridHeight) + startY
+			return {			
+				x: (currentGridX * gridWidth / 1.5 * Math.sqrt(3)) + startX + (gridWidth / 1.5 * Math.sqrt(3) / (1+(currentGridY % 2))),
+				y: (currentGridY * hexGridWidth) + startY
+				
 			}
 		}
 		return {
