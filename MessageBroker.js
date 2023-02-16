@@ -1487,9 +1487,8 @@ class MessageBroker {
 		else {
 			window.DRAWINGS = [];
 		}
+
 		redraw_text();
-
-
 		
 		
 		// console.groupEnd()
