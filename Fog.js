@@ -378,10 +378,21 @@ function is_token_under_fog(tokenid){
 		return false;
 	var canvas = document.getElementById("fog_overlay");
 	var ctx = canvas.getContext("2d");
+	let canvas2 = document.getElementById("raycastingCanvas");
+	let ctx2 = canvas2.getContext("2d");
+
+
 	var left = (parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2));
 	var top = (parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2));
 	var pixeldata = ctx.getImageData(left, top, 1, 1).data;
-	if (pixeldata[3] == 255 && !window.TOKEN_OBJECTS[tokenid].options.revealInFog)
+	var pixeldata2 = ctx2.getImageData(left, top, 1, 1).data;
+
+	let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
+	let playerTokenAuraIsLight = (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraislight;
+	let playerAuraIsVisible =  (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraVisible;
+
+
+	if (((pixeldata[3] == 255) || (pixeldata2[2] == 0 && playerTokenAuraIsLight && playerAuraIsVisible)) && !window.TOKEN_OBJECTS[tokenid].options.revealInFog)
 		return true;
 	else
 		return false;
@@ -474,12 +485,15 @@ function do_check_token_visibility() {
 		return;
 	var canvas = document.getElementById("fog_overlay");
 	var ctx = canvas.getContext("2d");
-
+	let canvas2 = document.getElementById("raycastingCanvas");3
+	let ctx2 = canvas2.getContext("2d");
 
 	for (var id in window.TOKEN_OBJECTS) {
 		var left = (parseInt(window.TOKEN_OBJECTS[id].options.left.replace('px', '')) + (window.TOKEN_OBJECTS[id].sizeWidth() / 2));
 		var top = (parseInt(window.TOKEN_OBJECTS[id].options.top.replace('px', '')) + (window.TOKEN_OBJECTS[id].sizeHeight() / 2));
 		var pixeldata = ctx.getImageData(left, top, 1, 1).data;
+		let pixeldata2 = ctx2.getImageData(left, top, 1, 1).data;
+
 		var auraSelectorId = $(".token[data-id='" + id + "']").attr("data-id").replaceAll("/", "");
 		var selector = "div[data-id='" + id + "']";
 		let auraSelector = ".aura-element[id='aura_" + auraSelectorId + "']";
@@ -488,7 +502,7 @@ function do_check_token_visibility() {
 		let playerTokenAuraIsLight = (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraislight;
 		let playerAuraIsVisible =  (playerTokenId == undefined) ? false : window.TOKEN_OBJECTS[playerTokenId].options.auraVisible;
 			
-		if (pixeldata[3] == 255 || (playerTokenAuraIsLight && playerAuraIsVisible && window.CURRENT_SCENE_DATA.darkness_filter > 0 && !is_token_under_light_aura(id) && !window.TOKEN_OBJECTS[id].options.revealInFog)) {
+		if (pixeldata[3] == 255 || (pixeldata2[2] == 0 && playerTokenAuraIsLight > 0 && playerAuraIsVisible) || (playerTokenAuraIsLight && playerAuraIsVisible && window.CURRENT_SCENE_DATA.darkness_filter > 0  && (!is_token_under_light_aura(id) && pixeldata[2] == 0 && window.CURRENT_SCENE_DATA.darkness_filter == 100) && !window.TOKEN_OBJECTS[id].options.revealInFog)) {
 			$(selector).hide();
 			if(window.TOKEN_OBJECTS[id].options.hideaurafog)
 			{
@@ -698,8 +712,9 @@ function reset_canvas() {
 	ctxScale('peer_overlay');
 	ctxScale('temp_overlay');
 
-	ctxScale('grid_overlay');
+	ctxScale('grid_overlay');	
 	ctxScale('draw_overlay');
+	ctxScale('raycastingCanvas');
 
 	$("#text_div").css("width", $("#scene_map").width()*window.CURRENT_SCENE_DATA.scale_factor);
 	$("#text_div").css("height", $("#scene_map").height()*window.CURRENT_SCENE_DATA.scale_factor);
@@ -754,6 +769,7 @@ function reset_canvas() {
 	else {
 		ctx_grid.clearRect(0, 0, canvas_grid.width, canvas_grid.height);
 	}
+	redraw_light();
 }
 
 function redraw_fog() {
@@ -852,11 +868,12 @@ function redraw_text() {
 }
 
 function redraw_drawings() {
+
 	let canvas = document.getElementById("draw_overlay");
 	let ctx = canvas.getContext("2d");
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
-	const drawings = window.DRAWINGS.filter(d => !d[0].includes("text"))
+	const drawings = window.DRAWINGS.filter(d => !d[0].includes("text") && d[1] !==  "wall")
 
 	for (var i = 0; i < drawings.length; i++) {
 
@@ -888,7 +905,7 @@ function redraw_drawings() {
 			drawCone(ctx, x, y, width, height, color, isFilled, lineWidth);
 		}
 		if (shape == "line") {
-			drawLine(ctx,x, y, width, height, color, lineWidth, scale);
+			drawLine(ctx,x, y, width, height, color, lineWidth, scale);		
 		}
 		if (shape == "polygon") {
 			drawPolygon(ctx,x, color, isFilled, lineWidth, undefined, undefined, scale);
@@ -897,6 +914,49 @@ function redraw_drawings() {
 		if (shape == "brush") {
 			drawBrushstroke(ctx, x, color, lineWidth, scale);
 		}
+	}
+}
+function redraw_light_walls(clear=true){
+
+	let canvas = document.getElementById("temp_overlay");
+	let ctx = canvas.getContext("2d");
+		
+	if(clear)
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+	
+	canvas = document.getElementById("raycastingCanvas");
+	ctx = canvas.getContext("2d");
+
+
+
+	window.walls =[];
+	let wall5 = new Boundary(new Vector(0, 0), new Vector($('#scene_map_container').width(), 0));
+	window.walls.push(wall5);
+	let wall6 = new Boundary(new Vector(0, 0), new Vector(0, $('#scene_map_container').height()));
+	window.walls.push(wall6);
+	let wall7 = new Boundary(new Vector($('#scene_map_container').width(), 0), new Vector($('#scene_map_container').width(), $('#scene_map_container').height()));
+	window.walls.push(wall7);
+	let wall8 = new Boundary(new Vector(0, $('#scene_map_container').height()), new Vector($('#scene_map_container').width(), $('#scene_map_container').height()));
+	window.walls.push(wall8);
+
+	const drawings = window.DRAWINGS.filter(d => d[1] == "wall");
+
+
+
+	for (var i = 0; i < drawings.length; i++) {
+		let [shape, fill, color, x, y, width, height, lineWidth, scale] = drawings[i];
+
+		scale = (scale == undefined) ? window.CURRENT_SCENE_DATA.scale_factor : scale;
+		let adjustedScale = scale/window.CURRENT_SCENE_DATA.scale_factor;
+
+		let drawnWall = new Boundary(new Vector(x/adjustedScale/window.CURRENT_SCENE_DATA.scale_factor, y/adjustedScale/window.CURRENT_SCENE_DATA.scale_factor), new Vector(width/adjustedScale/window.CURRENT_SCENE_DATA.scale_factor, height/adjustedScale/window.CURRENT_SCENE_DATA.scale_factor))
+		window.walls.push(drawnWall);
+		if (shape == "line" && $('#wall_button').hasClass('button-enabled')) {
+			canvas = document.getElementById("temp_overlay");
+			ctx = canvas.getContext("2d");
+			drawLine(ctx,x, y, width, height, color, lineWidth, scale);		
+		}
+
 	}
 }
 
@@ -942,8 +1002,8 @@ function drawing_mousedown(e) {
 	}
 
 	// always draw unbaked drawings to the temp overlay
-	canvas = document.getElementById("temp_overlay");
-	context = canvas.getContext("2d");
+	let canvas = document.getElementById("temp_overlay");
+	let context = canvas.getContext("2d");
 	// select modifies this line but never resets it, so reset it here
 	// otherwise all drawings are dashed
 	context.setLineDash([])
@@ -969,6 +1029,11 @@ function drawing_mousedown(e) {
 		window.DRAWCOLOR = "rgba(0, 0, 0, 0.5)"
 		window.DRAWTYPE = "filled"
 	}
+	else if(window.DRAWFUNCTION === "wall"){
+		// semi transparent black
+		window.DRAWCOLOR = "rgba(0, 255, 0, 1)"
+		window.DRAWTYPE = "filled"
+	}
 	else if (window.DRAWFUNCTION === "select"){
 		window.DRAWCOLOR = "rgba(255, 255, 255, 1)"
 		context.setLineDash([10, 5])
@@ -984,9 +1049,18 @@ function drawing_mousedown(e) {
 
 	if (window.DRAGGING && window.DRAWSHAPE != 'align')
 		return;
-	if (e.button != 0 && window.DRAWFUNCTION != "measure")
+	if (e.button != 0 && window.DRAWFUNCTION != "measure" && window.DRAWFUNCTION != "wall")
 		return;
 
+
+	if(window.DRAWFUNCTION == "wall" && window.MOUSEDOWN && window.wallToStore != undefined){
+		if(window.StoredWalls == undefined){
+			window.StoredWalls =[];
+		}
+		window.StoredWalls.push(window.wallToStore);
+	}
+	if (e.button != 0 && window.DRAWFUNCTION == "wall" && !window.MOUSEDOWN)
+		return;
 	if (shiftHeld == false || window.DRAWFUNCTION != 'select') {
 		deselect_all_tokens();
 	}
@@ -1043,6 +1117,20 @@ function drawing_mousedown(e) {
 		window.MOUSEDOWN = true;
 		window.MOUSEMOVEWAIT = false;
 	}
+	else if(window.DRAWFUNCTION == "wall" && window.wallToStore != undefined){
+		if(window.wallToStore.length>0) {
+			window.BEGIN_MOUSEX = window.wallToStore[2];
+			window.BEGIN_MOUSEY = window.wallToStore[3];
+			window.MOUSEDOWN = true;
+			window.MOUSEMOVEWAIT = false;
+		}
+		else{
+			window.BEGIN_MOUSEX = pointX
+			window.BEGIN_MOUSEY = pointY
+			window.MOUSEDOWN = true;
+			window.MOUSEMOVEWAIT = false;
+		}
+	}
 	else{
 		window.BEGIN_MOUSEX = pointX
 		window.BEGIN_MOUSEY = pointY
@@ -1094,6 +1182,9 @@ function drawing_mousemove(e) {
 		// }
 
 		if (window.DRAWSHAPE == "rect") {
+			if(window.DRAWFUNCTION == "wall-eraser"){
+				redraw_light_walls(false);
+			}
 			if(window.DRAWFUNCTION == "draw_text")
 			{
 				drawRect(context,
@@ -1170,6 +1261,22 @@ function drawing_mousemove(e) {
 					window.DRAWCOLOR,
 					window.LINEWIDTH);
 			}
+			if(window.DRAWFUNCTION == 'wall'){
+				window.wallToStore = [window.BEGIN_MOUSEX,window.BEGIN_MOUSEY, mouseX, mouseY];
+				redraw_light_walls(false);
+				if(window.StoredWalls != undefined){
+					for(let wall in window.StoredWalls){
+						drawLine(context,
+							window.StoredWalls[wall][0],
+							window.StoredWalls[wall][1],
+							window.StoredWalls[wall][2],
+							window.StoredWalls[wall][3],
+							window.DRAWCOLOR,
+							window.LINEWIDTH);
+					}
+				}
+				
+			}
 
 		}
 		else if (window.DRAWSHAPE == "brush"){
@@ -1234,6 +1341,7 @@ function drawing_mouseup(e) {
 		//console.log("Measure right click");
 		return;
 	}
+
 	// ignore if right mouse buttons for the following
 	if((window.DRAWFUNCTION == "draw" ||
 		window.DRAWFUNCTION == "reveal" ||
@@ -1252,15 +1360,15 @@ function drawing_mouseup(e) {
 	// restore to what it looked like when first clicked
 	// but not polygons as they have a close box to clear and then save
 	// measure gets special treatment later on in this function
-	if (window.DRAWSHAPE !== "polygon" && window.DRAWFUNCTION !== "measure"){
+	if (window.DRAWSHAPE !== "polygon" && window.DRAWFUNCTION !== "measure" && window.DRAWFUNCTION != "wall"){
 		clear_temp_canvas()
 	}
 
 	if (window.DRAWFUNCTION === 'select') {
 		$("#temp_overlay").css('cursor', '');
 	}
-
-	window.MOUSEDOWN = false;
+	if(e.button !== 2 && window.DRAWFUNCTION != 'wall')
+		window.MOUSEDOWN = false;
 	const width = mouseX - window.BEGIN_MOUSEX;
 	const height = mouseY - window.BEGIN_MOUSEY;
 	// data is modified by each shape/function but as a starting point fill it up
@@ -1275,7 +1383,7 @@ function drawing_mouseup(e) {
 		 window.CURRENT_SCENE_DATA.scale_factor];
 
 	if ((window.DRAWFUNCTION !== "select" || window.DRAWFUNCTION !== "measure") &&
-		(window.DRAWFUNCTION === "draw")){
+		(window.DRAWFUNCTION === "draw" || window.DRAWFUNCTION === 'wall')){
 		switch (window.DRAWSHAPE) {
 			case "line":
 				data[0] = "line"
@@ -1314,8 +1422,38 @@ function drawing_mouseup(e) {
 			default:
 				break;
 		}
+		switch(window.DRAWFUNCTION){
+		case 'wall':
+			data[1] = "wall"
+			break
+		default:
+			break
+		}
 		window.DRAWINGS.push(data);
+		if(window.DRAWFUNCTION == "wall"){
+			if ( e.button == 2) {
+				return;
+			}
+			for(walls in window.StoredWalls){
+					data = ['line',
+						"wall",
+						window.DRAWCOLOR,
+						window.StoredWalls[walls][0],
+						window.StoredWalls[walls][1],
+						window.StoredWalls[walls][2],
+						window.StoredWalls[walls][3],
+						window.LINEWIDTH,
+						window.CURRENT_SCENE_DATA.scale_factor];
+					window.DRAWINGS.push(data);
+			}
+			window.StoredWalls = [];
+			window.wallToStore = [];
+			window.MOUSEDOWN = false;
+		}
+
+		
 		redraw_drawings();
+		redraw_light_walls();
 		window.ScenesHandler.persist();
 		if(window.CLOUD)
 			sync_drawings();
@@ -1365,6 +1503,220 @@ function drawing_mouseup(e) {
 		else
 			window.MB.sendMessage('custom/myVTT/drawing', data);
 	}
+	else if (window.DRAWFUNCTION === "wall-eraser"){
+		let canvas = $("#raycastingCanvas")[0];
+		let ctx = canvas.getContext("2d");
+
+		let walls = window.DRAWINGS.filter(d => (d[1] == "wall" && d[0].includes("line")));
+		let rectLine = {
+			rx: window.BEGIN_MOUSEX,
+			ry: window.BEGIN_MOUSEY,		
+			rw: width,
+			rh: height
+		};
+		
+        let lineLine = function(x1, y1, x2, y2, x3, y3, x4, y4) {
+
+		  // calculate the direction of the lines
+		  let uA = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1));
+		  let uB = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / ((y4-y3)*(x2-x1) - (x4-x3)*(y2-y1));
+
+		  // if uA and uB are between 0-1, lines are colliding
+		  if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
+
+		    // optionally, draw a circle where the lines meet
+		    let intersectionX = x1 + (uA * (x2-x1));
+		    let intersectionY = y1 + (uA * (y2-y1));
+
+		    return {x: Math.floor(intersectionX), y: Math.floor(intersectionY)};
+		  }
+		  return false;
+		}
+	
+		for(i=0; i<walls.length; i++){
+
+
+
+			let wallLine = [];
+
+			if(walls[i][3] < walls[i][5] && walls[i][4] < walls[i][6] ){
+				wallLine = [{
+					a: {
+						x: walls[i][3],
+						y: walls[i][4]
+					},
+					b: {
+						x: walls[i][5],
+						y: walls[i][6]
+					}			
+				}]
+			}
+			else{
+				wallLine = [{
+					a: {
+						x: walls[i][5],
+						y: walls[i][6]	
+					},
+					b: {x: walls[i][3],
+						y: walls[i][4]					
+					}			
+				}]
+			}
+			let eraserToRight  = rectLine.rw > 0;
+			let eraserToBottom = rectLine.rh > 0;
+			let left;
+			let right;
+			let top;
+			let bottom;
+
+			if(!eraserToRight){
+				rectLine.rx = rectLine.rx + rectLine.rw;
+				rectLine.rw = Math.abs(rectLine.rw);
+			}
+			if(!eraserToBottom){
+				rectLine.ry = rectLine.ry + rectLine.rh;
+				rectLine.rh = Math.abs(rectLine.rh);
+			}
+
+			left = lineLine(wallLine[0].a.x,wallLine[0].a.y,wallLine[0].b.x,wallLine[0].b.y, rectLine.rx,rectLine.ry,rectLine.rx, rectLine.ry+rectLine.rh);
+			right = lineLine(wallLine[0].a.x,wallLine[0].a.y,wallLine[0].b.x,wallLine[0].b.y, rectLine.rx+rectLine.rw,rectLine.ry, rectLine.rx+rectLine.rw,rectLine.ry+rectLine.rh);
+			
+
+			top = lineLine(wallLine[0].a.x,wallLine[0].a.y,wallLine[0].b.x,wallLine[0].b.y, rectLine.rx,rectLine.ry,rectLine.rx+rectLine.rw,rectLine.ry);
+			bottom = lineLine(wallLine[0].a.x,wallLine[0].a.y,wallLine[0].b.x,wallLine[0].b.y, rectLine.rx,rectLine.ry+rectLine.rh, rectLine.rx+rectLine.rw,rectLine.ry+rectLine.rh);
+		
+		
+			let fullyInside;
+			let xInside; 
+			let yInside;
+			
+			xInside = (rectLine.rx < wallLine[0].a.x) && (rectLine.rx < wallLine[0].b.x) && (rectLine.rx+rectLine.rw > wallLine[0].b.x ) && (rectLine.rx+rectLine.rw > wallLine[0].a.x )		
+			yInside = (rectLine.ry < wallLine[0].a.y) && (rectLine.ry < wallLine[0].b.y) && (rectLine.ry+rectLine.rh > wallLine[0].b.y ) && (rectLine.ry+rectLine.rh > wallLine[0].a.y )
+			
+			
+
+			fullyInside = (yInside &&  xInside)
+
+			if(left != false || right != false || top != false || bottom != false || fullyInside){
+
+				for(j = 0; j < window.DRAWINGS.length; j++){
+					if(window.DRAWINGS[j][1] == ("wall") && window.DRAWINGS[j][0] == ("line") && window.DRAWINGS[j][3] == walls[i][3] && window.DRAWINGS[j][4] == walls[i][4] && window.DRAWINGS[j][5] == walls[i][5] && window.DRAWINGS[j][6] == walls[i][6]){
+						window.DRAWINGS.splice(j, 1);
+						break;
+					}
+				}
+				if(!fullyInside){
+					let x1;
+					let x2;
+					let y1;
+					let y2;
+					if(left != false){
+						if(wallLine[0].b.x > wallLine[0].a.x){
+							x1 = (wallLine[0].a.x);
+							y1 = (wallLine[0].a.y);
+						}
+						else{
+							x1 = (wallLine[0].b.x);
+							y1 = (wallLine[0].b.y);
+						}	
+						x2 = left.x;
+						y2 = left.y;
+						let data = ['line',
+						 'wall',
+						 "rgba(0, 255, 0 ,1)",
+						 x1,
+						 y1,
+						 x2,
+						 y2,
+						 window.LINEWIDTH,
+						 window.CURRENT_SCENE_DATA.scale_factor,
+						 ];	
+						window.DRAWINGS.push(data);
+					}	
+					if(right != false){
+						if(wallLine[0].b.x > wallLine[0].a.x){
+							x1 = (wallLine[0].b.x);
+							y1 = (wallLine[0].b.y);
+						}
+						else{
+							x1 = (wallLine[0].a.x);
+							y1 = (wallLine[0].a.y);
+						}	
+						
+						x2 = right.x;
+						y2 = right.y;
+						let data = ['line',
+						 'wall',
+						 'rgba(0, 255, 0, 1)',
+						 x1,
+						 y1,
+						 x2,
+						 y2,
+						 window.LINEWIDTH,
+						 window.CURRENT_SCENE_DATA.scale_factor,
+						 ];	
+						window.DRAWINGS.push(data);
+					}
+					if(top != false){
+						if(wallLine[0].a.y > wallLine[0].b.y){
+							x1 = (wallLine[0].b.x);
+							y1 = (wallLine[0].b.y);
+						}
+						else{
+							x1 = (wallLine[0].a.x);
+							y1 = (wallLine[0].a.y);
+						}
+						x2 = top.x;
+						y2 = top.y;
+						let data = ['line',
+						 'wall',
+						 "rgba(0, 255, 0 ,1)",
+						 x1,
+						 y1,
+						 x2,
+						 y2,
+						 window.LINEWIDTH,
+						 window.CURRENT_SCENE_DATA.scale_factor,
+						 ];	
+						window.DRAWINGS.push(data);
+					}
+					if(bottom != false){
+						if(wallLine[0].a.y > wallLine[0].b.y){
+							x1 = (wallLine[0].a.x);
+							y1 = (wallLine[0].a.y);
+						}
+						else{
+							x1 = (wallLine[0].b.x);
+							y1 = (wallLine[0].b.y);
+						}
+						x2 = bottom.x;
+						y2 = bottom.y;
+							let data = ['line',
+						 'wall',
+						 "rgba(0, 255, 0 ,1)",
+						 x1,
+						 y1,
+						 x2,
+						 y2,
+						 window.LINEWIDTH,
+						 window.CURRENT_SCENE_DATA.scale_factor,
+						 ];	
+						window.DRAWINGS.push(data);
+					}
+				
+				}	
+				
+			}		
+		}
+ 		
+
+		redraw_light_walls();
+		window.ScenesHandler.persist();
+		if(window.CLOUD)
+			sync_drawings();
+		else
+			window.MB.sendMessage('custom/myVTT/drawing', data);
+	}	
 	else if (window.DRAWFUNCTION === "draw_text"){
 		data[0] = "text";
 		const textWidth = e.clientX - window.BEGIN_MOUSEX
@@ -1509,7 +1861,7 @@ function finalise_drawing_fog(mouseX, mouseY, width, height) {
  * Hides all open menus from the top buttons and deselects all the buttons
  */
 function deselect_all_top_buttons(buttonSelectedClasses) {
-	topButtonIDs = ["select-button", "measure-button", "fog_button", "draw_button", "aoe_button", "text_button"]
+	topButtonIDs = ["select-button", "measure-button", "fog_button", "draw_button", "aoe_button", "text_button", "wall_button"]
 	$(".top_menu").removeClass("visible")
 	topButtonIDs.forEach(function(id) {
 		$(`#${id}`).removeClass(buttonSelectedClasses)
@@ -1624,6 +1976,8 @@ function handle_drawing_button_click() {
 		}
 
 		stop_drawing();
+		if(window.CURRENT_SCENE_DATA != undefined)
+			redraw_light_walls();
 		target =  $("#temp_overlay, #black_layer")
 		data = {
 			clicked:$(clicked),
@@ -1647,10 +2001,10 @@ function handle_drawing_button_click() {
 		target.on('mouseup',  data, drawing_mouseup);
 		target.on('mousemove', data, drawing_mousemove);
 		target.on('contextmenu', data, drawing_contextmenu);
-
 	})
 	// during initialisation of VTT default to the select button
 	$('#select-button').click();
+
 }
 
 function drawCircle(ctx, centerX, centerY, radius, style, fill=true, lineWidth = 6)
@@ -2193,3 +2547,304 @@ function init_draw_menu(buttons){
 	buttons.append(draw_button);
 	draw_menu.css("left",draw_button.position().left);
 }
+function init_walls_menu(buttons){
+	wall_menu = $("<div id='wall_menu' class='top_menu'></div>");
+
+	wall_menu.append(
+		`<div class='ddbc-tab-options--layout-pill'>
+			<button id='draw_line' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+				data-shape='line' data-function="wall" data-unique-with="draw">
+					Draw Wall
+			</button>
+		</div>`);
+	wall_menu.append(
+		`<div class='ddbc-tab-options--layout-pill menu-option data-skip='true''>
+			<button id='draw_erase' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+				data-shape='rect' data-function="wall-eraser" data-unique-with="draw">
+				 	Erase 
+			</button>
+		</div>`);
+	wall_menu.append(
+		`<div class='ddbc-tab-options--layout-pill' data-skip='true'>
+			<button class='ddbc-tab-options__header-heading  menu-option' id='delete_walls'>
+				CLEAR
+			</button>
+		</div>`);
+
+	wall_menu.find("#delete_walls").click(function() {
+		r = confirm("DELETE ALL WALLS (cannot be undone!)");
+		if (r === true) {
+			// keep only non wall
+			window.DRAWINGS = window.DRAWINGS.filter(d => d[1] !== "wall");
+
+			redraw_light_walls();
+			redraw_light();
+	 		window.ScenesHandler.persist();
+			if(window.CLOUD)
+				sync_drawings();
+			else
+				window.MB.sendMessage('custom/myVTT/drawing', data);
+		}
+	});
+
+
+	wall_menu.css("position", "fixed");
+	wall_menu.css("top", "50px");
+	wall_menu.css("width", "75px");
+	wall_menu.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')")
+
+	$("body").append(wall_menu);
+
+	wall_button = $("<button style='display:inline;width:75px' id='wall_button' class='drawbutton menu-button hideable ddbc-tab-options__header-heading'>Walls</button>");
+	wall_button.on('click', function(){
+		redraw_light_walls();
+	});
+	buttons.append(wall_button);
+	wall_menu.css("left",wall_button.position().left);
+}
+// helper functions
+let degreeToRadian = function(degree) {
+  return (degree / 180) * Math.PI;
+};
+
+// vector object
+let Vector = function(x,y) {
+  this.x = x;
+  this.y = y;
+};
+
+// static vector object methods
+Vector.fromAngle = function(angle, v) {
+  if (v === undefined || v === null) {
+    v = new Vector();
+  }
+  v.x = Math.cos(angle);
+  v.y = Math.sin(angle);
+  return v;
+};
+
+Vector.dist = function(v1, v2) {
+  let dx = v1.x - v2.x,
+      dy = v1.y - v2.y;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+// vector object instance methods
+Vector.prototype.mag = function() {
+  let x = this.x,
+      y = this.y,
+      z = this.z;
+  return Math.sqrt(x * x + y * y + z * z);
+};
+
+Vector.prototype.div = function(v) {
+  if (typeof v === 'number') {
+    this.x /= v;
+    this.y /= v;
+    this.z /= v;
+  } else {
+    this.x /= v.x;
+    this.y /= v.y;
+    this.z /= v.z;
+  }
+};
+
+Vector.prototype.normalize = function() {
+  let m = this.mag();
+  if (m > 0) {
+    this.div(m);
+  }
+};
+
+// boundary object a: vector, b: vector
+let Boundary = function(aVec, bVec) {
+  this.a = aVec;
+  this.b = bVec;
+};
+
+
+// ray object
+let Ray = function(pos, angle) {
+  this.pos = pos;
+  this.dir = Vector.fromAngle(angle);
+};
+
+/* test line used to show position a distribution of rays
+Ray.prototype.draw = function(ctx) {
+  ctx.translate(this.pos.x, this.pos.y);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(this.dir.x * 10, this.dir.y * 10);
+  ctx.strokeStyle = "rgba(255, 255, 255, 1)";
+  ctx.stroke();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}; */
+
+Ray.prototype.cast = function(boundary) {
+  const x1 = boundary.a.x;
+  const y1 = boundary.a.y;
+  const x2 = boundary.b.x;
+  const y2 = boundary.b.y;
+  
+  const x3 = this.pos.x;
+  const y3 = this.pos.y;
+  const x4 = this.pos.x + this.dir.x;
+  const y4 = this.pos.y + this.dir.y;
+  
+  const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  // if denominator is zero then the ray and boundary are parallel
+  if (den === 0) {
+    return;
+  }
+  
+  // numerator divided by denominator
+  let t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+  let u = -((x1 -x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+  
+  if (t > 0 && t < 1 && u > 0) {
+    const pt = new Vector();
+    pt.x = x1 + t * (x2 - x1);
+    pt.y = y1 + t * (y2 - y1);
+    return pt;
+  } else {
+    return;
+  }
+};
+
+// particle object
+let Particle = function(pos, divisor) {
+	if(window.walls == undefined)
+		return;
+	this.pos = pos;
+	this.rays = [];
+	this.divisor =  divisor || 40; // the degree of approximation
+	for (let a = 0; a < 360; a += this.divisor) {
+		for(let i = 0; i < window.walls.length; i++){
+	  		let wallEdgeAngle1 = Math.atan2(window.walls[i].a.y - this.pos.y*window.CURRENT_SCENE_DATA.scale_factor, window.walls[i].a.x - this.pos.x*window.CURRENT_SCENE_DATA.scale_factor )* (180/Math.PI)
+	  		let wallEdgeAngle2 = Math.atan2(window.walls[i].b.y - this.pos.y*window.CURRENT_SCENE_DATA.scale_factor, window.walls[i].b.x - this.pos.x*window.CURRENT_SCENE_DATA.scale_factor )* (180/Math.PI);		
+	  		if( wallEdgeAngle1 > a-this.divisor && wallEdgeAngle1 < a )
+	  			this.rays.push(new Ray(this.pos, degreeToRadian(wallEdgeAngle1)));
+	  		if( wallEdgeAngle2 > a-this.divisor && wallEdgeAngle2 < a )
+	  			this.rays.push(new Ray(this.pos, degreeToRadian(wallEdgeAngle2)));
+	  	}
+	    this.rays.push(new Ray(this.pos, degreeToRadian(a)));
+
+  }
+
+
+  
+};
+
+Particle.prototype.update = function(x, y) {
+  this.pos.x = x;
+  this.pos.y = y;
+};
+
+Particle.prototype.look = function(ctx, walls) {
+	lightPolygon = [{x: this.pos.x*window.CURRENT_SCENE_DATA.scale_factor, y: this.pos.y*window.CURRENT_SCENE_DATA.scale_factor}];
+  for (let i = 0; i < this.rays.length; i++) {
+    
+    let pt;
+    let closest = null;
+    let record = Infinity;
+    
+    for (let j = 0; j < walls.length; j++) {
+    
+      pt = this.rays[i].cast(walls[j]);
+      
+      if (pt) {
+        const dist = Vector.dist(this.pos, pt);
+        if (dist < record) {
+          record = dist;
+          closest=pt;
+        }
+
+       
+       
+      }
+    }
+    
+    if (closest) {
+
+      lightPolygon.push({x: closest.x*window.CURRENT_SCENE_DATA.scale_factor, y: closest.y*window.CURRENT_SCENE_DATA.scale_factor})
+    } 
+  }
+  lightPolygon.push(lightPolygon[1]);
+  drawPolygon(ctx, lightPolygon, 'rgba(255, 255, 255, 1)', true);
+};
+
+Particle.prototype.draw = function(ctx) {
+  ctx.beginPath();
+  ctx.arc(this.pos.x, this.pos.y, 5, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+  ctx.stroke();
+  /* test line to show all rays
+  for (let i = 0; i < this.rays.length; i++) {
+    this.rays[i].draw(ctx);
+  }*/
+};
+function redraw_light(){
+
+
+let canvas = document.getElementById("raycastingCanvas");
+let context = canvas.getContext("2d");
+let canvasWidth = canvas.width;
+let canvasHeight = canvas.height;
+let offsetX = canvas.offsetLeft;
+let offsetY = canvas.offsetTop;
+
+let particle = new Particle(new Vector(200, 200), 1);
+
+  context.clearRect(0,0,canvasWidth,canvasHeight);
+  
+  context.fillStyle = "black";
+  context.fillRect(0,0,canvasWidth,canvasHeight);
+  
+
+  let light_auras = $(`.aura-element.islight:not([style*='visibility: hidden'])`)
+  let selectedIds = [];
+  let selectedTokens = $('.tokenselected');
+  if(selectedTokens.length>0){
+  	if(window.DM && window.CURRENT_SCENE_DATA.darkness_filter >= 75){
+  		$('#VTT').css('--darkness-filter', 100-window.CURRENT_SCENE_DATA.darkness_filter)
+  		$('#raycastingCanvas').css('opacity', 1);
+  	}
+
+  		
+	  for(j = 0; j < selectedTokens.length; j++){
+	  	selectedIds.push($(selectedTokens[j]).attr('data-id'))
+	  }	  	
+  }
+
+  for(i = 0; i < light_auras.length; i++)
+  {  	
+  	let auraId = $(light_auras[i]).attr('data-id');
+
+  	found = selectedIds.some(r=> r == auraId);
+
+  	if(!found && window.DM){
+  		$(light_auras[i]).css("visibility", "hidden");
+  	}
+  	if(selectedIds.length == 0 || found){
+  		if(window.DM){
+  			$(light_auras[i]).css("visibility", "visible");
+  		}
+  		
+	  	let tokenPos = {
+	  		x: (parseInt($(light_auras[i]).css('left'))+(parseInt($(light_auras[i]).css('width'))/2)),
+	  		y: (parseInt($(light_auras[i]).css('top'))+(parseInt($(light_auras[i]).css('height'))/2))
+	  	}
+	
+  	  particle.update(tokenPos.x, tokenPos.y); // moves particle
+	  particle.draw(context);            // draws particle
+	  particle.look(context, walls); 
+	
+	}    // draws rays
+  }
+
+}
+
+
+
+
+

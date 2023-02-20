@@ -1277,6 +1277,7 @@ class Token {
 			else {
 				old.css("border", "");
 				old.removeClass("tokenselected");
+
 			}
 			const oldImage = old.find(".token-image,[data-img]")
 			// token uses an image for it's image
@@ -1367,6 +1368,7 @@ class Token {
 			if (typeof this.options.tokendataname !== "undefined") {
 				old.attr("data-tokendataname", this.options.tokendataname);
 			}
+			redraw_light();
 			console.groupEnd()
 		}
 		else { // adding a new token
@@ -1714,7 +1716,7 @@ class Token {
 					var original = ui.originalPosition;
 					let tokenX = Math.round((event.pageX - click.x + original.left) / zoom);
 					let tokenY = Math.round((event.pageY - click.y + original.top) / zoom);
-
+					redraw_light();
 
 					if (should_snap_to_grid()) {
 						tokenX += (window.CURRENT_SCENE_DATA.hpps / 2);
@@ -1866,6 +1868,7 @@ class Token {
 
 				window.MULTIPLE_TOKEN_SELECTED = (count > 1);
 				draw_selected_token_bounding_box(); // update rotation bounding box
+				redraw_light();
 			});
 			
 			console.groupEnd()
@@ -1881,6 +1884,7 @@ class Token {
 		toggle_player_selectable(this, token)
 		//check_token_visibility(); // CHECK FOG OF WAR VISIBILITY OF TOKEN
 		console.groupEnd()
+		redraw_light();
 	}
 
 	// key: String, numberRemaining: Number; example: track_ability("1stlevel", 2) // means they have 2 1st level spell slots remaining
@@ -2236,6 +2240,17 @@ function deselect_all_tokens() {
 		}
 	}
 	remove_selected_token_bounding_box();
+	let darknessPercent = 100 - parseInt(window.CURRENT_SCENE_DATA.darkness_filter); 	
+	if(window.DM && darknessPercent < 25){
+   	 	darknessPercent = 25; 	
+   	 	$('#VTT').css('--darkness-filter', darknessPercent + "%");
+   	 	$('#raycastingCanvas').css('opacity', 0.5);
+   	}
+   	if(window.DM){
+   		$("[id^='aura_']").css('visibility', "visible");
+   	}
+    redraw_light();
+    check_token_visibility();
 }
 
 function token_health_aura(hpPercentage) {

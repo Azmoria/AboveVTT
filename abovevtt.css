@@ -1812,6 +1812,11 @@ body:not(.body-rpgcampaign-details) .sidebar__pane-content {
     padding: 0.3em !important;
 }
 
+#raycastingCanvas{
+    mix-blend-mode:multiply;
+    filter:blur(2px);
+}
+
 #conditions-flyout li,
 #playerTokenSelectedWarning {
     position: relative;
@@ -4912,6 +4917,10 @@ input.max_hp[disabled]{
     z-index: unset !important; /*important to override dndbeyond's index.scss*/
 }
 
+#site.encounter-builder-app #raycastingCanvas{
+    opacity:50%;
+}
+
 .dm_scenes_button.selected,
 .player_scenes_button.selected,
 .dm_scenes_button.selected:hover,
@@ -5286,6 +5295,9 @@ div.ddbc-tab-options--layout-pill>button{
     background: #fff;
     filter: brightness(var(--darkness-filter));
 
+}
+#raycastingCanvas{
+    opacity: calc(100% - var(--darkness-filter));
 }
 
 #text_div{

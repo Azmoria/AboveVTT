@@ -253,9 +253,10 @@ function decrease_zoom() {
 * @return {Number}
 */
 function get_reset_zoom() {
+	const sidebar_open = ($('#hide_rightpanel').hasClass('point-right')) ? 340 : 0;
 	const wH = $(window).height();
 	const mH = $("#scene_map").height()*window.CURRENT_SCENE_DATA.scale_factor;
-	const wW = $(window).width();
+	const wW = $(window).width()-sidebar_open;
 	const mW = $("#scene_map").width()*window.CURRENT_SCENE_DATA.scale_factor;
 
 	console.log(wH, mH, wW, mW);
@@ -277,6 +278,8 @@ function reset_zoom() {
 		block: 'center',
 		inline: 'center'
 	});
+	if($('#hide_rightpanel').hasClass('point-right') &&  ($("#scene_map").width()*window.CURRENT_SCENE_DATA.scale_factor)*window.ZOOM+200 > $(window).width()-340)
+		$(window).scrollLeft(200);
 	// Don't store any zoom for this scene as we default to map fit on load
 	remove_zoom_from_storage();
 	console.groupEnd();
@@ -2796,6 +2799,13 @@ function init_ui() {
 	fog.css("position", "absolute");
 	fog.css("z-index", "21");
 
+
+	const rayCasting = $("<canvas id='raycastingCanvas'></canvas>");
+	rayCasting.css("top", "0");
+	rayCasting.css("left", "0");
+	rayCasting.css("position", "absolute");
+	rayCasting.css("z-index", "22");
+
 	// this overlay sits above other canvases, but below tempOverlay
 	// when peers stream their rulers, this canvas is where we draw them
 	const peerOverlay = $("<canvas id='peer_overlay'></canvas>");
@@ -2882,6 +2892,7 @@ function init_ui() {
 	VTT.append(drawOverlay);
 	VTT.append(textDiv);
 	VTT.append(tempOverlay);
+	VTT.append(rayCasting);
 	mapContainer.append(darknessLayer);
 
 	wrapper = $("<div id='VTTWRAPPER'/>");
@@ -3109,6 +3120,7 @@ function init_buttons() {
 		init_fog_menu(buttons)
 		init_draw_menu(buttons)
 		init_text_button(buttons)
+		init_walls_menu(buttons)
 
 	}
 
