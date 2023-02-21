@@ -1692,32 +1692,6 @@ function observe_character_sheet_aoe(documentToObserve) {
 	aoe_observer.observe(mutation_target, mutation_config);
 }
 
-
-/** Called from our character sheet observer for Dice Roll formulae.
- * @param element the jquery element that we observed changes to
- */
-function inject_dice_roll(element) {
-	try {
-		if (element.find("button.avtt-roll-formula-button").length > 0) {
-			console.debug("inject_dice_roll already has a button")
-			return;
-		}
-		const text = element.text();
-		if (text.match(slashCommandRegex)?.[0]) {
-			const diceRoll = DiceRoll.fromSlashCommand(text, window.PLAYER_NAME, window.PLAYER_IMG);
-			const button = $(`<button class='avtt-roll-formula-button integrated-dice__container' title="${diceRoll.action?.toUpperCase() ?? "CUSTOM"}: ${diceRoll.rollType?.toUpperCase() ?? "ROLL"}">${diceRoll.expression}</button>`);
-			button.on("click", function (clickEvent) {
-				clickEvent.stopPropagation();
-				window.diceRoller.roll(diceRoll);
-			});
-			element.empty();
-			element.append(button);
-		}
-	} catch (error) {
-		console.log("inject_dice_roll failed to process element", element, error);
-	}
-}
-
 /**
  * Opens the character sheet window.
  * @param {String} sheet_url URL to DDB charater
@@ -3118,11 +3092,11 @@ function init_buttons() {
 
 	if (window.DM) {
 		init_fog_menu(buttons)
-		init_draw_menu(buttons)
 		init_text_button(buttons)
 		init_walls_menu(buttons)
 
 	}
+	init_draw_menu(buttons)
 
 	setup_aoe_button();
 	handle_drawing_button_click();
