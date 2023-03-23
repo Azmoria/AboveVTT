@@ -3083,10 +3083,6 @@ function redraw_light(){
 	}
 
 
-	context.clearRect(0,0,canvasWidth,canvasHeight);
-
-	context.fillStyle = "black";
-	context.fillRect(0,0,canvasWidth,canvasHeight);
 
 
 	let light_auras = $(`.aura-element.islight:not([style*='visibility: hidden'])`)
@@ -3110,58 +3106,64 @@ function redraw_light(){
 	 }
 
 
-  for(let i = 0; i < light_auras.length; i++){
+	for(let i = 0; i < light_auras.length; i++){
 
-  	let auraId = $(light_auras[i]).attr('data-id');
+		let auraId = $(light_auras[i]).attr('data-id');
 
-  	found = selectedIds.some(r=> r == auraId);
+		found = selectedIds.some(r=> r == auraId);
 
 
 
-	let tokenPos = {
-		x: (parseInt($(light_auras[i]).css('left'))+(parseInt($(light_auras[i]).css('width'))/2)),
-		y: (parseInt($(light_auras[i]).css('top'))+(parseInt($(light_auras[i]).css('height'))/2))
-	}
-	
+		let tokenPos = {
+			x: (parseInt($(light_auras[i]).css('left'))+(parseInt($(light_auras[i]).css('width'))/2)),
+			y: (parseInt($(light_auras[i]).css('top'))+(parseInt($(light_auras[i]).css('height'))/2))
+		}
 
-	particleUpdate(tokenPos.x, tokenPos.y); // moves particle
-	particleLook(context, walls, 100000, undefined, undefined, undefined, false); // draws rays for clip paths
 
-	let path = "";
-	let adjustScale = (window.CURRENT_SCENE_DATA.scale_factor != undefined) ? window.CURRENT_SCENE_DATA.scale_factor : 1;
-	for( let i = 0; i < lightPolygon.length; i++ ){
-			path += (i && "L" || "M") + lightPolygon[i].x/adjustScale+','+lightPolygon[i].y/adjustScale
-	}
-	$(`.aura-element-container-clip[id='${auraId}']`).css('clip-path', `path('${path}')`)
+		particleUpdate(tokenPos.x, tokenPos.y); // moves particle
+		particleLook(context, walls, 100000, undefined, undefined, undefined, false); // draws rays for clip paths
 
-	
-	if(window.SelectedTokenVision){
-		$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'hidden');
-	}
-	
-	if(window.DM && !window.SelectedTokenVision){
-		$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'visible'); 
-	}
+		let path = "";
+		let adjustScale = (window.CURRENT_SCENE_DATA.scale_factor != undefined) ? window.CURRENT_SCENE_DATA.scale_factor : 1;
+		for( let i = 0; i < lightPolygon.length; i++ ){
+				path += (i && "L" || "M") + lightPolygon[i].x/adjustScale+','+lightPolygon[i].y/adjustScale
+		}
+		$(`.aura-element-container-clip[id='${auraId}']`).css('clip-path', `path('${path}')`)
 
-  	if(selectedIds.length == 0 || found || !window.SelectedTokenVision){	
-  		let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
-  		if(!auraId.includes(window.PLAYER_ID) && !window.DM && window.TOKEN_OBJECTS[auraId].options.share_vision != true && playerTokenId != undefined)
-  			continue; 
-  		
-  		if(playerTokenId == undefined && window.TOKEN_OBJECTS[auraId].options.share_vision != true && !window.DM && window.TOKEN_OBJECTS[auraId].options.itemType != 'pc')
-  			continue;
+
+		if(window.SelectedTokenVision){
+			$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'hidden');
+		}
+
+		if(window.DM && !window.SelectedTokenVision){
+			$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'visible'); 
+		}
+
+		if(selectedIds.length == 0 || found || !window.SelectedTokenVision){	
+			let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
+			if(!auraId.includes(window.PLAYER_ID) && !window.DM && window.TOKEN_OBJECTS[auraId].options.share_vision != true && playerTokenId != undefined)
+				continue; 
+			
+			if(playerTokenId == undefined && window.TOKEN_OBJECTS[auraId].options.share_vision != true && !window.DM && window.TOKEN_OBJECTS[auraId].options.itemType != 'pc')
+				continue;
 
 		
-		$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'visible'); 		
+			$(`.aura-element-container-clip[id='${auraId}'] [id*='vision_']`).css('visibility', 'visible'); 		
 		
-  	
+		
 
-  		
-  		drawPolygon(offscreenContext, lightPolygon, 'rgba(255, 255, 255, 1)', true); //draw to offscreen canvas so we don't have to render every draw and use this for a mask
-	}    	
-  }
-  context.drawImage(offscreenCanvasMask, 0, 0); // draw to visible canvas only once so we render this once
-  $('#VTT').css('--vision-mask', `url('${offscreenCanvasMask.toDataURL('image/png', 0)}')`) // make image ask of offscreen canvas
+			
+			drawPolygon(offscreenContext, lightPolygon, 'rgba(255, 255, 255, 1)', true); //draw to offscreen canvas so we don't have to render every draw and use this for a mask
+		}    	
+	}
+	context.clearRect(0,0,canvasWidth,canvasHeight);
+
+	context.fillStyle = "black";
+	context.fillRect(0,0,canvasWidth,canvasHeight);
+
+	  
+	context.drawImage(offscreenCanvasMask, 0, 0); // draw to visible canvas only once so we render this once
+	$('#VTT').css('--vision-mask', `url('${offscreenCanvasMask.toDataURL('image/png', 0)}')`) // make image mask of offscreen canvas
 }
 
 
