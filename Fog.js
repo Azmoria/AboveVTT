@@ -1360,7 +1360,7 @@ function redraw_light_walls(clear=true){
 	
         let type = Object.keys(doorColors).find(key => Object.keys(doorColors[key]).find(key2 => doorColors[key][key2] === color))
         let open;
-		if($(`.door-button[data-x1='${x}'][data-y1='${y}']`).length==0 && doorColorsArray.includes(color)){
+		if($(`.door-button[data-x1='${parseInt(x)}'][data-y1='${parseInt(y)}']`).length==0 && doorColorsArray.includes(color)){
 			
 			
 			let midX = Math.floor((x+width)/2) / scale * window.CURRENT_SCENE_DATA.scale_factor;
@@ -1458,7 +1458,7 @@ function init_door_context_menu(){
             let y1 = parseInt(door.attr('data-y1'));
             let y2 = parseInt(door.attr('data-y2'));
 
-            let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && d[3] == x1 && d[4] == y1 && d[5] == x2 && d[6] == y2)) 
+            let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
             let color = doors[0][2];
             let isOpen = (/rgba.*0\.5\)/g).test(color) ? 'open' : 'closed';
             if(door.children('.door').length>0){
@@ -1641,7 +1641,7 @@ function init_door_context_menu(){
 
 
 function open_close_door(x1, y1, x2, y2, type=0){
-	let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && d[3] == x1 && d[4] == y1 && d[5] == x2 && d[6] == y2)) 
+	let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2)) 
 
 
 		
