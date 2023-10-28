@@ -560,7 +560,11 @@ class Token {
 		) { return; }
 		let halfWidth = parseFloat(this.options.size)/2;
 		let inLos = this.isAoe() ? true : detectInLos(tokenPosition.x + halfWidth, tokenPosition.y + halfWidth) ;
-		if(window.CURRENT_SCENE_DATA.disableSceneVision == 1 || !this.options.auraislight || inLos){
+		let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
+		let playerTokenAuraIsLight = (window.CURRENT_SCENE_DATA.disableSceneVision == '1' || window.DM) ? false : (playerTokenId == undefined) ? true : window.TOKEN_OBJECTS[playerTokenId].options.auraislight; // used in drag to know if we should check for wall/LoS collision.
+				
+
+		if(!playerTokenAuraIsLight || inLos){
 			this.options.top = tokenPosition.y + 'px';
 			this.options.left = tokenPosition.x + 'px';
 
