@@ -1055,8 +1055,8 @@ function reset_canvas() {
  	if(!parseInt(darknessfilter) && window.walls.length>4){
  		$('#outer_light_container').css({
  			'mix-blend-mode': 'unset',
- 			'background':  '#FFF',
- 			'opacity': '0.3'
+ 			'background':  'var(--daylight-color, #000)',
+ 			'opacity': '0.5'
  		});
  	} else{
  		$('#outer_light_container').css({
@@ -1551,21 +1551,6 @@ function redraw_light_walls(clear=true){
 	
 
 	$('.door-button[removeAfterDraw]').remove();
-
-	let darknessfilter = (window.CURRENT_SCENE_DATA.darkness_filter != undefined) ? window.CURRENT_SCENE_DATA.darkness_filter : 0;
- 	if(!parseInt(darknessfilter) && window.walls.length>4){
- 		$('#light_container').css({
- 			'mix-blend-mode': 'unset',
- 			'background': '#FFF',
- 			'opacity': '0.3'
- 		});
- 	} else{
- 		$('#light_container').css({
- 			'mix-blend-mode': '',
- 			'background': '',
- 			'opacity': ''
- 		});
- 	}
  
 }
 
@@ -4591,19 +4576,7 @@ function redraw_light(){
 		  		selectedIds.push(tokenId)
 		}	  	
 	}
-	else {
-  		if(!parseInt(window.CURRENT_SCENE_DATA.darkness_filter) && window.walls.length>4){
-		 	$('#light_container').css({
-	 			'opacity': '0.3'
-		 	});
-		 	 
-	  	}
-	  	else{
-	  		$('#light_container').css({
-	 			'opacity': ''
-	 		});
-  		}
-  	}
+
 
 
 	let promises = []

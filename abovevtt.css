@@ -6580,7 +6580,7 @@ body.preventSelectDefinitelyNot .token.lockedToken>img{
 }
 #darkness_layer{
     z-index: 7;
-    background: #fff;
+    background: var(--daylight-color, #fff);
     filter: brightness(var(--darkness-filter));
 
 }
