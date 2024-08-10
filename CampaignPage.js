@@ -12,6 +12,7 @@ $(function() {
           window.MB = new MessageBroker();
           inject_chat_buttons();
         } else {
+          monitor_console_logs();
           inject_instructions();
           inject_dm_join_button();
           inject_player_join_buttons();
