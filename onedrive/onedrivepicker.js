@@ -68,8 +68,8 @@
         let embedData = null;
   
         await $.ajax({
-            url: `https://graph.microsoft.com/v1.0/me/drive/items/${fileid}/createLink`,
-            type: 'post',
+            url: fileid,
+            type: 'get',
             data: "{type: 'view'}",
             scope: 'anonymous',
             headers: {
@@ -100,6 +100,7 @@
         
         return embedData.link.webUrl
     }    
+  
     async function launchPicker(e, callback=function(){}, selectionMode, selectionType) {
 
         e.preventDefault();
@@ -140,6 +141,23 @@
             },  
             selection: {
               mode: selectionMode
+            },
+            commands: {
+                pick: {
+                    action: 'share',
+                    label: 'share and pick',
+                    select: {
+                        urls: {
+                          download: true,
+                        },
+                    },
+                },
+            }, 
+            tray: {
+                prompt: "keep-sharing",
+                keepSharing: {
+                    active: true
+                },
             },
         };
 
@@ -224,15 +242,30 @@
                                     case "pick":
                            
                                         console.log(`Picked: ${JSON.stringify(command)}`);
+
+                                       
                                         let embedToken = await getEmbedToken();
                                         let embedLinks=[];
                                         for(let i=0; i<command.items.length; i++){
-                                            let embedLink = await getEmbedLink(command.items[i].id, embedToken);
-                                            embedLinks.push({
-                                                name: command.items[i].name.replace(/\.[0-9a-zA-Z]*$/g, ''),
-                                                link: embedLink,
-                                                type: command.items[i].name.replace(/.*(\.[0-9a-zA-Z]*)$/g, '$1')
-                                            });
+
+
+                                            if(command.items[i]['@content.downloadUrl'] != undefined){
+
+                                                embedLinks.push({
+                                                    name: command.items[i].name.replace(/\.[0-9a-zA-Z]*$/g, ''),
+                                                    link: command.items[i]['@content.downloadUrl'],
+                                                    type: command.items[i].name.replace(/.*(\.[0-9a-zA-Z]*)$/g, '$1')
+                                                });
+                                            }
+                                            else{
+                                                let embedLink = await getEmbedLink(link, embedToken);
+                                                embedLinks.push({
+                                                    name: command.items[i].name.replace(/\.[0-9a-zA-Z]*$/g, ''),
+                                                    link: embedLink,
+                                                    type: command.items[i].name.replace(/.*(\.[0-9a-zA-Z]*)$/g, '$1')
+                                                });
+                                            }
+
                                         }
                                         callback(embedLinks);
                                         port.postMessage({

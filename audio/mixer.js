@@ -196,7 +196,7 @@ class Mixer extends EventTarget {
                 }
                 else if(url.includes("https://1drv.ms/"))
                 {
-                  if(url.split('/')[4].length == 1){
+                  if(url.split('/')[4]?.length == 1){
                     url = url;
                   }
                   else{
