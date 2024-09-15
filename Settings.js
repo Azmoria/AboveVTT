@@ -169,6 +169,16 @@ function token_setting_options() {
 			hiddenSetting: true
 		},
 		{
+			name: 'includeMapElev',
+			label: 'Add scene elevation to token elevation indicator',
+			type: 'toggle',
+			options: [
+				{ value: true, label: `Add scene elevation to token elevation`, description: "The token will include scene elevation in the elevation display." },
+				{ value: false, label: `Don't add scene elevation to token elevation`, description: "The token will not include scene elevation in the elevation display." }
+			],
+			defaultValue: false,
+		},
+		{
 			name: 'enablepercenthpbar',
 			label: 'Enable Token HP% Bar',
 			type: 'toggle',

@@ -1547,6 +1547,10 @@ function check_token_elev(tokenid, elevContext=undefined){
 
 	if(window.elevHeights != undefined && mapElev != undefined){
 		token.options.mapElev = window.elevHeights[mapElev] != undefined && window.elevHeights[mapElev] != '' ? window.elevHeights[mapElev] : 0;
+		let selector = "div[data-id='" + token.options.id + "']";
+		let mapToken =  $("#tokens").find(selector).add(`[data-notatoken='notatoken_${token.options.id}']`);
+		if(mapToken != undefined)
+			token.build_stats(mapToken);
 	}
 }
 
