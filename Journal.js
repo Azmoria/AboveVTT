@@ -819,7 +819,7 @@ class JournalManager{
 	                menuItems["delete"] = {
 	                    name: "Delete",
 	                    callback: function(itemKey, opt, originalEvent) {
-                        	if(confirm("Delete this chapter and all the contained notes?")){
+                        	if(confirm("Delete this folder and all the contained notes?")){
                         		
                         		for(let k=0;k<self.chapters[i].notes.length;k++){
 									let nid=self.chapters[i].notes[k];
