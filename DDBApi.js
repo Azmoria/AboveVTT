@@ -80,11 +80,8 @@ class DDBApi {
     const token = await DDBApi.#refreshToken();
     const config = {
       method: 'DELETE',
-      credentials: 'include',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Authorization': `Bearer ${token}`
       }
     }
     // Explicitly not calling `lookForErrors` here because we don't actually care if this succeeds.
