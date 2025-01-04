@@ -2570,56 +2570,56 @@ class JournalManager{
 
 			@font-face {
 			    font-family: 'Scala Sans Offc';
-			    src: url("../fonts/ScalaSansOffc-Bold.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansOffc-Bold.ttf") format("truetype");
 			    font-weight: bold;
 			    font-style: normal
 			}
 
 			@font-face {
 			    font-family: 'Scala Sans Offc';
-			    src: url("../fonts/ScalaSansOffc.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansOffc.ttf") format("truetype");
 			    font-weight: normal;
 			    font-style: normal
 			}
 
 			@font-face {
 			    font-family: 'Scala Sans Offc';
-			    src: url("../fonts/ScalaSansOffc-BoldIta.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansOffc-BoldIta.ttf") format("truetype");
 			    font-weight: bold;
 			    font-style: italic
 			}
 
 			@font-face {
 			    font-family: 'Scala Sans Offc';
-			    src: url("../fonts/ScalaSansOffc-Ita.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansOffc-Ita.ttf") format("truetype");
 			    font-weight: normal;
 			    font-style: italic
 			}
 
 			@font-face {
 			    font-family: 'Scala Sans SC Offc';
-			    src: url("../fonts/ScalaSansScOffc.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansScOffc.ttf") format("truetype");
 			    font-weight: normal;
 			    font-style: normal
 			}
 
 			@font-face {
 			    font-family: 'Scala Sans SC Offc';
-			    src: url("../fonts/ScalaSansScOffc-Bold.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/ScalaSansScOffc-Bold.ttf") format("truetype");
 			    font-weight: bold;
 			    font-style: normal
 			}
 
 			@font-face {
 			    font-family: 'MrsEavesSmallCaps';
-			    src: url("../fonts/MrsEavesSmallCaps.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/MrsEavesSmallCaps.ttf") format("truetype");
 			    font-weight: 100;
 			    font-style: normal
 			}
 
 			@font-face {
 			    font-family: 'DearSarahPro';
-			    src: url("../fonts/DearSarahPro.ttf") format("truetype");
+			    src: url("https://www.dndbeyond.com/fonts/DearSarahPro.ttf") format("truetype");
 			    font-weight: 100;
 			    font-style: normal
 			}
