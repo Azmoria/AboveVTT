@@ -1510,8 +1510,10 @@ class MessageBroker {
 
 		setInterval(function() {
 			self.sendPing();
-			self.sendAbovePing();
 		}, 480000);
+		setInterval(function() {
+			self.sendAbovePing();
+		}, 180000);
 
 		// Ensure we have an initial delay (15 seconds) before attempting re-connects to let everything load (every 4 seconds)
 		setTimeout(setInterval(function() {
