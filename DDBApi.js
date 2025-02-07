@@ -185,7 +185,18 @@ class DDBApi {
     const response = await DDBApi.fetchJsonWithToken(url);
     return response.data;
   }
+  static async fetchMonstersExtras(monsterIds){
+    if (!Array.isArray(monsterIds)) {
+      return [];
+    }
+    let uniqueMonsterIds = [...new Set(monsterIds)];
+  
+    console.log("DDBApi.fetchMonsters starting with ids", uniqueMonsterIds);
+    const url = `https://monster-service.dndbeyond.com/v1/Monster/details/${window.gameId}`;
+    const response = await DDBApi.postJsonWithToken(url, {ids: uniqueMonsterIds});
+    return response;
 
+  }
   static async fetchCampaignCharacters(campaignId) {
     // This is what the campaign page calls to fetch characters
     if(window.playerUsers != undefined)

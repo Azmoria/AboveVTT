@@ -206,6 +206,21 @@ function build_monster_stat_block(statBlock, token) {
                 <img class="mon-stat-block__separator-img ddbc-creature-block__separator-img" alt="" src="https://media-waterdeep.cursecdn.com/file-attachments/0/579/stat-block-header-bar.svg">
               </div>
               <div class="mon-stat-block__attributes">
+                ${statBlock.extras?.initiativeModifier != undefined ? 
+                  `
+                    <div class="mon-stat-block__attribute ddbc-creature-block__attribute">
+                      <span class="mon-stat-block__attribute-label ddbc-creature-block__attribute-label">Initiative</span>
+                      <span class="mon-stat-block__attribute-value">
+                        <span class="mon-stat-block__attribute-data-value">
+                            ${statBlock.rollButton("1d20", statBlock.initString(statBlock.extras.initiativeModifier), "roll", "Initiative", true)}
+                        </span>
+                        <span class="mon-stat-block__attribute-data-extra ddbc-creature-block__attribute-data-extra">
+                            ${statBlock.extras.initiativeScore}
+                        </span>
+                      </span>
+                    </div>
+                  ` 
+                : ''}  
                 <div class="mon-stat-block__attribute ddbc-creature-block__attribute">
                   <span class="mon-stat-block__attribute-label ddbc-creature-block__attribute-label">Armor Class</span>
                   <span class="mon-stat-block__attribute-value">
@@ -485,6 +500,21 @@ function build_monster_copy_stat_block(statBlock) {
                 <img class="mon-stat-block__separator-img ddbc-creature-block__separator-img" alt="" src="https://media-waterdeep.cursecdn.com/file-attachments/0/579/stat-block-header-bar.svg">
               </div>
               <div class="mon-stat-block__attributes">
+                ${statBlock.extras?.initiativeModifier != undefined ? 
+                  `
+                    <div class="mon-stat-block__attribute ddbc-creature-block__attribute">
+                      <span class="mon-stat-block__attribute-label ddbc-creature-block__attribute-label">Initiative</span>
+                      <span class="mon-stat-block__attribute-value">
+                        <span class="mon-stat-block__attribute-data-value">
+                            ${statBlock.rollButton("1d20", statBlock.initString(statBlock.extras.initiativeModifier), "roll", "Initiative", true)}
+                        </span>
+                        <span class="mon-stat-block__attribute-data-extra ddbc-creature-block__attribute-data-extra">
+                            ${statBlock.extras.initiativeScore}
+                        </span>
+                      </span>
+                    </div>
+                  ` 
+                : ''}   
                 <div class="mon-stat-block__attribute ddbc-creature-block__attribute">
                   <span class="mon-stat-block__attribute-label ddbc-creature-block__attribute-label">Armor Class</span>
                   <span class="mon-stat-block__attribute-value">
@@ -731,6 +761,7 @@ function build_monster_copy_stat_block(statBlock) {
 class MonsterStatBlock {
     constructor(data) {
         this.data = data;
+        this.extras = window.cached_monster_extras[data.id]     
     }
 
     findObj(key, id) {
@@ -825,8 +856,18 @@ class MonsterStatBlock {
             return `+${m}`;
         }
     }
+
     statButton(value, stat) {
         return this.rollButton("1d20", this.modString(value), "check", stat, true);
+    }
+
+    initString(value){
+      const m = value;
+      if (m < 0) {
+          return `${m}`;
+      } else {
+          return `+${m}`;
+      }
     }
 
     rollButton(expression, modifier, rollType, actionType, parenthesis = false) {

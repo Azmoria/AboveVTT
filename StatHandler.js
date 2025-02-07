@@ -5,7 +5,7 @@ class StatHandler {
 		//this.token=token;
 	}
 
-	getStat(monsterid, callback, open5eSlug = undefined) {
+		getStat(monsterid, callback, open5eSlug = undefined) {
 		let self = this;
 
 		if (monsterid in this.cache) {
@@ -68,12 +68,19 @@ class StatHandler {
 						statArray.push((window.all_token_objects[i]?.options?.customInit != undefined || (window.all_token_objects[i]?.options?.customStat != undefined && window.all_token_objects[i]?.options?.customStat[1]?.mod != undefined)) ? ((modifier*2)+10) : 0);
 					}
 					else {
-						promises.push(new Promise((resolve, reject) => {
-							this.getStat(window.all_token_objects[i].options.monster, function(stat) {
-								modArray.push(Math.floor((stat.data.stats[1].value - 10) / 2.0));
-								statArray.push(stat.data.stats[1].value);	
+						promises.push(new Promise((resolve, reject) => {3
+							if(cached_monster_extras[window.all_token_objects[i].options.monster].initiativeModifier != undefined){
+								modArray.push(cached_monster_extras[window.all_token_objects[i].options.monster].initiativeModifier);
+								statArray.push(cached_monster_extras[window.all_token_objects[i].options.monster].initiativeScore);	
 								resolve();
-							}, window.all_token_objects[i].options.itemId);
+							}
+							else{
+								this.getStat(window.all_token_objects[i].options.monster, function(stat) {
+									modArray.push(Math.floor((stat.data.stats[1].value - 10) / 2.0));
+									statArray.push(stat.data.stats[1].value);	
+									resolve();
+								}, window.all_token_objects[i].options.itemId);
+							}
 						}));
 					}
 				}
@@ -128,18 +135,32 @@ class StatHandler {
 			callback(total);
 		}
 		else{
-			this.getStat(monsterid, function(stat) {
-				let modifier = Math.floor((stat.data.stats[1].value - 10) / 2.0);
+			if(cached_monster_extras[monsterid].initiativeModifier != undefined){
+				let modifier = cached_monster_extras[monsterid].initiativeModifier;
 				let expression = dice + modifier;
 				let roll = new rpgDiceRoller.DiceRoll(expression);
 				console.log(expression + "->" + roll.total);
-				let total = parseFloat(roll.total + stat.data.stats[1].value/100).toFixed(2);
+				let total = parseFloat(roll.total + cached_monster_extras[monsterid].initiativeScore/100).toFixed(2);
 				let combatSettingData = getCombatTrackersettings();
 				if(combatSettingData['tie_breaker'] !='1'){
 					total = parseInt(total);
 				}
 				callback(total);
-			}, open5eSlug);
+			}
+			else{
+				this.getStat(monsterid, function(stat) {
+					let modifier = Math.floor((stat.data.stats[1].value - 10) / 2.0);
+					let expression = dice + modifier;
+					let roll = new rpgDiceRoller.DiceRoll(expression);
+					console.log(expression + "->" + roll.total);
+					let total = parseFloat(roll.total + stat.data.stats[1].value/100).toFixed(2);
+					let combatSettingData = getCombatTrackersettings();
+					if(combatSettingData['tie_breaker'] !='1'){
+						total = parseInt(total);
+					}
+					callback(total);
+				}, open5eSlug);
+			}	
 		}
 
 		

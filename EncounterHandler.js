@@ -84,6 +84,8 @@ async function fetch_monsters(monsterIds, callback, open5e=false) {
 		let uniqueMonsterIds = [...new Set(monsterIds)];
 		let queryParam = uniqueMonsterIds.map(id => `ids=${id}`).join("&");
 		console.log("fetch_monsters starting with ids", uniqueMonsterIds);
+		let monsterExtras = await DDBApi.fetchMonstersExtras(uniqueMonsterIds);
+		await update_monster_extras_cache(monsterExtras);
 		window.ajaxQueue.addDDBRequest({
 			url: `https://monster-service.dndbeyond.com/v1/Monster?${queryParam}`,
 			success: function (responseData) {

@@ -5,6 +5,7 @@ tokens_rootfolders = [];
 monster_search_filters = {};
 encounter_monster_items = {}; // encounterId: SidebarTokenItem[]
 cached_monster_items = {}; // monsterId: SidebarTokenItem
+cached_monster_extras = {};
 aoe_items = [];
 open5e_monsters = [];
 open5e_next = '';
@@ -3875,6 +3876,9 @@ const fetch_and_cache_monsters = mydebounce( (monsterIds, callback, open5e) => {
 
 function update_monster_item_cache(newItems) {
     newItems.forEach(item => cached_monster_items[item.monsterData.id] = item);
+}
+function update_monster_extras_cache(newItems){
+    newItems.forEach(item => cached_monster_extras[item.id] = item);
 }
 function update_open5e_item_cache(newItems) {
     newItems.forEach(item => {
