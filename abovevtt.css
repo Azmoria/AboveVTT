@@ -10551,21 +10551,79 @@ li.audio-row:hover .channel-progress-bar-total
 .token-image[src*='assets/icons/speaker.svg']{
     filter: invert(1) drop-shadow(1px 1px 0px #000) !important;
 }
+
+
 .token>.token-image{
-    background-position: calc(50% + var(--offsetX)) calc(0% - var(--offsetY)) !important;
+    --starting-position-x: calc(50% + var(--offsetX));
+    --starting-position-y: calc(0% - var(--offsetY));
+    background-position: var(--starting-position-x) var(--starting-position-y) !important;
     background-origin: border-box !important;
 }
 .token.underDarkness>.token-image{
-    background-position: calc(50% + calc(var(--offsetX) / var(--scene-scale, 1))) calc(0% - calc(var(--offsetY) / var(--scene-scale, 1))) !important;
+    --starting-position-x: calc(50% + calc(var(--offsetX) / var(--scene-scale, 1))); 
+    --starting-position-y: calc(0% - calc(var(--offsetY) / var(--scene-scale, 1)));
+    background-position: var(--starting-position-x) var(--starting-position-y) !important;
 }
 .token>.base~.token-image,
 .token>.token-image.freeform{
-    background-position: calc(50% + var(--offsetX)) calc(50% - var(--offsetY)) !important;
+    --starting-position-x: calc(50% + var(--offsetX)); 
+    --starting-position-y: calc(50% - var(--offsetY));
+    background-position: var(--starting-position-x) var(--starting-position-y) !important;
 }
 .token.underDarkness>.base~.token-image,
 .token.underDarkness>.token-image.freeform{
-    background-position: calc(50% + calc(var(--offsetX) / var(--scene-scale, 1))) calc(50% - calc(var(--offsetY) / var(--scene-scale, 1))) !important;
+    --starting-position-x: calc(50% + calc(var(--offsetX) / var(--scene-scale, 1))); 
+    --starting-position-y: calc(50% - calc(var(--offsetY) / var(--scene-scale, 1)));
+    background-position: var(--starting-position-x) var(--starting-position-y) !important;
 }
+
+@property --animated-x{
+  syntax: '<number>';
+  initial-value: 1;
+  inherits: false;
+}
+@property --animated-y{
+  syntax: '<number>'; 
+  initial-value: 1;
+  inherits: false;
+}
+@keyframes bgScrollX {
+  0% {
+    --animated-x  : 0; 
+  }
+  100% {
+    --animated-x: 1;
+  }
+}
+@keyframes bgScrollY {
+  0% {
+    --animated-y  : 0;
+  }
+  100% {
+    --animated-y: 1;
+  }
+}
+
+body:not(.reduceMovement) .token.underDarkness.tokenBGScroll>.base~.token-image,
+body:not(.reduceMovement) .token.underDarkness.tokenBGScroll>.token-image.freeform,
+body:not(.reduceMovement) .token.tokenBGScroll>.base~.token-image,
+body:not(.reduceMovement) .token.tokenBGScroll>.token-image.freeform,
+body:not(.reduceMovement) .token.tokenBGScroll.underDarkness>.token-image,
+body:not(.reduceMovement) .token.tokenBGScroll>.token-image {
+  animation: bgScrollX var(--bg-scroll-x-speed, 2s) linear infinite var(--bg-scroll-dir-x, normal), bgScrollY var(--bg-scroll-y-speed, 0s) linear infinite var(--bg-scroll-dir-y, normal);
+  background-position: calc(var(--starting-position-x) + calc(var(--animated-x) * calc(var(--max-width) * var(--image-zoom-value, 1)))) calc(var(--starting-position-y)  + calc(var(--animated-y) * calc(var(--max-height) * var(--image-zoom-value, 1)))) !important;
+
+}
+
+.token.underDarkness.tokenBGScroll>.base~.token-image,
+.token.underDarkness.tokenBGScroll>.token-image.freeform,
+.token.tokenBGScroll>.base~.token-image,
+.token.tokenBGScroll>.token-image.freeform,
+.token.tokenBGScroll.underDarkness>.token-image,
+.token.tokenBGScroll>.token-image{
+  background-repeat: repeat !important;
+}
+
 
 #tokens .audio-token.token:not(.underDarkness),
 #map_items .audio-token.token{

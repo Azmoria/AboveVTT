@@ -722,7 +722,12 @@ class Token {
 	    				"--offsetY": old.css('--offsetY'),
 						"--image-opacity": old.css('--image-opacity'),
 						"--view-box": old.css('--view-box'),
-						"--image-zoom": old.css('--image-zoom')
+						"--image-zoom": old.css('--image-zoom'),
+						"--image-zoom-value": old.css('--image-zoom-value'),
+						"--bg-scroll-x-speed": old.css('----bg-scroll-x-speed'),
+						"--bg-scroll-y-speed":old.css('--bg-scroll-y-speed'),
+						"--bg-scroll-dir-x": old.css('--bg-scroll-dir-x'),
+						"--bg-scroll-dir-y": old.css('--bg-scroll-dir-y'),
 					})
 			        tokenClone.attr('data-notatoken', `notatoken_${this.options.id}`);
 			        tokenClone.children('div:not(.base):not(.token-image):not(.hpvisualbar):not(.dead)').remove();    
@@ -754,7 +759,12 @@ class Token {
 	    				"--offsetY": old.css('--offsetY'),
 						"--image-opacity": old.css('--image-opacity'),
 						"--view-box": old.css('--view-box'),
-						"--image-zoom": old.css('--image-zoom')
+						"--image-zoom": old.css('--image-zoom'),
+						"--image-zoom-value": old.css('--image-zoom-value'),
+						"--bg-scroll-x-speed": old.css('----bg-scroll-x-speed'),
+						"--bg-scroll-y-speed":old.css('--bg-scroll-y-speed'),
+						"--bg-scroll-dir-x": old.css('--bg-scroll-dir-x'),
+						"--bg-scroll-dir-y": old.css('--bg-scroll-dir-y'),
 					})
 					copyToken.children('div:not(.base):not(.token-image):not(.hpvisualbar):not(.dead)').remove()
 					copyToken.toggleClass('lockedToken', this.options.locked==true)
@@ -2010,6 +2020,11 @@ class Token {
 			const imageOpacity = (this.options.imageOpacity != undefined) ? this.options.imageOpacity : 1;
 			const imageZoom = this.options.imageZoom != undefined ? parseFloat(this.options.imageZoom): undefined;
 			const newInset = imageZoom != undefined ? 49.5 * imageZoom/100 : undefined;
+			const bgScrollSpeedX = this.options.bgScrollX != undefined ? `${Math.abs(this.options.bgScrollX)}s` : '0s';
+			const bgScrollSpeedY = this.options.bgScrollY != undefined ? `${Math.abs(this.options.bgScrollY)}s` : '0s';
+			const bgScrollDirX = this.options.bgScrollX != undefined  && this.options.bgScrollX < 0 ? `reverse` : 'normal';
+			const bgScrollDirY = this.options.bgScrollY != undefined  && this.options.bgScrollY < 0 ? `reverse` : 'normal';
+
 			let rotation = 0;
 			
 			if (this.options.rotation != undefined) {
@@ -2067,15 +2082,20 @@ class Token {
 					"--offsetY": imageOffsetY != undefined ? `${parseFloat(imageOffsetY) * this.options.gridSquares}px` : '0px',
 					"--image-opacity": `${imageOpacity}`,
 					"--view-box": `inset(${newInset}% ${newInset}% ${newInset}% ${newInset}%)`, // will be used for object-view-box when supported in firefox
-					"--image-zoom": imageZoom == undefined ? ``: `${imageZoom+100}%` //adjust from viewbox to background-size property due to firefox not supporting it
-
+					"--image-zoom": imageZoom == undefined ? ``: `${imageZoom+100}%`, //adjust from viewbox to background-size property due to firefox not supporting it
+					"--image-zoom-value": imageZoom == undefined ? ``: `${(imageZoom+100)/100}`,
+					"--bg-scroll-x-speed": bgScrollSpeedX,
+					"--bg-scroll-y-speed":bgScrollSpeedY,
+					"--bg-scroll-dir-x": bgScrollDirX,
+					"--bg-scroll-dir-y": bgScrollDirY,
 				});
 				$(`.isAoe[data-id='${this.options.id}']:not(.token)`).css({
 					'--token-rotation': `${rotation}deg`,
 					'--token-scale': imageScale
 				})
 
-
+				old.toggleClass('tokenBGScroll', ((this.options.bgScrollX != undefined && parseInt(this.options.bgScrollX) != 0) || (this.options.bgScrollY != undefined && parseInt(this.options.bgScrollY) != 0)))
+					
 				setTimeout(function() {old.find(".token-image").css("transition", "")}, 200);		
 				
 				let selector = "tr[data-target='"+this.options.id+"']";
@@ -2388,7 +2408,12 @@ class Token {
 			    				"--offsetY": old.css('--offsetY'),
 								"--image-opacity": old.css('--image-opacity'),
 								"--view-box": old.css('--view-box'),
-								"--image-zoom": old.css('--image-zoom')
+								"--image-zoom": old.css('--image-zoom'),
+								"--image-zoom-value": old.css('--image-zoom-value'),
+								"--bg-scroll-x-speed": old.css('----bg-scroll-x-speed'),
+								"--bg-scroll-y-speed":old.css('--bg-scroll-y-speed'),
+								"--bg-scroll-dir-x": old.css('--bg-scroll-dir-x'),
+								"--bg-scroll-dir-y": old.css('--bg-scroll-dir-y'),
 							})
 					        tokenClone.attr('data-notatoken', `notatoken_${this.options.id}`);
 					        tokenClone.children('div:not(.base):not(.token-image):not(.hpvisualbar):not(.dead)').remove();    
@@ -2419,7 +2444,12 @@ class Token {
 			    				"--offsetY": old.css('--offsetY'),
 								"--image-opacity": old.css('--image-opacity'),
 								"--view-box": old.css('--view-box'),
-								"--image-zoom": old.css('--image-zoom')
+								"--image-zoom": old.css('--image-zoom'),
+								"--image-zoom-value": old.css('--image-zoom-value'),
+								"--bg-scroll-x-speed": old.css('----bg-scroll-x-speed'),
+								"--bg-scroll-y-speed":old.css('--bg-scroll-y-speed'),
+								"--bg-scroll-dir-x": old.css('--bg-scroll-dir-x'),
+								"--bg-scroll-dir-y": old.css('--bg-scroll-dir-y'),
 							})
 							copyToken.children('div:not(.base):not(.token-image):not(.hpvisualbar):not(.dead)').remove()
 							copyToken.toggleClass('lockedToken', this.options.locked==true)
@@ -2575,6 +2605,10 @@ class Token {
 					const imageOpacity = (this.options.imageOpacity != undefined) ? this.options.imageOpacity : 1;
 					const imageZoom = this.options.imageZoom != undefined ? parseFloat(this.options.imageZoom) : undefined;
 					const newInset = imageZoom != undefined ? 49.5 * imageZoom/100 : undefined;
+					const bgScrollSpeedX = this.options.bgScrollX != undefined ? `${Math.abs(this.options.bgScrollX)}s` : '0s';
+					const bgScrollSpeedY = this.options.bgScrollY != undefined ? `${Math.abs(this.options.bgScrollY)}s` : '0s';
+					const bgScrollDirX = this.options.bgScrollX != undefined && this.options.bgScrollX < 0 ? `reverse` : 'normal';
+					const bgScrollDirY = this.options.bgScrollY != undefined && this.options.bgScrollY < 0 ? `reverse` : 'normal';
 					this.options.imgsrc = update_old_discord_link(this.options.imgsrc) // this might be able to be removed in the future - it's to update maps with tokens already on them
 					let video = false;
 					if(this.options.videoToken == true || ['.mp4', '.webm','.m4v'].some(d => this.options.imgsrc.includes(d))){
@@ -2592,8 +2626,17 @@ class Token {
 						"--offsetY": imageOffsetY != undefined ? `${parseFloat(imageOffsetY) * this.options.gridSquares}px` : '0px',
 						"--image-opacity": `${imageOpacity}`,
 						"--view-box": `inset(${newInset}% ${newInset}% ${newInset}% ${newInset}%)`,
-						"--image-zoom": imageZoom == undefined ? ``: `${imageZoom+100}%` //adjust from viewbox to background-size property due to firefox not supporting it
+						"--image-zoom": imageZoom == undefined ? ``: `${imageZoom+100}%`, //adjust from viewbox to background-size property due to firefox not supporting it
+						"--image-zoom-value": imageZoom == undefined ? ``: `${(imageZoom+100)/100}`,
+						"--bg-scroll-x-speed": bgScrollSpeedX,
+						"--bg-scroll-y-speed":bgScrollSpeedY,
+						"--bg-scroll-dir-x": bgScrollDirX,
+						"--bg-scroll-dir-y": bgScrollDirY,
 					});
+
+					
+					tok.toggleClass('tokenBGScroll', ((this.options.bgScrollX != undefined && parseInt(this.options.bgScrollX) != 0) || (this.options.bgScrollY != undefined && parseInt(this.options.bgScrollY) != 0)))
+					
 					if(!(this.options.square)){
 						tokenImage.addClass("token-round");
 					}
@@ -3346,7 +3389,12 @@ class Token {
 		    				"--offsetY": tok.css('--offsetY'),
 							"--image-opacity": tok.css('--image-opacity'),
 							"--view-box": tok.css('--view-box'),
-							"--image-zoom": tok.css('--image-zoom')
+							"--image-zoom": tok.css('--image-zoom'),
+							"--image-zoom-value": tok.css('--image-zoom-value'),
+							"--bg-scroll-x-speed": tok.css('----bg-scroll-x-speed'),
+							"--bg-scroll-y-speed":tok.css('--bg-scroll-y-speed'),
+							"--bg-scroll-dir-x": tok.css('--bg-scroll-dir-x'),
+							"--bg-scroll-dir-y": tok.css('--bg-scroll-dir-y'),
 						})
 				        tokenClone.attr('data-notatoken', `notatoken_${this.options.id}`);
 				        tokenClone.children('div:not(.base):not(.token-image):not(.hpvisualbar):not(.dead)').remove();    

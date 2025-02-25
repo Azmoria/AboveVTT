@@ -3031,6 +3031,52 @@ function build_adjustments_flyout_menu(tokenIds) {
 		});
 		body.append(opacityWrapper);
 
+		let tokenBgScrollX = tokens.map(t => t.options.bgScrollX);
+		let uniqueBgScrollX = [...new Set(tokenBgScrollX)];
+		let startingBGScrollX = uniqueBgScrollX.length === 1 && uniqueBgScrollX[0] != undefined ? uniqueBgScrollX[0] : 0;
+		let bgScrollXWrapper = build_token_num_input(startingBGScrollX, tokens,  'Scroll X Time (sec)', "", "", 1, function (speed, persist=false) {
+			tokens.forEach(token => {
+				token.options.bgScrollX = speed;
+				if(speed == 0 && token.options.bgScrollY == 0){
+					$(`.VTTToken[data-id='${token.options.id}']`).toggleClass('tokenBGScroll', false);
+				}
+				else{
+					$(`.VTTToken[data-id='${token.options.id}']`).toggleClass('tokenBGScroll', true);
+					
+					$(`.VTTToken[data-id='${token.options.id}']`).css({
+						"--bg-scroll-x-speed": `${Math.abs(speed)}s`,
+						"--bg-scroll-dir-x": `${speed < 0 ? `reverse` : `normal`}`
+					})
+				}
+				if(persist)
+					token.place_sync_persist();
+			});
+		});
+		body.append(bgScrollXWrapper);
+
+		let tokenBgScrollY = tokens.map(t => t.options.bgScrollY);
+		let uniqueBgScrollY = [...new Set(tokenBgScrollY)];
+		let startingBGScrollY = uniqueBgScrollY.length === 1 && uniqueBgScrollY[0] != undefined ? uniqueBgScrollY[0] : 0;
+		let bgScrollYWrapper = build_token_num_input(startingBGScrollY, tokens,  'Scroll Y Time (sec)', "", "", 1, function (speed, persist=false) {
+			tokens.forEach(token => {
+				token.options.bgScrollY = speed;
+				if(speed == 0 && token.options.bgScrollX == 0){
+					$(`.VTTToken[data-id='${token.options.id}']`).toggleClass('tokenBGScroll', false);
+				}
+				else{
+					$(`.VTTToken[data-id='${token.options.id}']`).toggleClass('tokenBGScroll', true);
+					$(`.VTTToken[data-id='${token.options.id}']`).css({
+						"--bg-scroll-y-speed": `${Math.abs(speed)}s`,
+						"--bg-scroll-dir-y": `${speed < 0 ? `reverse` : `normal`}`
+					})
+				}
+
+				if(persist)
+					token.place_sync_persist();
+			});
+		});
+		body.append(bgScrollYWrapper);
+
 		//border color selections
 		let tokenBorderColors = tokens.map(t => t.options.color);
 		let initialColor = tokenBorderColors.length === 1 ? tokenBorderColors[0] : random_token_color();
@@ -3271,7 +3317,7 @@ function build_token_scale_input(startingScale, tokens, name, min=0.1, max=10, s
 }
 
 function build_token_num_input(startingScale=1, tokens, name, min=0.1, max=10, step=0.1, didUpdate) {
-	let imageInput = $(`<input class="image-input-number" type="number" max="${max}" min="${min}" step="${step}" title="Token Image Scale" placeholder="${startingScale}" name="Image Scale">`);
+	let imageInput = $(`<input class="image-input-number" type="number" max="${max}" min="${min}" step="${step}" title="${name}" placeholder="${startingScale}" name="Image Scale">`);
 
 	imageInput.val(startingScale);
 

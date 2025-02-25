@@ -2384,6 +2384,22 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     });
     inputWrapper.append(opacityWrapper);
 
+    let startingBgScrollX = customization.tokenOptions.bgScrollX || 0;
+    let bgScrollXWrapper = build_token_num_input(startingBgScrollX, tokens,  'Scroll X Time (sec)', "", "", 1, function (speed) {
+        customization.setTokenOption("bgScrollX", speed);
+        persist_token_customization(customization);
+        decorate_modal_images(sidebarPanel, listItem, placedToken);
+    });
+    inputWrapper.append(bgScrollXWrapper);
+
+    let startingBgScrollY = customization.tokenOptions.bgScrollY || 0;
+    let bgScrollYWrapper = build_token_num_input(startingBgScrollY, tokens,  'Scroll Y Time (sec)', "", "", 1, function (speed) {
+        customization.setTokenOption("bgScrollY", speed);
+        persist_token_customization(customization);
+        decorate_modal_images(sidebarPanel, listItem, placedToken);
+    });
+    inputWrapper.append(bgScrollYWrapper);
+
     // border color
     if(listItem.isTypePC() && customization.tokenOptions.playerThemeBorder != false){
         customization.tokenOptions.color = color_from_pc_object(find_pc_by_player_id(listItem.id));
