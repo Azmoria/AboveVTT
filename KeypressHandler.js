@@ -23,9 +23,17 @@ function unhide_interface() {
     }
 }
 
+function hotkeyDice(nthDice){
+    const dieButton = $(`.sidebar__pane-content .dice-roller>div:nth-of-type(${nthDice}) img`); 
+    if(ctrlHeld)
+        dieButton.triggerHandler('contextmenu');
+    else
+        dieButton.click();
+   
+}
+
 function init_keypress_handler(){
-
-
+ 
 Mousetrap.bind('c', function () {       //combat tracker
         $('#combat_button').click()
 });
@@ -87,17 +95,36 @@ Mousetrap.bind('shift+v', function () {       //check token vision
 });
 
 Mousetrap.bind('=', function () {       //zoom plus
-    $('#zoom_plus').click()
+    if($('.roll-mod-container').hasClass('show'))
+        $('.roll-button-mod.plus').click();
+    else
+        $('#zoom_plus').click()
+});
+Mousetrap.bind(["1","2","3","4","5","6","7","mod+1","mod+2","mod+3","mod+4","mod+5","mod+6","mod+7",], function (e, combo) {
+    e.preventDefault();  
+    let numberPressed = parseInt(combo.replace('mod+',''));
+    hotkeyDice(numberPressed);
 });
 
 Mousetrap.bind('+', function () {       //zoom plus
-    $('#zoom_plus').click()
+    if($('.roll-mod-container').hasClass('show'))
+        $('.roll-button-mod.plus').click(); 
+    else
+        $('#zoom_plus').click()
 });
 
 Mousetrap.bind('-', function () {       //zoom minus
-    $('#zoom_minus').click()
+    if($('.roll-mod-container').hasClass('show'))
+        $('.roll-button-mod.minus').click();
+    else
+        $('#zoom_minus').click()
+    
 });
-
+Mousetrap.bind('enter', function () {       //zoom minus
+    if(!$('.roll-mod-container').hasClass('show'))
+        return;
+    $('.roll-mod-container>.roll-button').click(); 
+});
 Mousetrap.bind('0', function () {   
     $('#zoom_fit').click()
 });
@@ -121,6 +148,11 @@ Mousetrap.bind('shift+space', function (e) {     //collapse/show character sheet
             window.TOKEN_OBJECTS[tokenId].highlight();   
     }
 });
+Mousetrap.bind('mod+space', function (e) {     //collapse/show character sheet
+    e.preventDefault();
+    $('#combat_area tr[data-current=1] .findTokenCombatButton').click();
+});
+
 Mousetrap.bind('shift+s', function (e) { 
     e.preventDefault();
     if ($('#grid_snap_drawings .ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active')) {
@@ -198,9 +230,7 @@ function handle_menu_number_press(e) {
     $(button).click()
     $(button).children().first().focus()
 }
-Mousetrap.bind(["1","2","3","4","5","6","7","8","9"], function (e) {
-    handle_menu_number_press(e)
-});
+
 const moveLoop = function(callback = function(){}){
     for (let i = 0; i < window.CURRENTLY_SELECTED_TOKENS.length; i++) {
         let id = window.CURRENTLY_SELECTED_TOKENS[i];
@@ -347,17 +377,17 @@ Mousetrap.bind('shift', function () {
 }, 'keyup');
 
 
-Mousetrap.bind('ctrl', function () {
+Mousetrap.bind('mod', function () {
 	ctrlHeld=true;
 	window.toggleSnap=true;
 }, 'keydown');
 
-Mousetrap.bind('ctrl', function () {
+Mousetrap.bind('mod', function () {
 	ctrlHeld=false;
 	window.toggleSnap=false;
 }, 'keyup');
 
-Mousetrap.bind(['ctrl+shift', 'shift+ctrl'], function () {
+Mousetrap.bind(['mod+shift', 'shift+mod'], function () {
     ctrlHeld=true;
     shiftHeld=true;
     $(window).off('blur.shiftCheck').one('blur.shiftCheck', function(){
@@ -366,7 +396,7 @@ Mousetrap.bind(['ctrl+shift', 'shift+ctrl'], function () {
     window.toggleSnap=true;
 }, 'keydown');
 
-Mousetrap.bind(['ctrl+shift', 'shift+ctrl'], function () {
+Mousetrap.bind(['mod+shift', 'shift+mod'], function () {
     ctrlHeld=false;
     shiftHeld = false;
     window.toggleSnap=false;
@@ -376,25 +406,12 @@ Mousetrap.bind('shift+h', function () {
     unhide_interface();
 });
 
-Mousetrap.bind('ctrl+c', function(e) {
-    if (window.navigator.userAgent.indexOf("Mac") != -1) return; // Mac/iOS use command
-    copy_selected_tokens();
-});
-Mousetrap.bind('command+c', function(e) {
+Mousetrap.bind('mod+c', function(e) {
     copy_selected_tokens();
 });
 
-Mousetrap.bind('ctrl+v', function(e) {
-    if (window.navigator.userAgent.indexOf("Mac") != -1) return; // Mac/iOS use command
-    if($('#temp_overlay:hover').length>0){
-        paste_selected_tokens(window.cursor_x, window.cursor_y);
-    } 
-    else {
-        let center = center_of_view();
-        paste_selected_tokens(center.x, center.y);
-    }
-});
-Mousetrap.bind('command+v', function(e) {
+
+Mousetrap.bind('mod+v', function(e) {
     if($('#temp_overlay:hover').length>0){
         paste_selected_tokens(window.cursor_x, window.cursor_y);
     } 
@@ -413,13 +430,7 @@ document.onmousemove = function(event)
 Mousetrap.bind(['backspace', 'del'], function(e) {
     delete_selected_tokens();
 });
-Mousetrap.bind('ctrl+z', function(e) {
-    if($('input:focus').length ==0){
-        e.preventDefault();
-    }
-    handle_undo();
-});
-Mousetrap.bind('command+z', function(e) {
+Mousetrap.bind('mod+z', function(e) {
     if($('input:focus').length ==0){
         e.preventDefault();
     }
