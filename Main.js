@@ -341,13 +341,16 @@ function apply_zoom_from_storage() {
 	console.groupEnd()
 }
 
+const throttleZoom = throttle((newZoom, x, y, reset=false) => {
+	change_zoom(newZoom, x, y, reset);
+}, 1, {leading: false, trailing: true})
 /**
  * Decreases zoom level by 10%.
  * Prevents zooming below MIN_ZOOM.
  */
 function decrease_zoom() {
 	if (window.ZOOM > MIN_ZOOM) {
-		change_zoom(window.ZOOM * 0.9);
+		throttleZoom(window.ZOOM * 0.9);
 	}
 }
 /**
@@ -386,7 +389,7 @@ function reset_zoom() {
  * Increases zoom level by 10%.
  */
 function increase_zoom() {
-	change_zoom(window.ZOOM * 1.10);
+	throttleZoom(window.ZOOM * 1.10);
 }
 
 /**
@@ -1337,8 +1340,9 @@ function init_mouse_zoom() {
 	let zsx=0, zsy=0;
 	let touchMode = 0;
 	let touchTimeout;
+
 	function getDist(ts) {
-  		const dx = ts[0].clientX - ts[1].clientX;
+  	const dx = ts[0].clientX - ts[1].clientX;
 		const dy = ts[0].clientY - ts[1].clientY;
 		return Math.sqrt(dx * dx + dy * dy);
 	}
@@ -1346,7 +1350,7 @@ function init_mouse_zoom() {
 		console.log("START PINCH??????",ev.targetTouches.length);
 		if (ev.targetTouches.length == 2) {
 			ev.preventDefault()
-			ev.stopPropagation();			
+			ev.stopPropagation();	
 			const ts = ev.targetTouches;
 			dist1 = getDist(ts);
 			start_scale = window.ZOOM;
@@ -1357,56 +1361,66 @@ function init_mouse_zoom() {
 	}
 	let suppressed = null;
 	function move_pinch(ev, busy) {
-		if(touchMode == 2) {
+		if (touchMode == 2) {
 			if(ev.preventDefault) {
 				ev.preventDefault()
 				ev.stopPropagation();
-			}
-			if (ev.targetTouches.length == 2) {
-				if(busy) {
-					suppressed = {targetTouches: ev.targetTouches};
-					console.log("suppress")
-				} else {
-					const dist2 = getDist(ev.targetTouches)
-              				const factor = dist2 / dist1;
-					const newScale = start_scale * factor;
-					suppressed = null;
-					console.log("SCALE",dist2, factor, newScale);
-					if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
-					if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
-					if(newScale != window.ZOOM) {
-						change_zoom(newScale,zsx,zsy);
-					}
+			}	
+			if(busy) {
+				suppressed = {targetTouches: ev.targetTouches};
+				console.log("suppress")
+			} else {
+				const dist2 = getDist(ev.targetTouches)
+        const factor = dist2 / dist1;
+				const newScale = start_scale * factor;
+				suppressed = null;
+				console.log("SCALE",dist2, factor, newScale);
+				if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
+				if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
+				if(newScale != window.ZOOM) {
+					throttleZoom(newScale,zsx,zsy);
 				}
-			}
-	        }
-        }
+			}		
+    }
+  }
 	window.addEventListener ('touchstart', start_pinch, false);
 	let isProcessing = false;
 	window.addEventListener('touchmove', function(e) {
+		if (touchMode == 2) {
 		//attempt here to process ASAP - but not faster than the frame rate
-		move_pinch(e, isProcessing);
-		isProcessing = true;
-		requestAnimationFrame(() => {
-			isProcessing = false;
-			if(suppressed) move_pinch(e, isProcessing);			
-	})}, {passive: false});
+			if(!isProcessing){
+				move_pinch(e, isProcessing);
+				isProcessing = true;
+			}
+			else{
+					requestAnimationFrame(() => {
+						isProcessing = false;
+						move_pinch(e, isProcessing);			
+				})
+			}
+		}
+	}, {passive: false});
 	window.addEventListener("touchend", function (e) {
-		if(touchTimeout) clearTimeout(touchTimeout);
-		if (e.touches.length === 0) {
-			touchTimeout = setTimeout(() => {
-				if(suppressed) { //handle final event if it was suppressed
-					move_pinch(suppressed, false);
-				}
-				console.log("TOUCH off");
-				touchMode = 0;
-			}, 100);
+		if(touchMode == 2){
+			if(touchTimeout) clearTimeout(touchTimeout);
+			if (e.touches.length === 0) {
+				touchTimeout = setTimeout(() => {
+					if(suppressed) { //handle final event if it was suppressed
+						move_pinch(suppressed, false);
+					}
+					console.log("TOUCH off");
+				}, 100);
+			}
+			touchMode = 0;
 		}
 	});
 	window.addEventListener("touchcancel", function (e) {
-		if (e.touches.length === 0) {
-			console.log("Touch interrupted. Resetting.");
-			change_zoom(start_scale);
+		if(touchMode == 2){
+			if (e.touches.length === 0) {
+				console.log("Touch interrupted. Resetting.");
+				throttleZoom(start_scale);
+			}
+			touchMode=0;
 		}
 	});
 
