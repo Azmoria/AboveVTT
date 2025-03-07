@@ -1361,27 +1361,25 @@ function init_mouse_zoom() {
 	}
 	let suppressed = null;
 	function move_pinch(ev, busy) {
-		if (touchMode == 2) {
-			if(ev.preventDefault) {
-				ev.preventDefault()
-				ev.stopPropagation();
-			}	
-			if(busy) {
-				suppressed = {targetTouches: ev.targetTouches};
-				console.log("suppress")
-			} else {
-				const dist2 = getDist(ev.targetTouches)
-        const factor = dist2 / dist1;
-				const newScale = start_scale * factor;
-				suppressed = null;
-				console.log("SCALE",dist2, factor, newScale);
-				if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
-				if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
-				if(newScale != window.ZOOM) {
-					throttleZoom(newScale,zsx,zsy);
-				}
-			}		
-    }
+		if(ev.preventDefault) {
+			ev.preventDefault()
+			ev.stopPropagation();
+		}	
+		if(busy) {
+			suppressed = {targetTouches: ev.targetTouches};
+			console.log("suppress")
+		} else {
+			const dist2 = getDist(ev.targetTouches)
+      const factor = dist2 / dist1;
+			const newScale = start_scale * factor;
+			suppressed = null;
+			console.log("SCALE",dist2, factor, newScale);
+			if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
+			if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
+			if(newScale != window.ZOOM) {
+				throttleZoom(newScale,zsx,zsy);
+			}
+		}		  
   }
 	window.addEventListener ('touchstart', start_pinch, false);
 	let isProcessing = false;
