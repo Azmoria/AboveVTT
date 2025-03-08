@@ -386,13 +386,20 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 					if(z != window.ZOOM) doit = true;
 					zoomQ = [];
 				}
-		
-				if(doit) {
-					change_zoom(z, zoomX, zoomY);
-					lastZoom = Date.now();
-				}
-				requestAnimationFrame(applyOrDone);
-				
+				if(doit && lastZoom && Date.now() - lastZoom < 2) {
+					//throttle by time
+					setTimeout(() => {
+						change_zoom(z, zoomX, zoomY);
+						lastZoom = Date.now();
+						requestAnimationFrame(applyOrDone)
+					}, 1);
+				} else {
+					if(doit) {
+						change_zoom(z, zoomX, zoomY);
+						lastZoom = Date.now();
+					}
+					requestAnimationFrame(applyOrDone);
+				} 
 			} else {
 				zoomBusy = false;
 			}
@@ -1396,7 +1403,7 @@ function init_mouse_zoom() {
 			}
 	        }
         }
-	window.addEventListener('touchstart', start_pinch, {passive: false});
+	window.addEventListener('touchstart', start_pinch, false);
 	window.addEventListener('touchmove', move_pinch, {passive: false});		
 	window.addEventListener("touchend", function (e) {
 		if(touchTimeout) clearTimeout(touchTimeout);
