@@ -403,7 +403,12 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 					}
 				} else {
 					if(doit) {
-						change_zoom(z, zoomX, zoomY);
+						if(!isIOS()){
+							throttleZoom(z, zoomX, zoomY);
+						}
+						else{
+							change_zoom(z, zoomX, zoomY);
+						}
 					}
 					requestAnimationFrame(function(){applyOrDone(Date.now())})
 				} 
