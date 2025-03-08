@@ -231,7 +231,7 @@ function change_zoom(newZoom, x, y, reset = false) {
 	if($('#projector_zoom_lock.enabled > [class*="is-active"]').length>0 && window.DM)
 		debounce_scroll_event()
 	
-	
+	zoomBusy = false;
 	console.groupEnd()
 }
 
