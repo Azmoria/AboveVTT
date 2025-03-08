@@ -386,20 +386,13 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 					if(z != window.ZOOM) doit = true;
 					zoomQ = [];
 				}
-				if(doit && lastZoom && Date.now() - lastZoom < 2) {
-					//throttle by time
-					setTimeout(() => {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-						requestAnimationFrame(applyOrDone)
-					}, 1);
-				} else {
-					if(doit) {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-					}
-					requestAnimationFrame(applyOrDone);
-				} 
+		
+				if(doit) {
+					change_zoom(z, zoomX, zoomY);
+					lastZoom = Date.now();
+				}
+				requestAnimationFrame(applyOrDone);
+				
 			} else {
 				zoomBusy = false;
 			}
