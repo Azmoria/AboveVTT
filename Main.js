@@ -373,8 +373,8 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 	}
 	console.log(`zoomBusy: ${zoomBusy}, zoomQ length: ${zoomQ.length}`);
 	if(!zoomBusy) {
+		zoomBusy = true;
 		function applyOrDone() {
-			zoomBusy = true;
 			console.log(`Start applyOrDone, zoomQ length: ${zoomQ.length}`);
 			if(zoomQ.length) { //add all the queue events together based on current zoom
 				let z = window.ZOOM;
@@ -389,7 +389,6 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 						
 					}
 					z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
-
 					zoomQ = [];
 					
 				}
