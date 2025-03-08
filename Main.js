@@ -343,6 +343,7 @@ function apply_zoom_from_storage() {
 
 let zoomBusy = false;
 let zoomQ = [];
+let zoomTimeout;
 let lastZoom;	  
 //each zoom event [amt, typ, off, x, y] typ = 0(relative) 1(absolute) 2(offset)
 //keep a queue - which can mostly be squashed except for some offset events
@@ -388,22 +389,24 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 						
 					}
 					z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
-					if(z != window.ZOOM) doit = true;
 
 					zoomQ = [];
 					
 				}
 				if(doit && lastZoom && Date.now() - lastZoom < 2) {
-					//throttle by time
-
-				} else {
-					if(doit) {
-						change_zoom(z, zoomX, zoomY);
+					//throttle by time|
+					if(zoomTimeout) clearTimeout(zoomTimeout)
+					zoomTimeout = setTimeout(() => {
+						change_zoom(z, zoomX, zoomY);	
 						lastZoom = Date.now();
 						requestAnimationFrame(applyOrDone);
-					}
+					}, 1);
+					
+				} else {			
+					change_zoom(z, zoomX, zoomY);
+					lastZoom = Date.now();
+					requestAnimationFrame(applyOrDone); 
 				} 
-				zoomBusy = false;
 			} else {
 				zoomBusy = false;
 				console.log(`zoom`)
