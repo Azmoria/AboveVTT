@@ -231,7 +231,7 @@ function change_zoom(newZoom, x, y, reset = false) {
 	if($('#projector_zoom_lock.enabled > [class*="is-active"]').length>0 && window.DM)
 		debounce_scroll_event()
 	
-	
+	zoomBusy = false;
 	console.groupEnd()
 }
 
@@ -386,13 +386,20 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 					if(z != window.ZOOM) doit = true;
 					zoomQ = [];
 				}
-		
-				if(doit) {
-					change_zoom(z, zoomX, zoomY);
-					lastZoom = Date.now();
-				}
-				requestAnimationFrame(applyOrDone);
-				
+				if(doit && lastZoom && Date.now() - lastZoom < 2) {
+					//throttle by time
+					setTimeout(() => {
+						change_zoom(z, zoomX, zoomY);
+						lastZoom = Date.now();
+						requestAnimationFrame(applyOrDone)
+					}, 1);
+				} else {
+					if(doit) {
+						change_zoom(z, zoomX, zoomY);
+						lastZoom = Date.now();
+					}
+					requestAnimationFrame(applyOrDone);
+				} 
 			} else {
 				zoomBusy = false;
 			}
