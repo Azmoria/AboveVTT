@@ -1382,20 +1382,12 @@ function init_mouse_zoom() {
     }
   }
 	window.addEventListener ('touchstart', start_pinch, false);
-	let isProcessing = false;
+
 	window.addEventListener('touchmove', function(e) {
 		if (touchMode == 2) {
 		//attempt here to process ASAP - but not faster than the frame rate
-			if(!isProcessing){
-				move_pinch(e, isProcessing);
-				isProcessing = true;
-			}
-			else{
-					requestAnimationFrame(() => {
-						isProcessing = false;
-						move_pinch(e, isProcessing);			
-				})
-			}
+			move_pinch(e, isProcessing);
+			isProcessing = true;
 		}
 	}, {passive: false});
 	window.addEventListener("touchend", function (e) {
