@@ -340,10 +340,14 @@ function apply_zoom_from_storage() {
 	
 	console.groupEnd()
 }
+const throttleZoom = throttle((z, zoomX, zoomY, callback = ()=>{}) => {
+	change_zoom(z, zoomX, zoomY);
+	requestAnimationFrame(callback)
+}, 1, {leading: true, trailing: true})
 
 let zoomBusy = false;
 let zoomQ = [];
-let lastZoom;	  
+	  
 //each zoom event [amt, typ, off, x, y] typ = 0(relative) 1(absolute) 2(offset)
 //keep a queue - which can mostly be squashed except for some offset events
 function throttledZoom(amount, typeFlag, zx, zy)  {
@@ -370,7 +374,7 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 	}
 	if(!zoomBusy) {
 		zoomBusy = true;
-		function applyOrDone() {
+		function applyOrDone(lastZoom) {
 			if(zoomQ.length) { //add all the queue events together based on current zoom
 				let z = window.ZOOM;
 				let zoomX, zoomY;
@@ -387,18 +391,21 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 					zoomQ = [];
 				}
 				if(doit && lastZoom && Date.now() - lastZoom < 2) {
-					//throttle by time
-					setTimeout(() => {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-						requestAnimationFrame(applyOrDone)
-					}, 1);
+					//throttle by time - no more than 1 request every 1ms				
+					if(!isIOS()){
+						throttleZoom(z, zoomX, zoomY, function(){applyOrDone(Date.now())});
+					}
+					else{
+						setTimeout(() => {
+							change_zoom(z, zoomX, zoomY);
+							requestAnimationFrame(function(){applyOrDone(Date.now())})
+						},1);
+					}
 				} else {
 					if(doit) {
 						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
 					}
-					requestAnimationFrame(applyOrDone);
+					requestAnimationFrame(function(){applyOrDone(Date.now())})
 				} 
 			} else {
 				zoomBusy = false;
