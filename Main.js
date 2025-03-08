@@ -341,9 +341,8 @@ function apply_zoom_from_storage() {
 	console.groupEnd()
 }
 const throttleZoom = throttle((z, zoomX, zoomY, callback = ()=>{}) => {
-		change_zoom(z, zoomX, zoomY);
-
-		requestAnimationFrame(callback)
+	change_zoom(z, zoomX, zoomY);
+	requestAnimationFrame(callback)
 }, 1, {leading: true, trailing: true})
 
 let zoomBusy = false;
@@ -394,7 +393,13 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 				if(doit && lastZoom && Date.now() - lastZoom < 2) {
 					//throttle by time - no more than 1 request every 1ms
 					lastZoom = Date.now();
-					throttleZoom(z, zoomX, zoomY, applyOrDone);
+					if(!isIOS()){
+						throttleZoom(z, zoomX, zoomY, applyOrDone);
+					}
+					else{
+						change_zoom(z, zoomX, zoomY);
+						requestAnimationFrame(applyOrDone)
+					}
 				} else {
 					if(doit) {
 						change_zoom(z, zoomX, zoomY);
