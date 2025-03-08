@@ -340,72 +340,79 @@ function apply_zoom_from_storage() {
 	
 	console.groupEnd()
 }
-
 let zoomBusy = false;
 let zoomQ = [];
 let lastZoom;	  
+const throttleZoom = throttle((amount, typeFlag, zx, zy) => {
+    if(typeFlag === 2) {
+    	if(zoomQ.length == 0) {
+    		zoomQ = [[1.0,0,amount,zx,zy]];				
+    	} else {
+    		last = zoomQ[zoomQ.length-1];
+    		if(last[1] === 0) {
+    			last[2] = amount;
+    		} else { //last[1] == 1
+    			last[0] += amount;
+    		}
+    	}
+    } else if(zoomQ.length == 0 || typeFlag === 1) {
+    	zoomQ = [[amount,typeFlag, 0, zx, zy]];
+    } else { //relative
+    	last = zoomQ[zoomQ.length-1];
+    	if(last[2] === 0) { //no offset
+    		last[0] = last[0] * amount;
+    	} else { //complex case where we need sequence
+    		zoomQ.push([amount,typeFlag, 0, zx, zy]);
+    	}
+    }
+    if(!zoomBusy) {
+    	zoomBusy = true;
+    	function applyOrDone() {
+    		if(zoomQ.length) { //add all the queue events together based on current zoom
+    			let z = window.ZOOM;
+    			let zoomX, zoomY;
+    			let doit = false;
+    			if(zoomQ.length) {
+    				while(zoomQ.length) {
+    					e = zoomQ.pop(0);
+    					z = ((e[1] === 0) ? z * e[0] : e[0]) + e[2];
+    					zoomX = e[3];
+    					zoomY = e[4];
+    				}
+    				z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    				if(z != window.ZOOM) doit = true;
+    				zoomQ = [];
+    			}
+    			if(doit && lastZoom && Date.now() - lastZoom < 2) {
+    				//throttle by time
+    				setTimeout(() => {
+    					change_zoom(z, zoomX, zoomY);
+    					lastZoom = Date.now();
+    					requestAnimationFrame(applyOrDone)
+    				}, 1);
+    			} else {
+    				if(doit) {
+    					change_zoom(z, zoomX, zoomY);
+    					lastZoom = Date.now();
+    				}
+    				requestAnimationFrame(applyOrDone);
+    			} 
+    		} else {
+    			zoomBusy = false;
+    		}
+    	}
+    	requestAnimationFrame(applyOrDone);
+    }
+}, 1, {leading: true, trailing: true})
+
+
 //each zoom event [amt, typ, off, x, y] typ = 0(relative) 1(absolute) 2(offset)
 //keep a queue - which can mostly be squashed except for some offset events
 function throttledZoom(amount, typeFlag, zx, zy)  {
-	if(typeFlag === 2) {
-		if(zoomQ.length == 0) {
-			zoomQ = [[1.0,0,amount,zx,zy]];				
-		} else {
-			last = zoomQ[zoomQ.length-1];
-			if(last[1] === 0) {
-				last[2] = amount;
-			} else { //last[1] == 1
-				last[0] += amount;
-			}
-		}
-	} else if(zoomQ.length == 0 || typeFlag === 1) {
-		zoomQ = [[amount,typeFlag, 0, zx, zy]];
-	} else { //relative
-		last = zoomQ[zoomQ.length-1];
-		if(last[2] === 0) { //no offset
-			last[0] = last[0] * amount;
-		} else { //complex case where we need sequence
-			zoomQ.push([amount,typeFlag, 0, zx, zy]);
-		}
+	if(!isIOS()){
+		throttleZoom(amount, typeFlag, zx, zy);
 	}
-	if(!zoomBusy) {
-		zoomBusy = true;
-		function applyOrDone() {
-			if(zoomQ.length) { //add all the queue events together based on current zoom
-				let z = window.ZOOM;
-				let zoomX, zoomY;
-				let doit = false;
-				if(zoomQ.length) {
-					while(zoomQ.length) {
-						e = zoomQ.pop(0);
-						z = ((e[1] === 0) ? z * e[0] : e[0]) + e[2];
-						zoomX = e[3];
-						zoomY = e[4];
-					}
-					z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
-					if(z != window.ZOOM) doit = true;
-					zoomQ = [];
-				}
-				if(doit && lastZoom && Date.now() - lastZoom < 2) {
-					//throttle by time
-					setTimeout(() => {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-						requestAnimationFrame(applyOrDone)
-					}, 1);
-				} else {
-					if(doit) {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-					}
-					requestAnimationFrame(applyOrDone);
-				} 
-			} else {
-				zoomBusy = false;
-			}
-		}
-		requestAnimationFrame(applyOrDone);
-	}
+	
 }
 
 /**
@@ -1413,7 +1420,7 @@ function init_mouse_zoom() {
 			}, 100);
 		}
 	});
-        window.addEventListener("touchcancel", function (e) {
+  window.addEventListener("touchcancel", function (e) {
 		if (e.touches.length === 0) {
 			console.log("Touch interrupted. Resetting.");
 			throttledZoom(start_scale,1); //todo: x,y?
