@@ -374,7 +374,7 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 	if(!zoomBusy) {
 		function applyOrDone() {
 			zoomBusy = true;
-			console.log(`Start applyOrDone`);
+			console.log(`Start applyOrDone, zoomQ length: ${zoomQ.length}`);
 			if(zoomQ.length) { //add all the queue events together based on current zoom
 				let z = window.ZOOM;
 				let zoomX, zoomY;
@@ -395,11 +395,7 @@ function throttledZoom(amount, typeFlag, zx, zy)  {
 				}
 				if(doit && lastZoom && Date.now() - lastZoom < 2) {
 					//throttle by time
-					setTimeout(() => {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-						requestAnimationFrame(applyOrDone)
-					}, 1);
+
 				} else {
 					if(doit) {
 						change_zoom(z, zoomX, zoomY);
