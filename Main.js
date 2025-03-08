@@ -182,10 +182,6 @@ const debounce_scroll_event = mydebounce(function(){
 const debounce_font_change = mydebounce(function(){
 	$('#VTTWRAPPER').css({"--font-size-zoom": Math.max(12 * Math.max((3 - window.ZOOM), 0), 8.5) + "px"})
 }, 25);
-
-const throttleZoom = throttle((newZoom, x, y, reset=false) => {
-	change_zoom(newZoom, x, y, reset);
-}, 1, {leading: false, trailing: true})
 /**
  * Changes the zoom level.
  * @param {Number} newZoom new zoom value
@@ -217,10 +213,7 @@ function change_zoom(newZoom, x, y, reset = false) {
 	$('#VTTWRAPPER').css({
 		"--window-zoom": window.ZOOM,
 	})
-	debounce_font_change();
-
-
-
+	debounce_font_change();	
 	set_default_vttwrapper_size();
 	if(reset == true){
 		$("#scene_map")[0].scrollIntoView({
@@ -347,6 +340,9 @@ function apply_zoom_from_storage() {
 	console.groupEnd()
 }
 
+const throttleZoom = throttle((newZoom, x, y, reset=false) => {
+	change_zoom(newZoom, x, y, reset);
+}, 1, {leading: false, trailing: true})
 /**
  * Decreases zoom level by 10%.
  * Prevents zooming below MIN_ZOOM.
@@ -1306,10 +1302,22 @@ const MAX_ZOOM_STEP = 20
  * Register event for mousewheel zoom.
  */
 function init_mouse_zoom() {
+	let wheelBusy = false;
+	let wheelScaleTarget;
 	window.addEventListener('wheel', function (e) {
 		if (e.ctrlKey) {
 			e.preventDefault();
 			e.stopPropagation();
+			if(!wheelBusy) {
+				wheelBusy = true;
+				requestAnimationFrame(() => {
+					wheelBusy = false;
+					if(wheelScaleTarget != window.ZOOM) {
+						console.log("wheel");
+						change_zoom(wheelScaleTarget, e.clientX, e.clientY);
+					}
+				});
+			}
 			let newScale;
 			if (e.deltaY > MAX_ZOOM_STEP) {
 				newScale = window.ZOOM * 0.9;
@@ -1320,52 +1328,106 @@ function init_mouse_zoom() {
 			else {
 				newScale = window.ZOOM - 0.01 * e.deltaY;
 			}
-
-			if ((newScale > MIN_ZOOM || newScale > window.ZOOM) && (newScale < MAX_ZOOM || newScale < window.ZOOM)) {
-				change_zoom(newScale, e.clientX, e.clientY);
-			}
+			if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
+			if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
+			wheelScaleTarget = newScale;
 		}
 	}, { passive: false } );
+	
 	let dist1=0;
-	let originalZoom=window.ZOOM;
-	function start_pinch(ev) {
-           if (ev.targetTouches.length == 2) {//check if two fingers touched screen
-           		 ev.preventDefault();
-    					 ev.stopPropagation();
-               dist1 = Math.hypot( //get rough estimate of distance between two fingers
-                ev.touches[0].pageX - ev.touches[1].pageX,
-                ev.touches[0].pageY - ev.touches[1].pageY);                  
-           }
-    			originalZoom = window.ZOOM;
-    }
-    function move_pinch(ev) {
-           if (ev.targetTouches.length == 2 && ev.changedTouches.length == 2) {
-           	 		ev.preventDefault();
-    			 			ev.stopPropagation();
-                 // Check if the two target touches are the same ones that started
-              	let dist2 = Math.hypot(//get rough estimate of new distance between fingers
-                ev.touches[0].pageX - ev.touches[1].pageX,
-                ev.touches[0].pageY - ev.touches[1].pageY);
-              	difference = dist1-dist2;
+	let start_scale=window.ZOOM;
+	let zsx=0, zsy=0;
+	let touchMode = 0;
+	let touchTimeout;
 
-              	const multiplier = dist2/dist1;
-                
-                
-                let newScale = originalZoom * multiplier;
-                
-                
-
-                if ((newScale > MIN_ZOOM || newScale > window.ZOOM) && (newScale < MAX_ZOOM || newScale < window.ZOOM)) {
-				
-	                throttleZoom(newScale);
-	            }
-            }
-           
-    }
-    window.addEventListener('touchstart', start_pinch, false);
-    window.addEventListener('touchmove', move_pinch, false);
-
+	function getDist(ts) {
+  	const dx = ts[0].clientX - ts[1].clientX;
+		const dy = ts[0].clientY - ts[1].clientY;
+		return Math.sqrt(dx * dx + dy * dy);
 	}
+	function start_pinch(ev) {
+		if (ev.targetTouches.length == 2) {
+			ev.preventDefault()
+			ev.stopPropagation();	
+			const ts = ev.targetTouches;
+			dist1 = getDist(ts);
+			start_scale = window.ZOOM;
+			zsx = (ts[0].clientX + ts[1].clientX)/2;
+			zsy = (ts[0].clientY + ts[1].clientY)/2;
+			touchMode = 2;
+		}
+	}
+	let suppressed = null;
+	function move_pinch(ev, busy) {
+		if (touchMode == 2) {
+			if(ev.preventDefault) {
+				ev.preventDefault()
+				ev.stopPropagation();
+			}	
+			if(busy) {
+				suppressed = {targetTouches: ev.targetTouches};
+				console.log("suppress")
+			} else {
+				const dist2 = getDist(ev.targetTouches)
+        const factor = dist2 / dist1;
+				const newScale = start_scale * factor;
+				suppressed = null;
+
+				if(newScale < MIN_ZOOM) newScale = MIN_ZOOM;
+				if(newScale > MAX_ZOOM) newScale = MAX_ZOOM;
+				if(newScale != window.ZOOM) {
+					throttleZoom(newScale,zsx,zsy);
+				}
+			}		
+    }
+  }
+	window.addEventListener ('touchstart', start_pinch, false);
+	let isProcessing = false;
+	window.addEventListener('touchmove', function(e) {
+		if (touchMode == 2) {
+		//attempt here to process ASAP - but not faster than the frame rate
+			if(!isProcessing){
+				move_pinch(e, isProcessing);
+				isProcessing = true;
+			}
+			else{
+					requestAnimationFrame(() => {
+						isProcessing = false;
+						move_pinch(e, isProcessing);			
+				})
+			}
+		}
+	}, {passive: false});
+	window.addEventListener("touchend", function (e) {
+		if(touchMode == 2){
+			if(touchTimeout) clearTimeout(touchTimeout);
+			if (e.touches.length === 0) {
+				touchTimeout = setTimeout(() => {
+					if(suppressed) { //handle final event if it was suppressed
+						move_pinch(suppressed, false);
+					}
+					console.log("TOUCH off");
+				}, 100);
+			}
+			touchMode = 0;
+		}
+	});
+	window.addEventListener("touchcancel", function (e) {
+		if(touchMode == 2){
+			if (e.touches.length === 0) {
+				console.log("Touch interrupted. Resetting.");
+				throttleZoom(start_scale);
+			}
+			touchMode=0;
+		}
+	});
+
+	//disable browser gestures (not sure: is there a more subtle way in CSS?)
+	function prevent(e) { e.preventDefault(); }
+	document.addEventListener("gesturestart", prevent);
+	document.addEventListener("gesturechange", prevent);
+	document.addEventListener("gestureend", prevent);
+}
 
 
 /**
@@ -4236,4 +4298,3 @@ function adjust_site_bar() {
 		});
 	}
 }
-
