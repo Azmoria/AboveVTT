@@ -1422,9 +1422,9 @@ function init_mouse_zoom() {
 
 	//disable browser gestures (not sure: is there a more subtle way in CSS?)
 	function prevent(e) { e.preventDefault(); }
-	document.addEventListener("gesturestart", prevent);
-	document.addEventListener("gesturechange", prevent);
-	document.addEventListener("gestureend", prevent);
+	document.addEventListener("gesturestart", prevent, { passive: false } );
+	document.addEventListener("gesturechange", prevent, { passive: false } );
+	document.addEventListener("gestureend", prevent, { passive: false } );
 }
 
 
