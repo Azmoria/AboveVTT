@@ -85,7 +85,7 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
 }
 const throttleDrawRuler = throttle((callback=()=>{})=>{
 	callback();
-},1000/24)//24 fps
+},1000/240)//240 fps
 /**
  * Class to manage measure waypoints
  */
@@ -519,17 +519,18 @@ class WaypointManagerClass {
 			}
 			prevFrameTime = time;
 
-			self.ctx.clearRect(0,0, self.canvas.width, self.canvas.height);
-			self.ctx.globalAlpha = alpha;
+
 			self.draw(undefined, undefined, alpha, window.PLAYER_ID)
-			alpha = alpha - (0.08 * deltaTime / 100); // 0.08 per 100 ms
+				alpha = alpha - (0.08 * deltaTime / 100); // 0.08 per 100 ms
 			if (alpha <= 0.0) {
 				self.clearWaypoints();
 				clear_temp_canvas(playerID)
+				cancelAnimationFrame(this.fadeoutAnimationId);
+				this.fadeoutAnimationId = undefined;
 				return;
 			}
 
-			this.fadeoutAnimationId = requestAnimationFrame(fadeout)
+			this.fadeoutAnimationId = requestAnimationFrame(fadeout);
 		};
 
 		this.fadeoutAnimationId = requestAnimationFrame(fadeout);
@@ -543,7 +544,6 @@ class WaypointManagerClass {
 			if(!dontClearCanvas)
 				clear_temp_canvas();
 			cancelAnimationFrame(this.fadeoutAnimationId);
-			this.ctx.globalAlpha = 1.0
 			this.fadeoutAnimationId = undefined
 		}
 	}
