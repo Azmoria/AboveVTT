@@ -2808,7 +2808,7 @@ class Token {
 							// drop the temp overlay back down so selection works correctly
 							$("#temp_overlay").css("z-index", "25")
 							if (get_avtt_setting_value("allowTokenMeasurement")){
-								WaypointManager.fadeoutMeasuring(window.PLAYER_ID)
+								//WaypointManager.fadeoutMeasuring(window.PLAYER_ID)
 							}	
 							debounceLightChecks();
 
