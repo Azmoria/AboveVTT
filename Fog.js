@@ -504,7 +504,7 @@ class WaypointManagerClass {
 		// this stops weird flashing behaviour with interacting
 		// interval function calls
 		if (this.fadeoutAnimationId) {
-			return
+			clearInterval(this.fadeoutAnimationId);
 		}
 
 		let prevFrameTime, deltaTime;
