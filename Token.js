@@ -2964,15 +2964,15 @@ class Token {
 								// reset measuring when a new token is picked up
 								if(window.previous_measured_token != self.options.id){
 									window.previous_measured_token = self.options.id
-									WaypointManager.cancelFadeout()
-									WaypointManager.clearWaypoints()
+									WaypointManager.cancelFadeout(true)
+									WaypointManager.clearWaypoints(false)
 								}
 								const tokenMidX = parseInt(self.orig_left) + Math.round(self.options.size / 2);
 								const tokenMidY = parseInt(self.orig_top) + Math.round(self.options.size / 2);
 
 								if(WaypointManager.numWaypoints > 0){
 									WaypointManager.checkNewWaypoint(tokenMidX/window.CURRENT_SCENE_DATA.scale_factor, tokenMidY/window.CURRENT_SCENE_DATA.scale_factor)
-									WaypointManager.cancelFadeout()
+									WaypointManager.cancelFadeout(true)
 								}
 								window.BEGIN_MOUSEX = tokenMidX;
 								window.BEGIN_MOUSEY = tokenMidY;

@@ -85,7 +85,7 @@ function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
 }
 const throttleDrawRuler = throttle((callback=()=>{})=>{
 	callback();
-},1000/24)//24 fps
+},1000/240)//240 fps
 /**
  * Class to manage measure waypoints
  */
@@ -202,7 +202,8 @@ class WaypointManagerClass {
 		this.mouseDownCoords = { mousex: undefined, mousey: undefined };
 		clearTimeout(this.timeout);
 		this.timeout = undefined;
-		this.cancelFadeout()
+		if(cancelFadeout)
+			this.cancelFadeout()
 	}
 
 	// Helper function to convert mouse coordinates to 'snap' or 'centre of current grid cell' coordinates
@@ -304,7 +305,7 @@ class WaypointManagerClass {
 			}
 			elementsToDraw = `${lines[0].outerHTML}${elementsToDraw}${bobbles[0].outerHTML}`
 
-			clear_temp_canvas(playerId);
+			
 			const rulerContainer = WaypointManager.getOrCreateDrawingContainer(playerId);
 
 			// update alpha for the entire container
@@ -519,11 +520,11 @@ class WaypointManagerClass {
 			}
 			prevFrameTime = time;
 
-			self.ctx.clearRect(0,0, self.canvas.width, self.canvas.height);
-			self.ctx.globalAlpha = alpha;
+
 			self.draw(undefined, undefined, alpha, window.PLAYER_ID)
 			alpha = alpha - (0.08 * deltaTime / 100); // 0.08 per 100 ms
 			if (alpha <= 0.0) {
+				self.cancelFadeout()
 				self.clearWaypoints();
 				clear_temp_canvas(playerID)
 				return;
@@ -2250,7 +2251,7 @@ function numToColor(num, alpha, max) {
 function drawing_mousedown(e) {
 
 	// perform some cleanup of the canvas/objects
-	if(e.button !== 2 && !window.MOUSEDOWN){
+	if((e.button !== 2 && !window.MOUSEDOWN) || e.touches != undefined){
 		clear_temp_canvas()
 		WaypointManager.resetDefaultDrawStyle()
 		WaypointManager.cancelFadeout()
@@ -4106,7 +4107,7 @@ function calculateFourthPoint(point1, point2, point3) {
 }
 function clear_temp_canvas(playerId=window.PLAYER_ID){
 	window.temp_context.clearRect(0, 0, window.temp_canvas.width, window.temp_canvas.height); 
-	WaypointManager.clearWaypointDrawings(playerId)
+	//WaypointManager.clearWaypointDrawings(playerId)
 }
 
 function bucketFill(ctx, mouseX, mouseY, fogStyle = 'rgba(0,0,0,0)', fogType=0, islight=false, distance1=10000, distance2){
