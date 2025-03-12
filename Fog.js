@@ -513,6 +513,7 @@ class WaypointManagerClass {
 		* @type {FrameRequestCallback}
 		*/
 		const fadeout = (time) =>{
+
 			if (prevFrameTime === undefined) {
 				deltaTime = 0;
 			} else {
@@ -530,10 +531,10 @@ class WaypointManagerClass {
 				return;
 			}
 
-			this.fadeoutAnimationId = requestAnimationFrame(fadeout)
+			
 		};
 
-		this.fadeoutAnimationId = requestAnimationFrame(fadeout);
+		this.fadeoutAnimationId = setInterval(function(){fadeout(Date.now())}, 1000/24);
 	}
 
 	/**
@@ -545,6 +546,7 @@ class WaypointManagerClass {
 				clear_temp_canvas();
 			cancelAnimationFrame(this.fadeoutAnimationId);
 			this.ctx.globalAlpha = 1.0
+			clearInterval(this.fadeoutAnimationId);
 			this.fadeoutAnimationId = undefined
 		}
 	}
@@ -4107,7 +4109,7 @@ function calculateFourthPoint(point1, point2, point3) {
 }
 function clear_temp_canvas(playerId=window.PLAYER_ID){
 	window.temp_context.clearRect(0, 0, window.temp_canvas.width, window.temp_canvas.height); 
-	//WaypointManager.clearWaypointDrawings(playerId)
+	WaypointManager.clearWaypointDrawings(playerId)
 }
 
 function bucketFill(ctx, mouseX, mouseY, fogStyle = 'rgba(0,0,0,0)', fogType=0, islight=false, distance1=10000, distance2){

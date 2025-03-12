@@ -2965,7 +2965,6 @@ class Token {
 								if(window.previous_measured_token != self.options.id){
 									window.previous_measured_token = self.options.id
 									WaypointManager.cancelFadeout(true)
-									WaypointManager.clearWaypoints(false)
 								}
 								const tokenMidX = parseInt(self.orig_left) + Math.round(self.options.size / 2);
 								const tokenMidY = parseInt(self.orig_top) + Math.round(self.options.size / 2);
