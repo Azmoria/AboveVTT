@@ -113,7 +113,7 @@ class WaypointManagerClass {
 			backgroundColor: "rgba(255, 255, 255, 0.7)"
 		}
 		this.playerId = window.PLAYER_ID;
-		this.throttleDraw = throttle((callback) => {requestAnimationFrame(callback)}, 1000/240);
+		this.throttleDraw = throttle((callback) => {requestAnimationFrame(callback)}, 1000);
 	}
 
 	resetDefaultDrawStyle(){
@@ -304,7 +304,7 @@ class WaypointManagerClass {
 		const rulerContainer = this.getOrCreateDrawingContainer(playerId);
 		this.throttleDraw(function(){
 			// update alpha for the entire container
-			rulerContainer.style.setProperty("--svg-text-alpha", alpha.toString());
+
 			rulerContainer.innerHTML = elementsToDraw;	
 		})
 	}
@@ -518,7 +518,7 @@ class WaypointManagerClass {
 				return;
 			}
 
-			self.fadeoutAnimationId = requestAnimationFrame(fadeout)
+			self.fadeoutAnimationId = requestAnimationFrame(fadeout);
 		};
 
 		self.fadeoutAnimationId = requestAnimationFrame(fadeout);
