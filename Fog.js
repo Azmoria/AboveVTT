@@ -278,6 +278,7 @@ class WaypointManagerClass {
 	* @param playerId {string | false | undefined} `window.PLAYER_ID` if unset
 	*/
 	draw(labelX = undefined, labelY = undefined, alpha = 1, playerId=window.PLAYER_ID) {
+
 		const sceneMapSize = this.getSceneMapSize();
 
 		let cumulativeDistance = 0;
@@ -303,9 +304,13 @@ class WaypointManagerClass {
 	
 		const rulerContainer = this.getOrCreateDrawingContainer(playerId);
 
-		// update alpha for the entire container
-		rulerContainer.style.setProperty("--svg-text-alpha", alpha.toString());
-		rulerContainer.innerHTML = elementsToDraw;		
+		
+		requestAnimationFrame(function(){
+			// update alpha for the entire container
+			rulerContainer.style.setProperty("--svg-text-alpha", alpha.toString());
+			rulerContainer.innerHTML = elementsToDraw;	
+		})
+	
 	}
 
 	/**
@@ -2483,7 +2488,7 @@ function drawing_mousemove(e) {
 
 	if(window.DRAWFUNCTION != 'select')
 		e.preventDefault();
-	if (window.MOUSEMOVEWAIT || (window.DRAWFUNCTION === "select" && e.touches != undefined) ) {
+	if (window.MOUSEMOVEWAIT || (window.DRAWFUNCTION === "select" && e.touches != undefined) || ( WaypointManager.isMeasuring() && window.DRAGGING)) {
 		return;
 	}
 	// don't perform any drawing when dragging a token
