@@ -131,7 +131,7 @@ class WaypointManagerClass {
 	setCanvas(canvas) {
 
 		this.canvas = canvas;
-		this.ctx = canvas.getContext("2d");
+		this.ctx = canvas.getContext("2d", { willReadFrequently: false });
 	}
 
 	// Are we in the middle of measuring?
@@ -1115,7 +1115,7 @@ function redraw_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=nul
 function draw_wizarding_box() {
 
 	let gridCanvas = document.getElementById("grid_overlay");
-	let gridContext = gridCanvas.getContext("2d");
+	let gridContext = gridCanvas.getContext("2d", { willReadFrequently: false });
 	gridCanvas.width = $("#scene_map").width();
 	gridCanvas.height = $("#scene_map").height();
 
@@ -1275,10 +1275,10 @@ function reset_canvas(apply_zoom=true) {
 	
 
 	let canvas_grid = document.getElementById("grid_overlay");
-	let ctx_grid = canvas_grid.getContext("2d");
+	let ctx_grid = canvas_grid.getContext("2d", { willReadFrequently: false });
 
 	window.temp_canvas = document.getElementById("temp_overlay");;
-	window.temp_context = window.temp_canvas.getContext("2d");
+	window.temp_context = window.temp_canvas.getContext("2d", { willReadFrequently: false });
 	if (window.CURRENT_SCENE_DATA && window.CURRENT_SCENE_DATA.hpps > 10 && window.CURRENT_SCENE_DATA.vpps > 10) {
 		//alert(window.CURRENT_SCENE_DATA.hpps + " "+ window.CURRENT_SCENE_DATA.vpps);
 		if(window.WIZARDING){
@@ -1721,7 +1721,7 @@ function check_token_elev(tokenid, elevContext=undefined){
 
 function redraw_drawn_light(){
 	let lightCanvas = document.getElementById("light_overlay");
-	let lightCtx = lightCanvas.getContext("2d");
+	let lightCtx = lightCanvas.getContext("2d", { willReadFrequently: false });
 	lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
 	const drawings = window.DRAWINGS.filter(d => d[1] == "light")
 
@@ -1796,7 +1796,7 @@ function redraw_light_walls(clear=true){
 	let showWallsToggle = $('#show_walls').hasClass('button-enabled');
 	let canvas = document.getElementById("walls_layer");	
 	$(`[id*='wallHeight']`).remove();
-	let ctx = canvas.getContext("2d");
+	let ctx = canvas.getContext("2d", { willReadFrequently: false });
 	ctx.setLineDash([]);
 	let displayWalls = showWallsToggle == true || $('#wall_button').hasClass('button-enabled') || $('.top_menu.visible [data-shape="paint-bucket"]').hasClass('button-enabled')
 	if(displayWalls){
@@ -2301,7 +2301,7 @@ function drawing_mousedown(e) {
 	}
 	// always draw unbaked drawings to the temp overlay
 	let canvas = document.getElementById("temp_overlay");
-	let context = canvas.getContext("2d");
+	let context = canvas.getContext("2d", { willReadFrequently: false });
 
 	// get teh data from the menu's/buttons
 	const data = get_draw_data(e.data.clicked,  e.data.menu)

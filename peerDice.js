@@ -41,9 +41,9 @@ function setDiceRemoteStream(stream, peerId) {
     });
     
     let canvas=dicecanvas.get(0);
-    let ctx=canvas.getContext('2d');
+    let ctx=canvas.getContext('2d', { willReadFrequently: false });
     let tmpcanvas = document.createElement("canvas");
-    let tmpctx = tmpcanvas.getContext("2d");
+    let tmpctx = tmpcanvas.getContext("2d", { willReadFrequently: false });
     video.off('resize.dice').on("resize.dice", function(){
         let videoAspectRatio = video[0].videoWidth / video[0].videoHeight
         if (video[0].videoWidth > video[0].videoHeight)

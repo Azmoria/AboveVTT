@@ -1,7 +1,7 @@
 function clearFrame(){
 	$(".streamer-canvas").each(function() {
 		let canvas=$(this).get(0);
-		let ctx=canvas.getContext('2d');
+		let ctx=canvas.getContext('2d', { willReadFrequently: false });
 		ctx.clearRect(0,0,canvas.width,canvas.height);	
 	});
 }
