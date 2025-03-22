@@ -1353,7 +1353,7 @@ function redraw_fog() {
 
 
 	let offscreenDraw = document.createElement('canvas');
-	let ctx = offscreenDraw.getContext('2d');
+	let ctx = offscreenDraw.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	offscreenDraw.width = canvas.width;
 	offscreenDraw.height = canvas.height;
@@ -1497,9 +1497,9 @@ function redraw_drawings() {
 	 
 
 	let offscreenDrawAboveFog = document.createElement('canvas');
-	let offscreenContextAboveFog = offscreenDrawAboveFog.getContext('2d');
+	let offscreenContextAboveFog = offscreenDrawAboveFog.getContext('2d', { willReadFrequently: false }); // canvas used for rendering not reading set false to force gpu buffer
 	let offscreenDrawBelowFog = document.createElement('canvas');
-	let offscreenContextBelowFog = offscreenDrawBelowFog.getContext('2d');
+	let offscreenContextBelowFog = offscreenDrawBelowFog.getContext('2d', { willReadFrequently: false }); // canvas used for rendering not reading set false to force gpu buffer
 
 	offscreenDrawAboveFog.width = canvasAboveFog.width;
 	offscreenDrawAboveFog.height = canvasAboveFog.height;
@@ -1602,7 +1602,7 @@ function redraw_elev(openLegened = false) {
 	 
 
 	let offscreenDraw = document.createElement('canvas');
-	let offscreenContext = offscreenDraw.getContext('2d');
+	let offscreenContext = offscreenDraw.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	offscreenDraw.width = canvas.width;
 	offscreenDraw.height = canvas.height;
@@ -1726,7 +1726,7 @@ function redraw_drawn_light(){
 	const drawings = window.DRAWINGS.filter(d => d[1] == "light")
 
 	let offscreenDraw = document.createElement('canvas');
-	let offscreenContext = offscreenDraw.getContext('2d');
+	let offscreenContext = offscreenDraw.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	offscreenDraw.width = lightCanvas.width;
 	offscreenDraw.height = lightCanvas.height;
@@ -5693,7 +5693,7 @@ function redraw_light(){
 	let context = canvas.getContext("2d");
 	
 	let offscreenCanvasMask = document.createElement('canvas');
-	let offscreenContext = offscreenCanvasMask.getContext('2d');
+	let offscreenContext = offscreenCanvasMask.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	offscreenCanvasMask.width = canvasWidth;
 	offscreenCanvasMask.height = canvasHeight;
@@ -5702,7 +5702,7 @@ function redraw_light(){
 	if(window.moveOffscreenCanvasMask == undefined){
 		window.moveOffscreenCanvasMask = document.createElement('canvas');
 	}
-	let moveOffscreenContext = moveOffscreenCanvasMask.getContext('2d');
+	let moveOffscreenContext = moveOffscreenCanvasMask.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	window.moveOffscreenCanvasMask.width = canvasWidth;
 	window.moveOffscreenCanvasMask.height = canvasHeight;
@@ -5726,7 +5726,7 @@ function redraw_light(){
 	if(window.truesightCanvas == undefined){
 		window.truesightCanvas = document.createElement('canvas');
 	}
-	let truesightCanvasContext = truesightCanvas.getContext('2d');
+	let truesightCanvasContext = truesightCanvas.getContext('2d');// canvas is read and rendered often leave willReadFrequently undefined to let browser decide
 
 	window.truesightCanvas.width = canvasWidth;
 	window.truesightCanvas.height = canvasHeight;
@@ -5736,7 +5736,7 @@ function redraw_light(){
 	
 	let devilsightCanvas = document.createElement('canvas');
 	
-	let devilsightCtx = devilsightCanvas.getContext('2d');
+	let devilsightCtx = devilsightCanvas.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	devilsightCanvas.width = canvasWidth;
 	devilsightCanvas.height = canvasHeight;
@@ -5745,7 +5745,7 @@ function redraw_light(){
 
 
 	let tempDarkvisionCanvas = document.createElement('canvas');
-	let tempDarkvisionCtx = tempDarkvisionCanvas.getContext('2d');
+	let tempDarkvisionCtx = tempDarkvisionCanvas.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 
 	tempDarkvisionCanvas.width = canvasWidth;
 	tempDarkvisionCanvas.height = canvasHeight;
@@ -6184,7 +6184,7 @@ function clipped_light(auraId, maskPolygon, playerTokenId, canvasWidth = $("#ray
 		return; // don't make an object for 0 range light
 	}
 	let lightCanvas = document.createElement('canvas');
-	let lightAuraClipPolygonCtx = lightCanvas.getContext('2d');
+	let lightAuraClipPolygonCtx = lightCanvas.getContext('2d', { willReadFrequently: false });// canvas used for rendering not reading set false to force gpu buffer
 	lightCanvas.width = canvasWidth;
 	lightCanvas.height = canvasHeight;
 
