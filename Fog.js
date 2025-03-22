@@ -960,14 +960,14 @@ function midPointBtw(p1, p2) {
 
 function clear_grid(){
 	const gridCanvas = document.getElementById("grid_overlay");
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext("2d", { willReadFrequently: false });
 	gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
 }
 function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=null, lineWidth=null, subdivide=null, dash=[], columns=true, drawGrid = window.CURRENT_SCENE_DATA.grid){
 	const gridCanvas = document.getElementById("grid_overlay");
 	gridCanvas.width = $('#scene_map').width() / window.CURRENT_SCENE_DATA.scaleAdjustment.x
 	gridCanvas.height = $('#scene_map').height() / window.CURRENT_SCENE_DATA.scaleAdjustment.y;
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext("2d", { willReadFrequently: false });
 	if(window.CURRENT_SCENE_DATA.gridType == 2){
 		hpps = vpps || window.CURRENT_SCENE_DATA.vpps;
 		window.CURRENT_SCENE_DATA.hpps = vpps || window.CURRENT_SCENE_DATA.vpps;
@@ -1063,7 +1063,7 @@ function redraw_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=nul
 	const gridCanvas = document.getElementById("grid_overlay");
 	gridCanvas.width = $('#scene_map').width();
 	gridCanvas.height = $('#scene_map').height();
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext("2d", { willReadFrequently: false });
 	clear_grid();
 	gridContext.setLineDash(dash);
 	let startX = offsetX / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.offsetx / window.CURRENT_SCENE_DATA.scale_factor;
@@ -1485,11 +1485,11 @@ function redraw_text() {
 function redraw_drawings() {
 
 	let canvasAboveFog = document.getElementById("draw_overlay");
-	let ctxAboveFog = canvasAboveFog.getContext("2d");
+	let ctxAboveFog = canvasAboveFog.getContext("2d", { willReadFrequently: false });
 	ctxAboveFog.clearRect(0, 0, canvasAboveFog.width, canvasAboveFog.height);
 
 	let canvasBelowFog = document.getElementById("draw_overlay_under_fog_darkness");
-	let ctxBelowFog = canvasBelowFog.getContext("2d");
+	let ctxBelowFog = canvasBelowFog.getContext("2d", { willReadFrequently: false });
 	ctxBelowFog.clearRect(0, 0, canvasBelowFog.width, canvasBelowFog.height);
 
 	const drawings = window.DRAWINGS.filter(d => !d[0].includes("text") && d[1] !==  "wall" && d[1] !== 'light' && d[1] !== 'elev')
