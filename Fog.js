@@ -131,7 +131,7 @@ class WaypointManagerClass {
 	setCanvas(canvas) {
 
 		this.canvas = canvas;
-		this.ctx = canvas.getContext("2d");
+		this.ctx = canvas.getContext('2d', { willReadFrequently: false });
 	}
 
 	// Are we in the middle of measuring?
@@ -563,7 +563,7 @@ function is_token_under_fog(tokenid, fogContext=undefined){
 	if((window.DM && !window.SelectedTokenVision) || window.TOKEN_OBJECTS[tokenid].options.revealInFog)
 		return false;
 	if(fogContext == undefined){
-		fogContext = $('#fog_overlay')[0].getContext('2d');
+		fogContext = $('#fog_overlay')[0].getContext('2d', { willReadFrequently: false });
 	}
 	let left = (parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2)) / window.CURRENT_SCENE_DATA.scale_factor;
 	let top = (parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', '')) + (window.TOKEN_OBJECTS[tokenid].options.size / 2)) / window.CURRENT_SCENE_DATA.scale_factor;
@@ -576,7 +576,7 @@ function is_token_under_fog(tokenid, fogContext=undefined){
 }
 function is_token_in_raycasting_context(tokenid, rayContext=undefined){
 	if(rayContext == undefined){
-		rayContext = $("#raycastingCanvas")[0].getContext('2d');
+		rayContext = $("#raycastingCanvas")[0].getContext('2d', { willReadFrequently: false });
 	}
 
 	let pixeldata = rayContext.getImageData((parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor) + (window.TOKEN_OBJECTS[tokenid].sizeWidth()/2/ window.CURRENT_SCENE_DATA.scale_factor),(parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor)+(window.TOKEN_OBJECTS[tokenid].sizeHeight()/2/ window.CURRENT_SCENE_DATA.scale_factor), 1, 1).data;
@@ -607,7 +607,7 @@ function is_token_in_aoe_context(tokenid, aoeContext=undefined){
 }
 function is_token_under_light_aura(tokenid, lightContext=undefined){
 	if(lightContext == undefined){
-		lightContext = window.lightInLos.getContext('2d');
+		lightContext = window.lightInLos.getContext('2d', { willReadFrequently: false });
 	}
 
 	let pixeldata = lightContext.getImageData(parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor, parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor,  window.TOKEN_OBJECTS[tokenid].sizeWidth()/window.CURRENT_SCENE_DATA.scale_factor, window.TOKEN_OBJECTS[tokenid].sizeHeight()/window.CURRENT_SCENE_DATA.scale_factor).data;
@@ -623,7 +623,7 @@ function is_token_under_light_aura(tokenid, lightContext=undefined){
 
 function is_token_under_truesight_aura(tokenid, truesightContext=undefined){
 	if(truesightContext == undefined){
-		truesightContext = window.truesightCanvas.getContext('2d');
+		truesightContext = window.truesightCanvas.getContext('2d', { willReadFrequently: false });
 	}
 
 	let pixeldata = truesightContext.getImageData(parseInt(window.TOKEN_OBJECTS[tokenid].options.left.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor, parseInt(window.TOKEN_OBJECTS[tokenid].options.top.replace('px', ''))/ window.CURRENT_SCENE_DATA.scale_factor, window.TOKEN_OBJECTS[tokenid].sizeWidth()/ window.CURRENT_SCENE_DATA.scale_factor, window.TOKEN_OBJECTS[tokenid].sizeHeight()/ window.CURRENT_SCENE_DATA.scale_factor).data;
@@ -642,7 +642,7 @@ function is_door_under_fog(door, fogContext=undefined){
 		return false;
 
 	if(fogContext == undefined){
-		fogContext = $('#fog_overlay')[0].getContext('2d');
+		fogContext = $('#fog_overlay')[0].getContext('2d', { willReadFrequently: false });
 	}
 	
 
@@ -659,7 +659,7 @@ function is_door_under_fog(door, fogContext=undefined){
 
 function is_door_under_light_aura(door, lightContext=undefined){
 	if(lightContext == undefined){
-		lightContext = window.lightInLos.getContext('2d');
+		lightContext = window.lightInLos.getContext('2d', { willReadFrequently: false });
 	}
 
 
@@ -679,7 +679,7 @@ function check_single_token_visibility(id){
 	console.log("check_single_token_visibility");
 	if (window.DM || $("#fog_overlay").is(":hidden") || window.TOKEN_OBJECTS[id].options.combatGroupToken)
 		return;	
-	let fogContext = $('#fog_overlay')[0].getContext('2d');
+	let fogContext = $('#fog_overlay')[0].getContext('2d', { willReadFrequently: false });
 	let auraSelectorId = id.replaceAll("/", "").replaceAll('.', '');
 	let auraSelector = ".aura-element[id='aura_" + auraSelectorId + "']";
 	let selector = "div.token[data-id='" + id + "']";
@@ -758,8 +758,8 @@ function do_check_token_visibility() {
 	let hideDoors =[];
 	let dmSelectedTokens = [];
 
-	let fogContext = $('#fog_overlay')[0].getContext('2d');
-	let lightContext = window.lightInLos.getContext('2d');
+	let fogContext = $('#fog_overlay')[0].getContext('2d', { willReadFrequently: false });
+	let lightContext = window.lightInLos.getContext('2d', { willReadFrequently: false });
 
 	let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
 	
@@ -769,13 +769,13 @@ function do_check_token_visibility() {
 	
 
 	
-	let rayContext = $('#raycastingCanvas')[0].getContext('2d');
+	let rayContext = $('#raycastingCanvas')[0].getContext('2d', { willReadFrequently: false });
 	const truesightAuraExists = $(`.aura-element-container-clip.truesight`).length>0;
 
 	let truesightContext;
 
 	if(truesightAuraExists) 
-		truesightContext = window.truesightCanvas.getContext('2d');
+		truesightContext = window.truesightCanvas.getContext('2d', { willReadFrequently: false });
 
 
 
@@ -948,14 +948,14 @@ function midPointBtw(p1, p2) {
 
 function clear_grid(){
 	const gridCanvas = document.getElementById("grid_overlay");
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext('2d', { willReadFrequently: false });
 	gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
 }
 function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=null, lineWidth=null, subdivide=null, dash=[], columns=true, drawGrid = window.CURRENT_SCENE_DATA.grid){
 	const gridCanvas = document.getElementById("grid_overlay");
 	gridCanvas.width = $('#scene_map').width() / window.CURRENT_SCENE_DATA.scaleAdjustment.x
 	gridCanvas.height = $('#scene_map').height() / window.CURRENT_SCENE_DATA.scaleAdjustment.y;
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext('2d', { willReadFrequently: false });
 	if(window.CURRENT_SCENE_DATA.gridType == 2){
 		hpps = vpps || window.CURRENT_SCENE_DATA.vpps;
 		window.CURRENT_SCENE_DATA.hpps = vpps || window.CURRENT_SCENE_DATA.vpps;
@@ -1051,7 +1051,7 @@ function redraw_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=nul
 	const gridCanvas = document.getElementById("grid_overlay");
 	gridCanvas.width = $('#scene_map').width();
 	gridCanvas.height = $('#scene_map').height();
-	const gridContext = gridCanvas.getContext("2d");
+	const gridContext = gridCanvas.getContext('2d', { willReadFrequently: false });
 	clear_grid();
 	gridContext.setLineDash(dash);
 	let startX = offsetX / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.offsetx / window.CURRENT_SCENE_DATA.scale_factor;
@@ -1103,7 +1103,7 @@ function redraw_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=nul
 function draw_wizarding_box() {
 
 	let gridCanvas = document.getElementById("grid_overlay");
-	let gridContext = gridCanvas.getContext("2d");
+	let gridContext = gridCanvas.getContext('2d', { willReadFrequently: false });
 	gridCanvas.width = $("#scene_map").width();
 	gridCanvas.height = $("#scene_map").height();
 
@@ -1240,7 +1240,7 @@ function reset_canvas(apply_zoom=true) {
 	$("#text_div").css({"width": sceneMapWidth * window.CURRENT_SCENE_DATA.scale_factor,  "height": sceneMapHeight * window.CURRENT_SCENE_DATA.scale_factor});
 
 	canvas = document.getElementById("fog_overlay");
-	let ctx = canvas.getContext("2d");
+	let ctx = canvas.getContext('2d', { willReadFrequently: false });
 
 	if (!window.FOG_OF_WAR) {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1263,10 +1263,10 @@ function reset_canvas(apply_zoom=true) {
 	
 
 	let canvas_grid = document.getElementById("grid_overlay");
-	let ctx_grid = canvas_grid.getContext("2d");
+	let ctx_grid = canvas_grid.getContext('2d', { willReadFrequently: false });
 
 	window.temp_canvas = document.getElementById("temp_overlay");;
-	window.temp_context = window.temp_canvas.getContext("2d");
+	window.temp_context = window.temp_canvas.getContext('2d', { willReadFrequently: false });
 	if (window.CURRENT_SCENE_DATA && window.CURRENT_SCENE_DATA.hpps > 10 && window.CURRENT_SCENE_DATA.vpps > 10) {
 		//alert(window.CURRENT_SCENE_DATA.hpps + " "+ window.CURRENT_SCENE_DATA.vpps);
 		if(window.WIZARDING){
@@ -1332,7 +1332,7 @@ function redraw_fog() {
 	if (!window.FOG_OF_WAR)
 		return;
 	let canvas = document.getElementById("fog_overlay");
-	let fogContext = canvas.getContext("2d");
+	let fogContext = canvas.getContext('2d', { willReadFrequently: false });
 	let fogStyle;
 	if (window.DM)
 		fogStyle = "rgba(0, 0, 0, 0.5)";
@@ -1341,7 +1341,7 @@ function redraw_fog() {
 
 
 	let offscreenDraw = document.createElement('canvas');
-	let ctx = offscreenDraw.getContext('2d');
+	let ctx = offscreenDraw.getContext('2d', { willReadFrequently: false });
 
 	offscreenDraw.width = canvas.width;
 	offscreenDraw.height = canvas.height;
@@ -1473,11 +1473,11 @@ function redraw_text() {
 function redraw_drawings() {
 
 	let canvasAboveFog = document.getElementById("draw_overlay");
-	let ctxAboveFog = canvasAboveFog.getContext("2d");
+	let ctxAboveFog = canvasAboveFog.getContext('2d', { willReadFrequently: false });
 	ctxAboveFog.clearRect(0, 0, canvasAboveFog.width, canvasAboveFog.height);
 
 	let canvasBelowFog = document.getElementById("draw_overlay_under_fog_darkness");
-	let ctxBelowFog = canvasBelowFog.getContext("2d");
+	let ctxBelowFog = canvasBelowFog.getContext('2d', { willReadFrequently: false });
 	ctxBelowFog.clearRect(0, 0, canvasBelowFog.width, canvasBelowFog.height);
 
 	const drawings = window.DRAWINGS.filter(d => !d[0].includes("text") && d[1] !==  "wall" && d[1] !== 'light' && d[1] !== 'elev')
@@ -1485,9 +1485,9 @@ function redraw_drawings() {
 	 
 
 	let offscreenDrawAboveFog = document.createElement('canvas');
-	let offscreenContextAboveFog = offscreenDrawAboveFog.getContext('2d');
+	let offscreenContextAboveFog = offscreenDrawAboveFog.getContext('2d', { willReadFrequently: false });
 	let offscreenDrawBelowFog = document.createElement('canvas');
-	let offscreenContextBelowFog = offscreenDrawBelowFog.getContext('2d');
+	let offscreenContextBelowFog = offscreenDrawBelowFog.getContext('2d', { willReadFrequently: false });
 
 	offscreenDrawAboveFog.width = canvasAboveFog.width;
 	offscreenDrawAboveFog.height = canvasAboveFog.height;
@@ -1574,7 +1574,7 @@ function redraw_drawings() {
 function redraw_elev(openLegened = false) {
 	window.elevHeights = {};
 	let canvas = document.getElementById("elev_overlay");
-	let ctx = canvas.getContext("2d");
+	let ctx = canvas.getContext('2d', { willReadFrequently: false });
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	ctx.setLineDash([]);
 	let displayElev = $('#elev_button').hasClass('button-enabled')
@@ -1590,7 +1590,7 @@ function redraw_elev(openLegened = false) {
 	 
 
 	let offscreenDraw = document.createElement('canvas');
-	let offscreenContext = offscreenDraw.getContext('2d');
+	let offscreenContext = offscreenDraw.getContext('2d', { willReadFrequently: false });
 
 	offscreenDraw.width = canvas.width;
 	offscreenDraw.height = canvas.height;
@@ -1694,7 +1694,7 @@ function close_elev_legend(){
 
 function check_token_elev(tokenid, elevContext=undefined){
 	if(elevContext == undefined){
-		elevContext = $('#elev_overlay')[0].getContext('2d');
+		elevContext = $('#elev_overlay')[0].getContext('2d', { willReadFrequently: false });
 	}
 	let token = window.TOKEN_OBJECTS[tokenid];
 	let left = (parseInt(token.options.left.replace('px', '')) + (token.options.size / 2)) / window.CURRENT_SCENE_DATA.scale_factor;
@@ -1709,12 +1709,12 @@ function check_token_elev(tokenid, elevContext=undefined){
 
 function redraw_drawn_light(){
 	let lightCanvas = document.getElementById("light_overlay");
-	let lightCtx = lightCanvas.getContext("2d");
+	let lightCtx = lightCanvas.getContext('2d', { willReadFrequently: false });
 	lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
 	const drawings = window.DRAWINGS.filter(d => d[1] == "light")
 
 	let offscreenDraw = document.createElement('canvas');
-	let offscreenContext = offscreenDraw.getContext('2d');
+	let offscreenContext = offscreenDraw.getContext('2d', { willReadFrequently: false });
 
 	offscreenDraw.width = lightCanvas.width;
 	offscreenDraw.height = lightCanvas.height;
@@ -1784,7 +1784,7 @@ function redraw_light_walls(clear=true){
 	let showWallsToggle = $('#show_walls').hasClass('button-enabled');
 	let canvas = document.getElementById("walls_layer");	
 	$(`[id*='wallHeight']`).remove();
-	let ctx = canvas.getContext("2d");
+	let ctx = canvas.getContext('2d', { willReadFrequently: false });
 	ctx.setLineDash([]);
 	let displayWalls = showWallsToggle == true || $('#wall_button').hasClass('button-enabled') || $('.top_menu.visible [data-shape="paint-bucket"]').hasClass('button-enabled')
 	if(displayWalls){
@@ -2289,7 +2289,7 @@ function drawing_mousedown(e) {
 	}
 	// always draw unbaked drawings to the temp overlay
 	let canvas = document.getElementById("temp_overlay");
-	let context = canvas.getContext("2d");
+	let context = canvas.getContext('2d', { willReadFrequently: false });
 
 	// get teh data from the menu's/buttons
 	const data = get_draw_data(e.data.clicked,  e.data.menu)
@@ -3492,7 +3492,7 @@ function drawing_contextmenu(e) {
 		window.BEGIN_MOUSEY.pop();
 		if(window.BEGIN_MOUSEX.length > 0){
 			let canvas = document.getElementById("temp_overlay");
-			let ctx = canvas.getContext("2d");
+			let ctx = canvas.getContext('2d', { willReadFrequently: false });
 			clear_temp_canvas();
 			drawPolygon(
 				ctx,
@@ -3517,7 +3517,7 @@ function drawing_contextmenu(e) {
 		window.BEGIN_MOUSEY.pop();
 		if(window.BEGIN_MOUSEX.length > 0){
 			let canvas = document.getElementById("temp_overlay");
-			let ctx = canvas.getContext("2d");
+			let ctx = canvas.getContext('2d', { willReadFrequently: false });
 			clear_temp_canvas();
 			draw3PointRect(
 				ctx,
@@ -5678,10 +5678,10 @@ function redraw_light(){
 		initParticle(new Vector(200, 200), 1);
 	}
 
-	let context = canvas.getContext("2d");
+	let context = canvas.getContext('2d', { willReadFrequently: false });
 	
 	let offscreenCanvasMask = document.createElement('canvas');
-	let offscreenContext = offscreenCanvasMask.getContext('2d');
+	let offscreenContext = offscreenCanvasMask.getContext('2d', { willReadFrequently: false });
 
 	offscreenCanvasMask.width = canvasWidth;
 	offscreenCanvasMask.height = canvasHeight;
@@ -5690,7 +5690,7 @@ function redraw_light(){
 	if(window.moveOffscreenCanvasMask == undefined){
 		window.moveOffscreenCanvasMask = document.createElement('canvas');
 	}
-	let moveOffscreenContext = moveOffscreenCanvasMask.getContext('2d');
+	let moveOffscreenContext = moveOffscreenCanvasMask.getContext('2d', { willReadFrequently: false });
 
 	window.moveOffscreenCanvasMask.width = canvasWidth;
 	window.moveOffscreenCanvasMask.height = canvasHeight;
@@ -5714,7 +5714,7 @@ function redraw_light(){
 	if(window.truesightCanvas == undefined){
 		window.truesightCanvas = document.createElement('canvas');
 	}
-	let truesightCanvasContext = truesightCanvas.getContext('2d');
+	let truesightCanvasContext = truesightCanvas.getContext('2d', { willReadFrequently: false });
 
 	window.truesightCanvas.width = canvasWidth;
 	window.truesightCanvas.height = canvasHeight;
@@ -5724,7 +5724,7 @@ function redraw_light(){
 	
 	let devilsightCanvas = document.createElement('canvas');
 	
-	let devilsightCtx = devilsightCanvas.getContext('2d');
+	let devilsightCtx = devilsightCanvas.getContext('2d', { willReadFrequently: false });
 
 	devilsightCanvas.width = canvasWidth;
 	devilsightCanvas.height = canvasHeight;
@@ -5733,7 +5733,7 @@ function redraw_light(){
 
 
 	let tempDarkvisionCanvas = document.createElement('canvas');
-	let tempDarkvisionCtx = tempDarkvisionCanvas.getContext('2d');
+	let tempDarkvisionCtx = tempDarkvisionCanvas.getContext('2d', { willReadFrequently: false });
 
 	tempDarkvisionCanvas.width = canvasWidth;
 	tempDarkvisionCanvas.height = canvasHeight;
@@ -5831,9 +5831,9 @@ function redraw_light(){
 
 
 
-	let lightInLosContext = window.lightInLos.getContext('2d');
+	let lightInLosContext = window.lightInLos.getContext('2d', { willReadFrequently: false });
 
-	let elevContext = $('#elev_overlay')[0].getContext('2d');
+	let elevContext = $('#elev_overlay')[0].getContext('2d', { willReadFrequently: false });
 
 	for(let i = 0; i < light_auras.length; i++){
 		promises.push(new Promise((resolve) => {
@@ -6003,7 +6003,7 @@ function redraw_light(){
 				exploredCanvas =  document.createElement("canvas")
 				exploredCanvas.width = canvasWidth;
 				exploredCanvas.height = canvasHeight;			
-				window.exploredCanvasContext = exploredCanvas.getContext('2d');
+				window.exploredCanvasContext = exploredCanvas.getContext('2d', { willReadFrequently: false });
 				
 
 				window.exploredCanvasContext.globalCompositeOperation='source-over';
@@ -6031,7 +6031,7 @@ function redraw_light(){
 			}
 			else{
 				if(window.exploredCanvasContext == undefined){
-					window.exploredCanvasContext = exploredCanvas.getContext('2d');
+					window.exploredCanvasContext = exploredCanvas.getContext('2d', { willReadFrequently: false });
 				}
 				requestAnimationFrame(function(){
 					window.exploredCanvasContext.globalCompositeOperation='lighten';
@@ -6172,7 +6172,7 @@ function clipped_light(auraId, maskPolygon, playerTokenId, canvasWidth = $("#ray
 		return; // don't make an object for 0 range light
 	}
 	let lightCanvas = document.createElement('canvas');
-	let lightAuraClipPolygonCtx = lightCanvas.getContext('2d');
+	let lightAuraClipPolygonCtx = lightCanvas.getContext('2d', { willReadFrequently: false });
 	lightCanvas.width = canvasWidth;
 	lightCanvas.height = canvasHeight;
 

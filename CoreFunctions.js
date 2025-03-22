@@ -231,7 +231,7 @@ function deleteDB(){
     objectStoreRequest.onsuccess = function(event) {       
       exploredCanvas =  document.getElementById("exploredCanvas");
       if(exploredCanvas != undefined){
-        let exploredCanvasContext = exploredCanvas.getContext('2d');
+        let exploredCanvasContext = exploredCanvas.getContext('2d', { willReadFrequently: false });
         exploredCanvasContext.fillStyle = "black";
         exploredCanvasContext.fillRect(0,0,exploredCanvas.width,exploredCanvas.height); 
       }
@@ -257,7 +257,7 @@ function deleteExploredScene(sceneId){
       if(sceneId == window.CURRENT_SCENE_DATA.id){
         let exploredCanvas = $('#exploredCanvas')
         if(exploredCanvas.length > 0){
-          let exploredCanvasContext = exploredCanvas[0].getContext('2d');
+          let exploredCanvasContext = exploredCanvas[0].getContext('2d', { willReadFrequently: false });
           exploredCanvasContext.globalCompositeOperation ='source-over';
           exploredCanvasContext.fillStyle = "black";
           exploredCanvasContext.fillRect(0,0,exploredCanvas[0].width,exploredCanvas[0].height); 

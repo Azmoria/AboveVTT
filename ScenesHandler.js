@@ -193,7 +193,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 			let drawX = function(canvas) {
 
-				let ctx = canvas.getContext("2d");
+				let ctx = canvas.getContext('2d', { willReadFrequently: false });
 
 				ctx.strokeStyle = "red";
 				ctx.lineWidth = 1;
@@ -208,7 +208,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 			let canvas1 = aligner1.get(0);
 
-			let ctx = canvas1.getContext("2d");
+			let ctx = canvas1.getContext('2d', { willReadFrequently: false });
 			canvas1.width = 59;
 			canvas1.height = 59;
 			ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -239,7 +239,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			let canvas2 = aligner2.get(0);
 			canvas2.width = 59;
 			canvas2.height = 59;
-			ctx = canvas2.getContext("2d");
+			ctx = canvas2.getContext('2d', { willReadFrequently: false });
 			ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
 			ctx.fillRect(0, 0, canvas2.width, canvas2.height);
 			ctx.fillStyle = "rgba(0,255,0,0.5)";

@@ -332,7 +332,7 @@ class Token {
 	}
 
 	// number of pixels
-	sizeWidth() {
+	 sizeWidth() {
 		let w = parseFloat(this.options.gridWidth);
 		if (isNaN(w)) return this.options.size;
 		return Math.round(parseInt(window.CURRENT_SCENE_DATA.hpps) * w);
@@ -1467,7 +1467,7 @@ class Token {
 			console.log("update_opacity failed to find an html element", this);
 			return;
 		}
-		let fogContext = $('#fog_overlay')[0].getContext('2d');
+		let fogContext = $('#fog_overlay')[0].getContext('2d', { willReadFrequently: false });
 
 		if (this.options.hidden || is_token_under_fog(this.options.id, fogContext)) {
 			if (window.DM) {
@@ -3027,7 +3027,7 @@ class Token {
 									WaypointManager.resetDefaultDrawStyle();
 								}
 								const canvas = document.getElementById("temp_overlay");
-								const context = canvas.getContext("2d");
+								const context = canvas.getContext('2d', { willReadFrequently: false });
 								// incase we click while on select, remove any line dashes
 								context.setLineDash([])
 								context.fillStyle = '#f50';
@@ -4000,7 +4000,7 @@ function checkAudioVolume(){
 
 			let tokenMovePolygon = window.lineOfSightPolygons[tokensToCheck[checkedTokenId]]?.move
 			let audioCanvas = document.createElement('canvas');
-			let audioCanvasCtx = audioCanvas.getContext('2d');
+			let audioCanvasCtx = audioCanvas.getContext('2d', { willReadFrequently: false });
 			audioCanvas.width = $("#raycastingCanvas").width();
 			audioCanvas.height =  $("#raycastingCanvas").height();
 			

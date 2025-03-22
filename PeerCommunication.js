@@ -733,7 +733,7 @@ function get_peer_waypoint_manager(playerId, color) {
     waypointManager.drawStyle.color = color;
   }
   const canvas = document.getElementById("peer_overlay");
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext('2d', { willReadFrequently: false });
   context.setLineDash([]);
   context.fillStyle = '#f50';
   waypointManager.setCanvas(canvas);
