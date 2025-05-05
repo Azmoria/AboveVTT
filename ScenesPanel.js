@@ -2305,6 +2305,13 @@ function register_scene_row_context_menu() {
 						export_scenes_folder_context(itemToEdit.id)
 					}			
 				}
+				menuItems["exportImport"] = {
+					name: "Export Import",
+					callback: function(itemKey, opt, originalEvent) {
+						let itemToEdit = find_sidebar_list_item(opt.$trigger);
+						export_import_scenes_folder_context(itemToEdit.id)
+					}	
+				}
 			}
 
 			if (rowItem.canDelete()) {

@@ -1484,7 +1484,87 @@ async function export_scene_context(sceneId){
 }
 
 
+async function export_import_scenes_folder_context(folderId){
+	build_import_loading_indicator('Preparing Export File');  
+	let ids = [];
+	const getIds = function(folderId){
+		let scenesInFolder = window.ScenesHandler.scenes.filter(d => d.parentId == folderId);
 
+		for(let scene in scenesInFolder){
+			
+			if(scenesInFolder[scene].itemType != 'scene'){
+				getIds(scenesInFolder[scene].id)
+			}
+			else{
+				ids.push(scenesInFolder[scene].id)
+			}
+		}
+	}
+	getIds(folderId);
+	let DataFile = {
+
+	};
+	let version = 1;
+	for(let id in ids){
+		let scene = await AboveApi.getScene(ids[id]);
+		let currentSceneData = {
+			...scene.data
+		} 
+		let removeArray = ['scale_check', 'daylightColor', 'undefined', 'isnewscene', 'disableSceneVision', 'snap', 'fog_of_war', 'folderPath', 'id', 'itemType', 'order', 'parentId', 'playlist', 'uuid', 'visionTrail', 'height', 'width']
+		let removeDdbArray = ['dm_map', 'player_map', 'map', 'thumb', 'dm_map_is_video', 'map', 'player_map_is_video']
+		
+		for(let i in removeArray){
+			delete currentSceneData[removeArray[i]];
+		}
+
+		if(currentSceneData?.dm_map?.includes('dndbeyond.com') || currentSceneData?.map?.includes('dndbeyond.com') || currentSceneData?.player_map?.includes('dndbeyond.com') ){
+			for(let i in removeDdbArray){
+				delete currentSceneData[removeDdbArray[i]];
+			}
+		}
+
+		let defaultSceneData = window.default_scene_data();
+		for(let i in defaultSceneData){
+			if(data[i] == defaultSceneData[i]){
+				delete currentSceneData[i];
+			}
+		}
+
+		let tokensObject = {}
+		for(let token in scene.data.tokens){
+			let tokenId = scene.data.tokens[token].id;
+			let statBlockID = scene.data.tokens[token].statBlock
+			currentSceneData.notes = {};
+			if(statBlockID != undefined && window.JOURNAL.notes[statBlockID] != undefined){
+				currentSceneData.notes[statBlockID] = window.JOURNAL.notes[statBlockID];
+			}
+			if(window.JOURNAL.notes[tokenId] != undefined){
+				currentSceneData.notes[tokenId] = window.JOURNAL.notes[tokenId];
+			}
+			tokensObject[tokenId] = scene.data.tokens[token];		
+		}
+		currentSceneData.tokens = tokensObject;
+		if(DataFile[scene.data.uuid] != undefined){
+			DataFile[scene.data.uuid.replace(/^.*?(\/.*)/gi, `v${version}$1`)] = currentSceneData;
+			version++;
+		}
+		else{
+			DataFile[scene.data.uuid] = currentSceneData
+		}
+		
+	}
+	
+	let folder = window.ScenesHandler.scenes.filter(d => d.id == folderId)[0].title;
+
+	let currentdate = new Date(); 
+	let datetime = `${currentdate.getFullYear()}-${(currentdate.getMonth()+1)}-${currentdate.getDate()}`
+	download(JSON.stringify(DataFile,null,"\t"),`${folder}-${datetime}.abovevtt`,"text/plain");
+	$(".import-loading-indicator").remove();
+
+
+
+
+}
 async function export_scenes_folder_context(folderId){
 	build_import_loading_indicator('Preparing Export File');  
 
