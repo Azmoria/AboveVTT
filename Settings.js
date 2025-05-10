@@ -1531,10 +1531,10 @@ async function export_import_scenes_folder_context(folderId){
 		}
 
 		let tokensObject = {}
+		currentSceneData.notes = {};
 		for(let token in scene.data.tokens){
 			let tokenId = scene.data.tokens[token].id;
-			let statBlockID = scene.data.tokens[token].statBlock
-			currentSceneData.notes = {};
+			let statBlockID = scene.data.tokens[token].statBlock		
 			if(statBlockID != undefined && window.JOURNAL.notes[statBlockID] != undefined){
 				currentSceneData.notes[statBlockID] = window.JOURNAL.notes[statBlockID];
 			}
