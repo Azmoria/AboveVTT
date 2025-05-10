@@ -179,7 +179,21 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	$('body').append(moveableTokenOptions);
 	$('body').append(tokenOptionsClickCloseDiv);
+	$("#tokenOptionsPopup").addClass("moveableWindow");
+	$("#tokenOptionsPopup").draggable({
+		addClasses: false,
+		scroll: false,
+		handle: "div:not(:has(select))",
+		cancel: "select",
+		start: function () {
+			$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
+			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+		},
+		stop: function () {
+			$('.iframeResizeCover').remove();
 
+		}
+	});
 
 	if(door?.length == 1){
 
@@ -622,19 +636,7 @@ function token_context_menu_expanded(tokenIds, e) {
 			
 
 		}
-		$("#tokenOptionsPopup").addClass("moveableWindow");
-		$("#tokenOptionsPopup").draggable({
-				addClasses: false,
-				scroll: false,
-				start: function () {
-					$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-					$("#sheet").append($('<div class="iframeResizeCover"></div>'));
-				},
-				stop: function () {
-					$('.iframeResizeCover').remove();
 
-				}
-			});
 		
 
 		if(e.touches?.length>0){
@@ -855,20 +857,6 @@ function token_context_menu_expanded(tokenIds, e) {
 				close_token_context_menu();
 		 	});
 		 }
-	
-		$("#tokenOptionsPopup").addClass("moveableWindow");
-		$("#tokenOptionsPopup").draggable({
-				addClasses: false,
-				scroll: false,
-				start: function () {
-					$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-					$("#sheet").append($('<div class="iframeResizeCover"></div>'));
-				},
-				stop: function () {
-					$('.iframeResizeCover').remove();
-
-				}
-			});
 		
 
 		if(e.touches?.length>0){
@@ -1454,21 +1442,6 @@ function token_context_menu_expanded(tokenIds, e) {
 			close_token_context_menu();
 	 	});
 	 }
-
-
-	$("#tokenOptionsPopup").addClass("moveableWindow");
-	$("#tokenOptionsPopup").draggable({
-			addClasses: false,
-			scroll: false,
-			start: function () {
-				$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-				$("#sheet").append($('<div class="iframeResizeCover"></div>'));
-			},
-			stop: function () {
-				$('.iframeResizeCover').remove();
-
-			}
-		});
 	
 
 	
@@ -4646,6 +4619,7 @@ function save_type_change(dropdown){
 }
 
 function qrm_fetch_stat(token) {
+	let roll_bonus
 	//if its a monster it needs to be calulated.
 	if(token.options.monster > 0 || token.options.monster == 'open5e'){
 		let stat = (cached_monster_items[token.options.monster]?.monsterData) ? cached_monster_items[token.options.monster]?.monsterData : cached_open5e_items[token.options.itemId]?.monsterData;
@@ -4889,36 +4863,34 @@ function qrm_apply_hp_adjustment(healing=false){
 			damage = -hp_adjustment_failed_save || 0
 		}
 		else{
-			if (result.includes('Fail')){
-				damage = hp_adjustment_failed_save || 0
-				let conditions = $('#qrm_apply_conditions')
-				let conditionName = conditions.val()
-				if(conditionName == 'conditions'){
-					//Do nothing
-				} 
-				else if(conditionName == "remove_all"){
-					//guess this is fine, we update the token immediately. Probably a better way to clear though
-					token.options.conditions = []
-					token.options.custom_conditions = []
-				}
-				else{
-					if(!token.hasCondition(conditionName)){
-						token.addCondition(conditionName, conditionName);
-					}
-				}	
-			}
-			else {
-				damage = half_damage_save_success || 0
+			
+			damage = hp_adjustment_failed_save || 0
+			
+			if(!result.includes('Fail') && damage > 0) {
+				damage = Math.max(half_damage_save_success, 1) || 0
 			}	
-			if($(this).find('button.resistanceButton.enabled').length>0){
-				damage = Math.floor(damage/2);
-			}
-			if(damage == 0){
-				damage = 1;
+			if($(this).find('button.resistanceButton.enabled').length>0 && damage>0){
+				damage = Math.max(Math.floor(damage/2), 1);
 			}
 		}
+	
+		let conditions = $('#qrm_apply_conditions')
+		let conditionName = conditions.val()
+		if(conditionName == 'conditions'){
+			//Do nothing
+		} 
+		else if(conditionName == "remove_all"){
+			//guess this is fine, we update the token immediately. Probably a better way to clear though
+			token.options.conditions = []
+			token.options.custom_conditions = []
+		}
+		else if(result.includes('Fail')){
+			if(!token.hasCondition(conditionName)){
+				token.addCondition(conditionName, conditionName);
+			}
+		}	
 		
-		if(token.options.hitPointInfo.maximum>0 && token.options.itemType != 'pc'){
+		if(token.options?.hitPointInfo?.maximum>0 && token.options?.itemType != 'pc'){
 			let _hp = $(this).find('#qrm_hp');
 			let _max_hp = $(this).find('#qrm_maxhp');
 
@@ -4935,20 +4907,21 @@ function qrm_apply_hp_adjustment(healing=false){
 			_hp.trigger('change');
 		}
 		else {
-			// doing it this way, because Players might also have resistances or abilites and they should manage their own HP. 
-			let dmg_heal_text;
-			if (damage >= 0){
-				dmg_heal_text = token.options.name + " takes " + damage +" damage (adjust manually)";
+			if (damage != 0){
+				let dmg_heal_text;
+				if (damage > 0){
+					dmg_heal_text = token.options.name + " takes " + damage +" damage (adjust manually)";
+				}
+				else{
+					dmg_heal_text = token.options.name + " heals for " + -damage +" (adjust manually)";
+				}
+					let msgdata = {
+					player: window.PLAYER_NAME,
+					img: window.PLAYER_IMG,
+					text: dmg_heal_text,
+				};
+				window.MB.inject_chat(msgdata);
 			}
-			else{
-				dmg_heal_text = token.options.name + " heals for " + damage +" (adjust manually)";
-			}
-				let msgdata = {
-				player: window.PLAYER_NAME,
-				img: window.PLAYER_IMG,
-				text: dmg_heal_text,
-			};
-			window.MB.inject_chat(msgdata);
 		}
 		//token.place_sync_persist();	
 		// bit of overlap with place_sync_persist nad update_and_sync, so probably break it up, just to only sync once.
