@@ -115,16 +115,7 @@ function getRandomColorOLD() {
 	return color;
 }
 
-/**
- * Generates a random uuid string.
- * @returns String
- */
-function uuid() {
-	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-		let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-		return v.toString(16);
-	});
-}
+
 
 /**
  * Generates a random integer number between min and max.
@@ -696,28 +687,7 @@ function set_pointer(data, dontscroll = false) {
 	}
 }
 
-/**
- * Add .notification and .highlight-gamelog classes to #switch_gamelog.
- */
-function notify_gamelog() {
-	if (window.color) {
-		$("#switch_gamelog").css("--player-border-color", window.color);
-	}
-	if (!$("#switch_gamelog").hasClass("selected-tab")) {
-		if ($("#switch_gamelog").hasClass("notification")) {
-			$("#switch_gamelog").removeClass("notification");
-			setTimeout(function() {
-				$("#switch_gamelog").addClass("notification");
-			}, 400);
-		} else {
-			$("#switch_gamelog").addClass("notification");
-		}
-	}
 
-	if ($(".GameLog_GameLog__2z_HZ").scrollTop() < 0) {
-		$(".GameLog_GameLog__2z_HZ").addClass("highlight-gamelog");
-	}
-}
 
 /**
  * Add .notification and .highlight-gamelog classes to #switch_gamelog.
@@ -840,13 +810,16 @@ function load_monster_stat(monsterId, tokenId, customStatBlock=undefined) {
 		let container = build_draggable_monster_window();
 		display_stat_block_in_container(customStatBlock, container, tokenId, customStatBlock);
 		$(".sidebar-panel-loading-indicator").remove();
+		container.attr('data-name', window.all_token_objects[tokenId].options.name);
 		return;
 	}
 	if(window.all_token_objects[tokenId].options.monster == 'open5e'){
 		let container = build_draggable_monster_window();
 		build_and_display_stat_block_with_id(window.all_token_objects[tokenId].options.stat, container, tokenId, function () {
 			$(".sidebar-panel-loading-indicator").remove();
+			container.attr('data-name', window.all_token_objects[tokenId].options.name);
 		}, true);
+
 		return;
 	}
 	if (should_use_iframes_for_monsters()) {
@@ -856,6 +829,7 @@ function load_monster_stat(monsterId, tokenId, customStatBlock=undefined) {
 	let container = build_draggable_monster_window();
 	build_and_display_stat_block_with_id(monsterId, container, tokenId, function () {
 		$(".sidebar-panel-loading-indicator").remove();
+		container.attr('data-name', window.all_token_objects[tokenId].options.name);
 	});
 }
 
@@ -1196,7 +1170,7 @@ function minimize_player_monster_window_double_click(titleBar) {
 			titleBar.addClass("minimized");
 			titleBar.removeClass("restored");
 			// titleBar.prepend('<div class="monster_title">Monster: '+$("#resizeDragMon iframe").contents().find(".mon-stat-block__name-link").text()+"</div>");
-			titleBar.prepend('<div class="monster_title">Monster: '+$("#monster_block").contents().find(".mon-stat-block__name-link").text()+"</div>");
+			titleBar.prepend('<div class="monster_title">Monster: '+titleBar.attr('data-name')+"</div>");
 
 		} else if(titleBar.hasClass("minimized")) {
 			titleBar.data("prev-minimized-top", titleBar.css("top"));
@@ -1595,7 +1569,7 @@ function minimize_player_window_double_click(titleBar) {
 			titleBar.width(200);
 			titleBar.addClass("minimized");
 			titleBar.removeClass("restored");
-			titleBar.prepend('<div class="player_title">Player: '+$("#sheet iframe").contents().find(".ddbc-character-name").text()+"</div>");
+			titleBar.prepend('<div class="player_title">Player: '+$("#sheet").attr("data-name")+"</div>");
 		} else if(titleBar.hasClass("minimized")) {
 			titleBar.data("prev-minimized-top", titleBar.css("top"));
 			titleBar.data("prev-minimized-left", titleBar.css("left"));
@@ -1803,7 +1777,7 @@ function init_player_sheet(pc_sheet, loadWait = 0) {
  * @param {Boolean} closeIfOpen - currenlty not in use
  * @returns
  */
-function open_player_sheet(sheet_url, closeIfOpen = true) {
+function open_player_sheet(sheet_url, closeIfOpen = true, playerName = '') {
 	if($("#sheet.minimized").length > 0) {
 		$("#sheet.minimized").dblclick();
 	}
@@ -1821,9 +1795,9 @@ function open_player_sheet(sheet_url, closeIfOpen = true) {
 
 	iframe.attr('data-sheet_url',sheet_url);
 	iframe.attr('src', sheet_url);
+	const playerId = sheet_url.split('/').pop();
 
-
-
+	container.attr('data-name', playerName);
 	// lock this sheet
 	window.MB.sendMessage("custom/myVTT/lock", { player_sheet: sheet_url });
 	iframe.off("load").on("load", function(event) {
@@ -1948,6 +1922,7 @@ function open_player_sheet(sheet_url, closeIfOpen = true) {
 		if (window.JOINTHEDICESTREAM) {
 			joinDiceRoom();
 		}
+
 
 		// WIP to allow players to add in tokens from their extra tab
 		// observe_character_sheet_companion($(event.target).contents());
@@ -2164,324 +2139,7 @@ function monitor_character_sidebar_changes() {
 
 
 
-/**
- * Add Dice buttons into sidebar.
- *
- * We add dice buttons and an input for chatting in the gamelog.
- * This does that injection on initial load as well as any time the character sheet re-adds the gamelog to the sidebar.
- * See `monitor_character_sidebar_changes` for more details on sidebar changes.
- * @returns
- */
-function inject_chat_buttons() {
-	const gameLog = $(".glc-game-log");
-	if (gameLog.find("#chat-text").length > 0) {
-		// make sure we only ever inject these once. This gets called a lot on the character sheet which is intentional, but just in case we accidentally call it too many times, let's log it, and return
-		return;
-	}
 
-	const chatTextWrapper = $(`<div class='chat-text-wrapper sidebar-hover-text' data-hover="Dice Rolling Format: /cmd diceNotation action  &#xa;
-		'/r 1d20'&#xa;
-		'/roll 1d4 punch:bludgeoning damage'&#xa;
-		'/hit 2d20kh1+2 longsword ADV'&#xa;
-		'/dmg 1d8-2 longsword:slashing'&#xa;
-		'/save 2d20kl1 DEX DISADV'&#xa;
-		'/skill 1d20+1d4 Thieves' Tools + Guidance'&#xa;
-		Advantage: 2d20kh1 (keep highest)&#xa;
-		Disadvantage: 2d20kl1 (keep lowest)&#xa;
-		'/w [playername] a whisper to playername'"><input id='chat-text' autocomplete="off" placeholder='Chat, /r 1d20+4..'></div>`
-	);
-  const diceRoller = $(`
-		<div class="dice-roller">
-			<div>
-				<img title="d4" alt="d4" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d4.svg"}"/>
-			</div>
-			<div>
-				<img title="d6" alt="d6" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d6.png"}"/>
-			</div>
-			<div>
-				<img title="d8" alt="d8" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d8.svg"}"/>
-			</div>
-			<div>
-				<img title="d10" alt="d10" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d10.svg"}"/>
-			</div>
-			<div>
-				<img title="d100" alt="d100" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d100.png"}"/>
-			</div>
-			<div>
-				<img title="d12" alt="d12" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d12.svg"}"/>
-			</div>
-			<div>
-				<img title="d20" alt="d20" height="40px" src="${window.EXTENSION_PATH + "assets/dice/d20.svg"}"/>
-			</div>
-		</div>
-	`)	
-	const languageSelect= $(`<select id='chat-language'></select>`)
-	const ignoredLanguages = ['All'];
-
-	const knownLanguages = get_my_known_languages();
-	for (const language of window.ddbConfigJson.languages) {
-		if (ignoredLanguages.includes(language.name))
-			continue;
-		if (!window.DM && !knownLanguages.includes(language.name))
-			continue;
-		const option = $(`<option value='${language.id}'>${language.name}</option>`)
-		languageSelect.append(option);
-	}
-
-	gameLog.append(chatTextWrapper, languageSelect, diceRoller);
-
-	$(".dice-roller > div img").on("click", function(e) {
-		if ($(".dice-toolbar__dropdown").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
-			// DDB dice are on the screen so let's use those. Ours will synchronize when these change.
-			if (!$(".dice-toolbar__dropdown").hasClass("dice-toolbar__dropdown-selected")) {
-				// make sure it's open
-				$(".dice-toolbar__dropdown-die").click();
-			}
-			// select the DDB dice matching the one that the user just clicked
-			let dieSize = $(this).attr("alt");
-			$(`.dice-die-button[data-dice='${dieSize}']`).click();
-		} else {
-			// there aren't any DDB dice on the screen so use our own
-			const dataCount = $(this).attr("data-count");
-			if (dataCount === undefined) {
-				$(this).attr("data-count", 1);
-				$(this).parent().append(`<span class="dice-badge">1</span>`);
-			} else {
-				$(this).attr("data-count", parseInt(dataCount) + 1);
-				$(this).parent().append(`<span class="dice-badge">${parseInt(dataCount) + 1}</span>`);
-			}
-			if ($(".dice-roller > div img[data-count]").length > 0) {
-				if(!$(".roll-mod-container").hasClass('show')){
-					$(".roll-mod-container").addClass("show");
-					$(".roll-mod-container").find('input').val(0);
-				}
-			} else {
-				$(".roll-mod-container").removeClass("show");
-			}
-		}
-	});
-
-	
-	window.rollButtonObserver = new MutationObserver(function() {
-        // Any time the DDB dice buttons change state, we want to synchronize our dice buttons to match theirs.
-			$(".dice-die-button").each(function() {
-				let dieSize = $(this).attr("data-dice");
-				let ourDiceElement = $(`.dice-roller > div img[alt='${dieSize}']`);
-				let diceCountElement = $(this).find(".dice-die-button__count");
-				ourDiceElement.parent().find("span").remove();
-				if (diceCountElement.length == 0) {
-					ourDiceElement.removeAttr("data-count");
-				} else {
-					let diceCount = parseInt(diceCountElement.text());
-					ourDiceElement.attr("data-count", diceCount);
-					ourDiceElement.parent().append(`<span class="dice-badge">${diceCount}</span>`);
-				}
-			})
-
-
-			// make sure our roll button is shown/hidden after all animations have completed
-			setTimeout(function() {
-				if ($(".dice-toolbar").hasClass("rollable")) {
-					if(!$(".roll-mod-container").hasClass('show')){
-						$(".roll-mod-container").addClass("show");
-						$(".roll-mod-container").find('input').val(0);
-					}
-				} else {
-					$(".roll-mod-container").removeClass("show");
-				}
-			}, 0);	
-    })
-
-	let watchForDicePanel = new MutationObserver((mutations) => {
-	 mutations.every((mutation) => {
-	    if (!mutation.addedNodes) return
-
-	    for (let i = 0; i < mutation.addedNodes.length; i++) {
-	      // do things to your newly added nodes here
-	      let node = mutation.addedNodes[i]
-	      if ((node.className == 'dice-rolling-panel' || $('.dice-rolling-panel').length>0)){
-	        const mutation_target = $(".dice-toolbar__dropdown")[0];
-			const mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
-			window.rollButtonObserver.observe(mutation_target, mutation_config);
-			watchForDicePanel.disconnect();
-			return false;
-	      }
-	    }
-	    return true // must return true if doesn't break
-	  })
-	});
-
-	window.sendToDefaultObserver = new MutationObserver(function() {
-    	localStorage.setItem(`${gameId}-sendToDefault`, gamelog_send_to_text());
-	})
-
-
-	let gamelogObserver = new MutationObserver((mutations) => {
-	 mutations.every((mutation) => {
-	    if (!mutation.addedNodes) return
-	    for (let i = 0; i < mutation.addedNodes.length; i++) {
-	      // do things to your newly added nodes here
-	      let node = mutation.addedNodes[i]
-	      if($(node).attr('class')?.includes('-SendToLabel') || $('.glc-game-log [class*="-SendToLabel"] ~ button').length>0){
-	      	const sendto_mutation_target = $(".glc-game-log [class*='-SendToLabel'] ~ button")[0];
-					const sendto_mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
-					window.sendToDefaultObserver.observe(sendto_mutation_target, sendto_mutation_config);
-					gamelogObserver.disconnect();
-					return false;
-	      }
-	    }
-	    return true // must return true if doesn't break
-	  })
-	});
-
-	watchForDicePanel.observe(document.body, {childList: true, subtree: true, attributes: false, characterData: false});
-	gamelogObserver.observe(document.body, {childList: true, subtree: true, attributes: false, characterData: false});
-
-	
-
-
-
-	
-
-	
-
-	$(".dice-roller > div img").on("contextmenu", function(e) {
-		e.preventDefault();
-
-		if ($(".dice-toolbar__dropdown").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
-			// There are DDB dice on the screen so update those buttons. Ours will synchronize when these change.
-			// the only way I could get this to work was with pure javascript. Everything that I tried with jQuery did nothing
-			let dieSize = $(this).attr("alt");
-			let  element = $(`.dice-die-button[data-dice='${dieSize}']`)[0];
-			let  e = element.ownerDocument.createEvent('MouseEvents');
-			e.initMouseEvent('contextmenu', true, true,
-					element.ownerDocument.defaultView, 1, 0, 0, 0, 0, false,
-					false, false, false, 2, null);
-			element.dispatchEvent(e);
-		} else {
-			let dataCount = $(this).attr("data-count");
-			if (dataCount !== undefined) {
-				dataCount = parseInt(dataCount) - 1;
-				if (dataCount === 0) {
-					$(this).removeAttr("data-count");
-					$(this).parent().find("span").remove();
-				} else {
-					$(this).attr("data-count", dataCount);
-					$(this).parent().append(`<span class="dice-badge">${dataCount}</span>`);
-				}
-			}
-			if ($(".dice-roller > div img[data-count]").length > 0) {
-				if(!$(".roll-mod-container").hasClass('show')){
-					$(".roll-mod-container").addClass("show");
-					$(".roll-mod-container").find('input').val(0);
-				}
-			} else {
-				$(".roll-mod-container").removeClass("show");
-			}
-		}
-	});
-
-	if ($(".roll-button").length == 0) {
-		const rollButton = $(`<button class="roll-button">Roll</button>`);
-		const modInput = $(`<div class='roll-mod-container'>
-				<button class="roll-button-mod minus">-</button>
-				<input class="roll-input-mod" type='number' value='0' step='1'></input>
-				<button class="roll-button-mod plus">+</button>
-			</div>`)
-		modInput.append(rollButton);
-
-		
-		$("body").append(modInput);
-
-		modInput.off('click.button').on('click.button', 'button.roll-button-mod', function(e){
-			e.preventDefault();
-			const clickedButton = $(this)
-			const input = modInput.find('input');
-			if(clickedButton.hasClass('minus')){
-				input.val(parseInt(input.val())-1);
-			}
-			else if(clickedButton.hasClass('plus')){
-				input.val(parseInt(input.val())+1);
-			}
-		});
-		rollButton.on("click", function (e) {
-			let modValue = parseInt($('.roll-input-mod').val())
-			if ($(".dice-toolbar").hasClass("rollable") && modValue == 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {			
-					let theirRollButton = $(".dice-toolbar__target").children().first();
-					if (theirRollButton.length > 0) {
-						// we found a DDB dice roll button. Click it and move on
-						theirRollButton.click();
-						return;
-					}
-			}
-
-			const rollExpression = [];
-			const diceToCount = $(".dice-roller > div img[data-count]").length>0 ? $(".dice-roller > div img[data-count]") : $('.dice-die-button__count')
-			diceToCount.each(function() {
-				let count, dieType;
-				if($(this).is('.dice-die-button__count')){
-					count = $(this).text();
-					dieType = $(this).closest('[data-dice]').attr("data-dice");
-				}
-				else{
-					count = $(this).attr("data-count");
-					dieType = $(this).attr("alt");
-				}
-				rollExpression.push(count + dieType);
-			});
-			$('.dice-toolbar__dropdown-selected>div:first-of-type')?.click();
-			let expression = `${rollExpression.join("+")}${modValue<0 ? modValue : `+${modValue}`}`
-			let sendToDM = window.DM || false;
-			let sentAsDDB = send_rpg_dice_to_ddb(expression, sendToDM);
-			if (!sentAsDDB) {
-				const roll = new rpgDiceRoller.DiceRoll(rollExpression.join("+"));
-				
-				const text = roll.output;
-				const uuid = new Date().getTime();
-				const data = {
-					player: window.PLAYER_NAME,
-					img: window.PLAYER_IMG,
-					text: text,
-					dmonly: sendToDM,
-					id: window.DM ? `li_${uuid}` : undefined
-				};
-				window.MB.inject_chat(data);
-
-				if (window.DM) { // THIS STOPPED WORKING SINCE INJECT_CHAT
-					$("#" + uuid).on("click", () => {
-						const newData = {...data, dmonly: false, id: undefined, text: text};
-						window.MB.inject_chat(newData);
-						$(this).remove();
-					});
-				}
-						
-			}
-
-			$(".roll-mod-container").removeClass("show");
-			$(".dice-roller > div img[data-count]").removeAttr("data-count");
-			$(".dice-roller > div span").remove();
-		});
-	}
-
-	if (window.chatObserver === undefined) {
-		window.chatObserver = new ChatObserver();
-	}
-	window.chatObserver.observe($("#chat-text"));
-	$(".GameLog_GameLog__2z_HZ").scroll(function() {
-		if ($(this).scrollTop() >= 0) {
-			$(this).removeClass("highlight-gamelog");
-		}
-	});
-
-	// open, resize, then close the `Send To: (Default)` drop down. It won't resize unless it's open
-	$("div.MuiPaper-root.MuiMenu-paper").click();
-	setTimeout(function() {
-		$("div.MuiPaper-root.MuiMenu-paper").css({
-			"min-width": "200px"
-		})
-		$("div.MuiPaper-root.MuiMenu-paper").click();
-	}, 0);
-}
 
 /**
  * Initializes the user interface.
@@ -3258,6 +2916,8 @@ function init_zoom_buttons() {
 			window.SelectedTokenVision = true;
 		}
 		redraw_light();	
+    if(window.DM && !window.SelectedTokenVision)
+      do_check_token_visibility();
 	});
 	if(defaultValues.selectedTokenVision != undefined){
 		selected_token_vision.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active', defaultValues.selectedTokenVision); 
@@ -4175,6 +3835,7 @@ function show_sidebar(dispatchResize = true) {
 	} else {
 		let sidebar = is_characters_page() ? $(".ct-sidebar__portal") : $(".sidebar--right");
 		sidebar.css("transform", "translateX(0px)");
+		$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', false)
 	}
 
 	if (is_characters_page()) {
@@ -4330,6 +3991,7 @@ function hide_sidebar(triggerResize = true) {
 	} else {
 		let sidebar = is_characters_page() ? $(".ct-sidebar__portal") : $(".sidebar--right");
 		sidebar.css("transform", "translateX(340px)");
+		$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', true)
 	}
 
 	if (is_characters_page()) {

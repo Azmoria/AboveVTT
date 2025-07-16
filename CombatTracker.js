@@ -77,7 +77,7 @@ function init_combat_tracker(){
 	const ct_title_bar_popout=$('<div class="popout-button"><svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"/></svg></div>');
 	const ct_title_bar_exit=$('<div id="combat_tracker_title_bar_exit"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>')
 	let ct_area=$("<table id='combat_area'/>");
-	const ct_list_wrapper = $(`<div class="tracker-list"></div>`);
+	const ct_list_wrapper = $(`<div class="tracker-list default-tracker"></div>`);
 	ct_list_wrapper.mouseover(function(){
 		$(this).css('--scrollY', $(this).scrollTop());
 	});
@@ -166,7 +166,6 @@ function init_combat_tracker(){
 	let reset_rounds=$("<button style='font-size: 10px;'>RESET</button>");
 	
 	reset_rounds.click(function (){
-		$(e.target).select();
 		window.ROUND_NUMBER = 1;
 		document.getElementById('round_number').value = window.ROUND_NUMBER;
 		let tokenID = $("#combat_area tr[data-current]").attr('data-target');
@@ -323,8 +322,8 @@ function init_combat_tracker(){
 				next=$("#combat_area tr:not([skipTurn])").first()
 			}
 			next.attr('data-current','1');
-			if($("#resizeDragMon:not(.hideMon)").length>0 && $("[data-current] button.openSheetCombatButton").css('visibility') == 'visible' && !$('[data-current]').attr('data-target').startsWith('/profile')) {
-				$("[data-current] button.openSheetCombatButton").click();
+			if($("#resizeDragMon:not(.hideMon)").length>0 && $("#combat_area [data-current] button.openSheetCombatButton").css('visibility') == 'visible' && !$('[data-current]').attr('data-target').startsWith('/profile')) {
+				$("#combat_area [data-current] button.openSheetCombatButton").click();
 			}
 			let newTarget=$("#combat_area tr[data-current=1]").attr('data-target');
 			if(window.TOKEN_OBJECTS[currentTarget] != undefined){
@@ -391,7 +390,7 @@ function init_combat_tracker(){
 			}
 			prev.attr('data-current','1');
 			if($("#resizeDragMon:not(.hideMon)").length>0) {
-				$("[data-current][data-monster] button.openSheetCombatButton").click();
+				$("#combat_area [data-current][data-monster] button.openSheetCombatButton").click();
 			}
 			let newTarget=$("#combat_area tr[data-current=1]").attr('data-target');
 			if(window.TOKEN_OBJECTS[currentTarget] != undefined){
@@ -503,7 +502,304 @@ function init_combat_tracker(){
 	$("#combat_tracker_inside").mousedown(function() {
 		frame_z_index_when_click($(this));
 	});
+
+	if(getCombatTrackersettings().carousel == '1'){
+		init_carousel_combat_tracker()
+	}
 }
+function init_carousel_combat_tracker(){
+    $('#combat_carousel_container, #combat_area_carousel').remove();
+    const container = $('body');
+    const sidebarClosed = $(`#hide_rightpanel`).hasClass('point-left');
+    const carouselContainer = $(`<div id="combat_carousel_container" class="tracker-list ${sidebarClosed ? 'sidebarClosed' : ''}">`);
+    const table = $('#combat_area').clone(true, true);
+    table.attr('id', 'combat_area_carousel');
+    table.find('td:not(:first-of-type, :last-of-type), tr[skipturn], .expandgroup').remove();
+	  const currentTurnToken = table.find('tr[data-current="1"]');
+	  table.find('td video').removeAttr('disableremoteplayback').attr('autoplay', true).attr('loop', true);
+	  const firstTokenId = $('#combat_area tr:first-of-type').attr('data-target');
+	  if(currentTurnToken.length == 0){
+	    table.find('tr:gt(7)').remove()
+	  }
+	  else{
+	  	const prevRows = currentTurnToken.prevAll('tr');
+	  	const nextRows = currentTurnToken.nextAll('tr');
+	  	
+
+	  	const prevRowsRemove = currentTurnToken.prevUntil(':not(tr)').filter((index) => ![0, 1, 2].includes(index)); // Filters by index.;
+	  	const nextRowsRemove = currentTurnToken.nextUntil(':not(tr)').filter((index) => ![0, 1, 2].includes(index));
+	  	
+	  	const originalTable = table.clone(true, true);
+
+
+	  	if(prevRows.length < 4){    		
+		    for(let i = 1; i < 4-prevRows.length; i++){
+		        table.prepend(originalTable.find(`tr:nth-last-of-type(${i})`).clone(true, true).removeAttr('data-current'));
+		    }   	  
+	  	}
+	  	if(nextRows.length < 4){		
+		    for(let i = 1; i < 4-nextRows.length; i++){
+		        table.append(originalTable.find(`tr:nth-of-type(${i})`).clone(true, true).removeAttr('data-current'));
+		    }  
+	  	}
+
+	    prevRowsRemove.remove();
+	    nextRowsRemove.remove();
+	    
+	  }
+    const prevButtonClone = $('#combat_prev_button').clone(true, true);
+    const nextButtonClone = $('#combat_next_button').clone(true, true);
+    table.find(`tr[data-target='${firstTokenId}']`).toggleClass('first-in-round', true);
+    prevButtonClone.text('<');
+    nextButtonClone.text('>');
+    if(window.DM)
+    	carouselContainer.append(prevButtonClone, table, nextButtonClone);
+    else
+    	carouselContainer.append(table);
+
+    $('body').append(carouselContainer, `<style id='carousel_styles'>
+      #combat_carousel_container.tracker-list{
+          left: calc(50% - 120px);
+          transform: translateX(-50%);
+          position:fixed;
+          top:0px;
+          width: 50%;
+          min-width: 200px;
+    	    max-width: 700px;
+          z-index:20000;
+          background: none !important;
+          pointer-events:none;
+      }
+      #combat_carousel_container.tracker-list.sidebarClosed{
+    		left: 50%;
+      }
+     #combat_carousel_container tr {
+          display: flex;
+  				min-height:105px !important;
+      }
+      #combat_carousel_container tr :is(img, video) {
+          width:80px;
+          height: 80px;   
+      }
+      #combat_carousel_container tr.first-in-round:before{
+			  background:#ffffff00;
+			  position:absolute;
+			  height:60px;
+			  width:0px;
+			  left:-2px;
+			  content:'';
+			  top:43px;
+			  transform:translateY(-50%);
+			  border:1px dashed #fff;
+			  border-radius:5px;
+			}
+      #combat_carousel_container tr[data-current="1"] :is(img, video){
+          width:100px;
+          height:100px;
+      }
+      #combat_carousel_container table {
+          display: flex;
+          justify-content: center;
+          flex-wrap: nowrap;
+      }
+      
+      #combat_carousel_container #combat_area_carousel tr[data-current]{
+          background: none !important;
+          box-shadow:none !important;
+          
+      }
+      #combat_carousel_container .selected-token td:first-of-type:before {
+          width:78px;
+          height: 78px;
+          top: 3px;
+          left: 3px;
+      }
+      #combat_carousel_container .selected-token[data-current='1'] td:first-of-type:before {
+          width:98px;
+          height: 98px;
+          top: 3px;
+          left: 3px;
+      }
+      #combat_carousel_container #combat_area_carousel tr[data-current]{
+          padding:0px;
+      }    
+      #combat_carousel_container table .ac {
+          top:60px;
+          left:60px;
+      }
+      #combat_carousel_container table [data-current='1'] .ac {
+          top:80px;
+          left:80px;
+      }
+      #combat_carousel_container #combat_area_carousel .conditions{
+          top:1px;
+      }
+      #combat_carousel_container #combat_area_carousel .conditions{
+        width: 70px !important;
+    		left: 20px !important;
+    	}
+      #combat_carousel_container #combat_area_carousel [data-current='1'] .conditions{
+        width: 90px !important;
+    		left: 20px !important;
+      }
+      #combat_carousel_container tr:first-of-type{
+          mask-image: linear-gradient(to left, #000, transparent)
+      }
+      #combat_carousel_container tr:last-of-type{
+          mask-image: linear-gradient(to right, #000, transparent)
+      }
+    	#combat_carousel_container tr td:last-of-type{
+    	  display: flex;
+	      z-index: 1;
+	      left: 2px;
+	      top: 1px;
+	      width: 24px;
+	      height: 80px;
+	      position: absolute;
+	      flex-direction: column;
+	      pointer-events: all;
+	      flex-wrap: wrap;
+    	}
+    	#combat_carousel_container tr td:last-of-type button{
+  	    width: 20px;
+  	    height:20px;
+  	    margin-left:5px;
+  	    outline: none;
+  	    background: transparent;
+  	    border:none;
+  	    scale:0.8;
+    		margin: 0px;
+    	}
+
+    	#combat_carousel_container tr td:last-of-type button svg{
+    	    filter: drop-shadow(#000 0px 0px 2px)
+    	}
+    	#combat_carousel_container tr td:last-of-type button:hover svg{
+    	    filter: drop-shadow(#fff 0px 0px 2px)
+    	}
+    	#combat_carousel_container{
+			    display:flex;
+			}
+			#combat_carousel_container #combat_prev_button {
+			  left:10px;
+			}
+
+			#combat_carousel_container #combat_next_button{
+			  right:10px; 
+			}
+
+			#combat_carousel_container #combat_prev_button, 
+			#combat_carousel_container #combat_next_button {
+			    background: none !important;
+			    border: none;
+			    color: #fffd;
+			    filter: drop-shadow(0px 0px 5px black);
+			    font-size: 30px;
+			    display: flex;
+			    line-height: 80px;
+			    pointer-events: all;
+			    height: 80px;
+			    box-shadow: none;
+			    position: relative;
+			    opacity: 0.8;
+			    outline:none;
+			}
+
+			#combat_carousel_container #combat_prev_button:hover, 
+			#combat_carousel_container #combat_next_button:hover{
+			   opacity:1; 
+			}
+
+			#combat_carousel_container #combat_area_carousel{
+			    max-width:100%;
+			    overflow:hidden;
+			}
+
+			#combat_carousel_container .openEye path:not([fill*="none"]), 
+			#combat_carousel_container .closedEye path:not([fill*="none"]), 
+			#combat_carousel_container .hideSVG path:not([fill*="none"]), 
+			#combat_carousel_container .rollSVG path:not([fill*="none"]), 
+			#combat_carousel_container .findSVG path:not([fill*="none"]), 
+			#combat_carousel_container .delSVG path:not([fill*="none"]), 
+			#combat_carousel_container .statSVG path:not([fill*="none"]){
+    		fill: #fff;
+			}
+    </style>`)
+}
+
+function update_carousel_combat_tracker(){
+		
+
+    const carouselContainer = $('#combat_carousel_container');
+
+    carouselContainer.find('#combat_area_carousel').remove();
+    const table = $('#combat_area').clone(true, true);
+    table.attr('id', 'combat_area_carousel');
+    table.find('td video').removeAttr('disableremoteplayback').attr('autoplay', true).attr('loop', true);
+    if(table.find('tr').length == 0){
+    	carouselContainer.empty();
+    }
+    else{
+	    table.find('td:not(:first-of-type, :last-of-type), tr[skipturn], .expandgroup').remove();
+	    const currentTurnToken = table.find('tr[data-current="1"]');
+	   	const firstTokenId = $('#combat_area tr:first-of-type').attr('data-target');
+
+	    if(currentTurnToken.length == 0){
+	    	table.find('tr:gt(7)').remove()
+	    }
+	    else{
+	    	const prevRows = currentTurnToken.prevAll('tr');
+	    	const nextRows = currentTurnToken.nextAll('tr');
+
+	    	const prevRowsRemove = currentTurnToken.prevUntil(':not(tr)').filter((index) => ![0, 1, 2].includes(index)); // Filters by index.;
+	    	const nextRowsRemove = currentTurnToken.nextUntil(':not(tr)').filter((index) => ![0, 1, 2].includes(index));
+	    	
+	    	const originalTable = table.clone(true, true);
+
+
+	    	if(prevRows.length < 4){    		
+    	    for(let i = 1; i < 4-prevRows.length; i++){
+    	        table.prepend(originalTable.find(`tr:nth-last-of-type(${i})`).clone(true, true).removeAttr('data-current'));
+    	    }   	  
+	    	}
+	    	if(nextRows.length < 4){		
+    	    for(let i = 1; i < 4-nextRows.length; i++){
+    	        table.append(originalTable.find(`tr:nth-of-type(${i})`).clone(true, true).removeAttr('data-current'));
+    	    }  
+	    	}
+
+	    	prevRowsRemove.remove();
+	    	nextRowsRemove.remove();
+	    }
+
+	    table.find(`tr[data-target='${firstTokenId}']`).toggleClass('first-in-round', true);
+
+
+
+	    if(window.DM){
+	    	if(carouselContainer.find('#combat_prev_button').length == 0){
+	    		const prevButtonClone = $('#combat_prev_button').clone(true, true);
+			    const nextButtonClone = $('#combat_next_button').clone(true, true);
+
+			    prevButtonClone.text('<');
+			    nextButtonClone.text('>');
+			    carouselContainer.append(prevButtonClone, nextButtonClone);
+	    	}
+	    	
+
+
+	    	carouselContainer.find('#combat_next_button').before(table);
+	    }
+	    else{
+	    	carouselContainer.append(table);
+	    }
+    }
+
+    
+}
+
+
+
 function getCombatTrackersettings(){
 	let combatSettingData = {};
 	if(localStorage.getItem(`abovevtt-combat-tracker-settings-${window.DM}`) == null){
@@ -512,7 +808,8 @@ function getCombatTrackersettings(){
 			scroll_to_next: 0,
 			select_next: 0,
 			auto_init: 0,
-			remove_init: 0
+			remove_init: 0,
+			carousel: 0
 		}
 	}else{
 		combatSettingData = $.parseJSON(localStorage.getItem(`abovevtt-combat-tracker-settings-${window.DM}`));
@@ -622,6 +919,17 @@ function openCombatTrackerSettings(){
 	let highlightSelectedTokensRow = form_row(`ct_selected_token`, `${window.DM ? 'Highlight Selected Token Image' : 'Highlight Selected Token Image'}`, highlightSelectedTokensToggle)
 	form.append(highlightSelectedTokensRow);
 
+	let carouselToggle = form_toggle('carousel', `Always displays some combat data as a carousel`, combatSettingData['carousel'] == '1', function(e){
+		handle_basic_form_toggle_click(e);
+		if($(e.currentTarget).hasClass("rc-switch-checked")){
+			init_carousel_combat_tracker();
+		}
+		else{
+			$('#combat_carousel_container, #carousel_styles').remove();
+		}
+	});
+	let carouselRow = form_row(`carousel`, `${window.DM ? 'Display Combat Tracker Carousel' : 'Always displays some combat data as a carousel'}`, carouselToggle)
+	form.append(carouselRow);
 
 	const cancel = $("<button type='button' id='cancel_importer'>Cancel</button>");
 	cancel.click(function() {
@@ -1030,7 +1338,7 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 				let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
 				let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
 				if(pcURL){
-					open_player_sheet(pcURL);
+					open_player_sheet(pcURL, undefined, token.options.name);
 				}else{
 					load_monster_stat(undefined, token.options.id, customStatBlock)
 				}
@@ -1094,7 +1402,7 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 	else if (token.isPlayer()) {
 		stat=$('<button class="openSheetCombatButton" style="font-size:10px;"><svg class="statSVG" xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><g><rect fill="none" height="24" width="24"/><g><path d="M19,5v14H5V5H19 M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3L19,3z"/></g><path d="M14,17H7v-2h7V17z M17,13H7v-2h10V13z M17,9H7V7h10V9z"/></g></svg></button>');
 		stat.click(function(){
-			open_player_sheet(token.options.id);
+			open_player_sheet(token.options.id, undefined, token.options.name);
 		});
 		if(window.DM)
 			buttons.append(stat);
@@ -1190,6 +1498,10 @@ function ct_update_popout(){
 		}
 		
 	}
+
+	update_carousel_combat_tracker();
+	
+
 }
 
 function ct_load(data=null){

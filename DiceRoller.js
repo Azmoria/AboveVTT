@@ -14,7 +14,7 @@ class DiceRoll {
     // don't allow changing these. They can only be set from within the constructor.
     #fullExpression = "";
     get expression() { return this.#fullExpression; }
-
+    set expression(fullExpression) {this.#fullExpression = fullExpression}
     #individualDiceExpressions = [];
     get diceExpressions() { return this.#individualDiceExpressions; }
 
@@ -192,6 +192,7 @@ class DiceRoll {
             .match(/[+\-]\d+/g) // find any numbers preceded by [+, -] // Should we support [*, /] ?
             ?.reduce((total, current) => total + current); // combine anything we find into a single string; ex: "-2+3"
         if (constantEquation) {
+            constantEquation = constantEquation.replaceAll(/(\D)0+(\d)/gi, '$1$2');
             let calculatedConstant = parseInt(eval(constantEquation.toString())); // execute the equation to get a single number
             if (!isNaN(calculatedConstant)) {
                 this.#calculatedExpressionConstant = calculatedConstant;
@@ -259,7 +260,10 @@ function getRollData(rollButton){
     let rollTitle = 'AboveVTT';
     let damageType = undefined;
     if($(rollButton).find('.ddbc-damage__value, .ct-spell-caster__modifier-amount').length>0){
-      expression = $(rollButton).find('.ddbc-damage__value, .ct-spell-caster__modifier-amount').text().replace(/\s/g, '');
+      expression = $(rollButton).find('.ddbc-damage__value, .ct-spell-caster__modifier-amount').text();
+      const damageRollRegex = /([:\s>]|^)(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)([\.\):\s<,]|$)/gi
+      expression = `${expression.match(damageRollRegex)[0].replace(/\s*/gi, '')}`
+
       if($(rollButton).find('.ct-spell-caster__modifier-amount').length>0){
         rollType ='damage';
         rollTitle = $(rollButton).closest('[class*="styles_content"]')?.find('[class*="styles_spellName"]')?.text() || rollTitle;
@@ -551,6 +555,7 @@ class DiceRoller {
                 self.#resetVariables();
             }, this.timeoutDuration);
             let msgdata = {}
+            diceRoll.expression = diceRoll.expression.replaceAll(/$\+0|\+0(\D)/gi, '$1')
             let roll = new rpgDiceRoller.DiceRoll(diceRoll.expression); 
             let regExpression = new RegExp(`${diceRoll.expression.replace(/[+-]/g, '\\$&')}:\\s`);
             let rollType = (diceRoll.rollType) ? diceRoll.rollType : 'Custom';
@@ -980,7 +985,7 @@ class DiceRoller {
                 // 2. replace each dice expression in #pendingDiceRoll.expression with the corresponding dice roll results
                 // For example: "2d20kh1+1d4-3" with rolled results of [9, 18, 2] will turn into "18+2-3"
                 // we also need to collect the results that we use which will end up being [18, 2] in this example
-                let replacedExpression = this.#pendingDiceRoll.expression.toString(); // make sure we have a new string that we alter so we don't accidentally mess up the original
+                let replacedExpression = this.#pendingDiceRoll.expression.toString().replaceAll(/(\D)0+(\d)/gi, '$1$2'); // make sure we have a new string that we alter so we don't accidentally mess up the original
                 let replacedValues = []; // will go into the roll object and DDB also parses these.
                 this.#pendingDiceRoll.diceExpressions.forEach(diceExpression => {
                     let diceType = diceExpression.match(/d\d+/g);
@@ -1006,7 +1011,7 @@ class DiceRoller {
                         let rerolledValues = calculationValues.slice(half)
                         const rerollModifier = diceExpression.match(/ro(<|<=|>|>=|=)\d+/);
                         calculationValues = rolledValues.map(value => {
-                            const rerollExpression = rerollModifier[0].replace('ro', value).replace(/(?<!(<|>))=(?!(<|>))/, "==");
+                            const rerollExpression = rerollModifier[0].replace('ro', value).replace(/(?<!(<|>))=(?!(<|>))/, "==").replaceAll(/(\D)0+(\d)/gi, '$1$2');
                             console.debug("rerollExpression", rerollExpression)
                             if (eval(rerollExpression)) {
                                 return rerolledValues.shift();
@@ -1021,7 +1026,7 @@ class DiceRoller {
                         // any value that evaluates to true is set to the minimum value
                         const minRoll = /min(\d+)/.exec(diceExpression);
                         calculationValues = calculationValues.map(value => {
-                            const minExpression = minRoll[0].replace('min', `${value}<`);
+                            const minExpression = minRoll[0].replace('min', `${value}<`).replaceAll(/(\D)0+(\d)/gi, '$1$2');
                             console.debug("minExpression", minExpression)
                             if (eval(minExpression)) {
                                 return minRoll[1];

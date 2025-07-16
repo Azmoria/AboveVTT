@@ -1701,6 +1701,25 @@ function did_click_row(clickEvent) {
           clickedRow.toggleClass('selected', true);
         }  
       }
+      else if(clickedItem.type == ItemType.PC){
+        open_player_sheet(clickedItem.sheet, undefined, clickedItem.name);
+      }
+      else if(clickedItem.type == ItemType.Scene){
+        // show the preview
+        build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
+          if (clickedItem.isVideo) {
+            flyout.append(`<div style="background:lightgray;padding:10px;">This map is a video. We don't currently support previewing videos.</div>`);
+          } else {
+            flyout.append(`<img class='list-item-image-flyout' src="${clickedItem.image}" alt="scene map preview" />`);
+          }
+          flyout.css("right", "340px");
+        });
+        clickedRow.off("mouseleave").on("mouseleave", function (mouseleaveEvent) {
+          $(mouseleaveEvent.currentTarget).off("mouseleave");
+          remove_sidebar_flyout();
+        });
+      }   
+      break;
     case ItemType.Encounter:
     case ItemType.Folder:
       if (clickedRow.hasClass("collapsed")) {
@@ -1719,9 +1738,6 @@ function did_click_row(clickEvent) {
     case ItemType.MyToken:
       // display_sidebar_list_item_configuration_modal(clickedItem);
       break;
-    case ItemType.PC:
-      open_player_sheet(clickedItem.sheet);
-      break;
     case ItemType.Monster:
       if (clickedItem.monsterData.isReleased === true || clickedItem.monsterData.isHomebrew === true) {
         console.log(`Opening monster with id ${clickedItem.monsterData.id}, url ${clickedItem.monsterData.url}`);
@@ -1737,24 +1753,6 @@ function did_click_row(clickEvent) {
       break;
     case ItemType.BuiltinToken:
       // display_builtin_token_details_modal(clickedItem);
-      break;
-    case ItemType.Scene:
-      if(window.reorderState != 'scene'){
-        // show the preview
-        build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
-          if (clickedItem.isVideo) {
-            flyout.append(`<div style="background:lightgray;padding:10px;">This map is a video. We don't currently support previewing videos.</div>`);
-          } else {
-            flyout.append(`<img class='list-item-image-flyout' src="${clickedItem.image}" alt="scene map preview" />`);
-          }
-          flyout.css("right", "340px");
-        });
-        clickedRow.off("mouseleave").on("mouseleave", function (mouseleaveEvent) {
-          $(mouseleaveEvent.currentTarget).off("mouseleave");
-          remove_sidebar_flyout();
-        });
-      }
-      
       break;
     case ItemType.Aoe:
       // bain todo open context menu to choose style / size

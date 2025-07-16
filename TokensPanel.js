@@ -2833,7 +2833,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
 
     }
     let revealVisionInput = build_dropdown_input(revealvisionOption, auraRevealVisionEnabled, function(name, newValue) {
-        setTokenOption(name, newValue);
+        customization.setTokenOption(name, newValue);
         persist_token_customization(customization); 
     });
 
@@ -3047,8 +3047,12 @@ function build_override_token_options_button(sidebarPanel, listItem, placedToken
     let tokenOptionsButton = $(`<button class="sidebar-panel-footer-button" style="margin: 10px 0px 10px 0px;">Override Token Options</button>`);
     tokenOptionsButton.on("click", function (clickEvent) {
         build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
-            const overrideOptions = listItem.isTypeAoe() ? token_setting_options().filter(option=> availableToAoe.includes(option.name))
-                .map(option => convert_option_to_override_dropdown(option)) : token_setting_options().map(option => convert_option_to_override_dropdown(option));
+            const overrideOptions = listItem.isTypeAoe() ? 
+                token_setting_options().filter(option=> availableToAoe.includes(option.name))
+                 .map(option => convert_option_to_override_dropdown(option)) 
+                : (listItem.type === ItemType.PC || listItem.folderType === ItemType.PC)
+                ? token_setting_options().filter(option => !['player_owned'].includes(option.name)).map(option => convert_option_to_override_dropdown(option))
+                : token_setting_options().map(option => convert_option_to_override_dropdown(option));
             let optionsContainer = build_sidebar_token_options_flyout(overrideOptions, options, function(name, value) {
                 updateValue(name, value);
             }, didChange);
@@ -4802,7 +4806,7 @@ function getPersonailityTrait(){
         295: "Noncommittal",
         296: "Noncompetitive",
         297: "Obedient",
-        298: "Old-fashined",
+        298: "Old-fashioned",
         299: "Ordinary",
         300: "Outspoken",
         301: "Paternalistic",
@@ -4873,7 +4877,7 @@ function getPersonailityTrait(){
         366: "Bizarre",
         367: "Bland",
         368: "Blunt",
-        369: "Biosterous",
+        369: "Boisterous",
         370: "Brittle",
         371: "Brutal",
         372: "Calculating",
@@ -5042,7 +5046,7 @@ function getPersonailityTrait(){
         535: "Pedantic",
         536: "Perverse",
         537: "Petty",
-        538: "Pharissical",
+        538: "Pharisaical",
         539: "Phlegmatic",
         540: "Plodding",
         541: "Pompous",

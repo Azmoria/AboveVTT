@@ -745,7 +745,10 @@ function token_context_menu_expanded(tokenIds, e) {
 		let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
 		if (uniqueSettings.length === 1) {
 			currentValue = uniqueSettings[0];
+		}	else if(uniqueSettings.length === 0){
+			currentValue = undefined;
 		}
+
 		let lockDropdown = build_dropdown_input(lockSettings, currentValue, function(name, newValue) {
 			tokens.forEach(token => {
 				token.options[name] = newValue;
@@ -832,14 +835,14 @@ function token_context_menu_expanded(tokenIds, e) {
 
 
 	
-		let optionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Options</div></div>`);
+	/*	let optionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Options</div></div>`);
 		optionsRow.hover(function (hoverEvent) {
 			context_menu_flyout("options-flyout", hoverEvent, function(flyout) {
 				flyout.append(build_options_flyout_menu(tokenIds));
 				update_token_base_visibility(flyout);
 			});
 		});
-		body.append(optionsRow);
+		body.append(optionsRow);*/
 
 		if(window.DM) {
 			body.append(`<hr style="opacity: 0.3" />`);
@@ -890,7 +893,7 @@ function token_context_menu_expanded(tokenIds, e) {
 		if (token.isPlayer() && !token.options.id.includes(window.PLAYER_ID)) {
 			let button = $(`<button>Open Character Sheet<span class="material-icons icon-view"></span></button>`);
 			button.on("click", function() {
-				open_player_sheet(token.options.id);
+				open_player_sheet(token.options.id, undefined, token.options.name);
 				close_token_context_menu();
 			});
 			body.append(button);
@@ -902,7 +905,7 @@ function token_context_menu_expanded(tokenIds, e) {
 				let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
 				let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
 				if(pcURL){
-					open_player_sheet(pcURL);
+					open_player_sheet(pcURL, undefined, token.options.name);
 				}else{
 					load_monster_stat(undefined, token.options.id, customStatBlock)
 				}
@@ -1180,7 +1183,10 @@ function token_context_menu_expanded(tokenIds, e) {
 		let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
 		if (uniqueSettings.length === 1) {
 			currentValue = uniqueSettings[0];
+		}	else if(uniqueSettings.length === 0){
+			currentValue = undefined;
 		}
+
 		let lockDropdown = build_dropdown_input(lockSettings, currentValue, function(name, newValue) {
 			tokens.forEach(token => {
 				token.options[name] = newValue;
@@ -1360,6 +1366,68 @@ function token_context_menu_expanded(tokenIds, e) {
 		$(".acMenuInput").prop('readonly', true);
 		$(".hpMenuInput").prop('readonly', true);
 	}	
+	if(window.DM || (tokens.length == 1 && (tokens[0].options.player_owned == true || tokens[0].isPlayer()))){
+		let tokenNames = tokens.map(t => t.options.name);
+		let uniqueNames = [...new Set(tokenNames)];
+		let nameInput = $(`<input title="Token Name" placeholder="Token Name" name="name" type="text" />`);
+		if (uniqueNames.length === 1) {
+			nameInput.val(tokenNames[0]);
+		} else {
+			nameInput.attr("placeholder", "Multiple Values");
+		}
+
+		nameInput.on('keyup', function(event) {
+			let newName = event.target.value;
+			if (event.key == "Enter" && newName !== undefined && newName.length > 0) {
+				tokens.forEach(token => {
+					if(window.JOURNAL.notes[token.options.id]){
+						window.JOURNAL.notes[token.options.id].title = newName;
+						window.JOURNAL.persist();
+					}
+					token.options.name = newName;
+					token.place_sync_persist();
+
+				});
+			}
+		});
+		nameInput.on('focusout', function(event) {
+			let newName = event.target.value;
+			if (newName !== undefined && newName.length > 0) {
+				tokens.forEach(token => {
+					if(window.JOURNAL.notes[token.options.id]){
+						window.JOURNAL.notes[token.options.id].title = newName;
+						window.JOURNAL.persist();
+					}
+					token.options.name = newName;
+					token.place_sync_persist();		
+				});
+
+			}
+		});
+		let nameWrapper = $(`
+			<div class="token-image-modal-url-label-wrapper">
+				<div class="token-image-modal-footer-title">Name</div>
+			</div>
+		`);
+		nameWrapper.append(nameInput); // input below label
+
+
+		
+		body.append(nameWrapper);
+		let changeImageMenuButton = $("<button id='changeTokenImage' class='material-icons'>Change Token Image</button>")
+		body.append(changeImageMenuButton)
+		changeImageMenuButton.off().on("click", function() {
+			close_token_context_menu();
+			id = tokens[0].options.id;
+			if (!(id in window.TOKEN_OBJECTS)) {
+				return;
+			}
+			let tok = window.TOKEN_OBJECTS[id];
+			display_change_image_modal(tok);
+		});
+	}
+
+
 	let conditionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Conditions / Markers</div></div>`);	
 	conditionsRow.hover(function (hoverEvent) {
 		context_menu_flyout("conditions-flyout", hoverEvent, function(flyout) {
@@ -1368,15 +1436,7 @@ function token_context_menu_expanded(tokenIds, e) {
 	});
 
 	body.append(conditionsRow);
-	let adjustmentsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Adjustments</div></div>`);
-	adjustmentsRow.hover(function (hoverEvent) {
-		context_menu_flyout("adjustments-flyout", hoverEvent, function(flyout) {
-			flyout.append(build_adjustments_flyout_menu(tokenIds));
-		})
-	});
-	if(window.DM || (tokens.length == 1 && (tokens[0].options.player_owned == true || tokens[0].isPlayer()))){
-		body.append(adjustmentsRow);
-	}
+
 
 	// Auras (torch, lantern, etc)
 	let aurasRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Auras</div></div>`);
@@ -1415,7 +1475,7 @@ function token_context_menu_expanded(tokenIds, e) {
 		}
 	}
 
-	if(window.DM) {
+/*	if(window.DM) {
 		let optionsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Options</div></div>`);
 		optionsRow.hover(function (hoverEvent) {
 			context_menu_flyout("options-flyout", hoverEvent, function(flyout) {
@@ -1424,8 +1484,19 @@ function token_context_menu_expanded(tokenIds, e) {
 			});
 		});
 		body.append(optionsRow);
-	}
+	}*/
+	let adjustmentsRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item token-settings"><div class="token-image-modal-footer-title">Token Settings</div></div>`);
+	adjustmentsRow.hover(function (hoverEvent) {
+		context_menu_flyout("adjustments-flyout", hoverEvent, function(flyout) {
+			const menuBody = build_adjustments_flyout_menu(tokenIds);
+			flyout.append(menuBody);
+			update_token_base_visibility(flyout);
+		})
 
+	});
+	if(window.DM || (tokens.length == 1 && (tokens[0].options.player_owned == true || tokens[0].isPlayer()))){
+		body.append(adjustmentsRow);
+	}
 	if(window.DM) {
 		body.append(`<hr style="opacity: 0.3" />`);
 		let deleteTokenMenuButton = $("<button class='deleteMenuButton icon-close-red material-icons'>Delete</button>")
@@ -2893,6 +2964,7 @@ function build_notes_flyout_menu(tokenIds, flyout) {
 		"flex-direction": "row"
 	});
 	let editNoteButton = $(`<button class="icon-note material-icons">Create Note</button>`)
+
 	if(tokenIds.length=1){
 		let has_note=id in window.JOURNAL.notes;
 		if(has_note){
@@ -2931,6 +3003,21 @@ function build_notes_flyout_menu(tokenIds, flyout) {
 		}
 		else {
 			body.append(editNoteButton);
+			let editSharedNoteButton = $(`<button class="icon-note material-icons">Create Shared Note</button>`)
+			editSharedNoteButton.off().on("click", function(){
+				if (!(id in window.JOURNAL.notes)) {
+					let title = window.TOKEN_OBJECTS[id] ? window.TOKEN_OBJECTS[id].options.name : `Note`
+					window.JOURNAL.notes[id] = {
+						title: title,
+						text: '',
+						plain: '',
+						player: true
+					}
+				}
+				$('#tokenOptionsClickCloseDiv').click();
+				window.JOURNAL.edit_note(id);
+			});	
+			body.append(editSharedNoteButton);
 		}
 
 		editNoteButton.off().on("click", function(){
@@ -3158,6 +3245,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 	let isAoeList = tokens.map(t => t.isAoe());
 	let uniqueAoeList = [...new Set(isAoeList)];
 	const allTokensAreAoe = (uniqueAoeList.length === 1 && uniqueAoeList[0] === true);
+	let player_selected = false;
 
 	let body = $("<div></div>");
 	body.css({
@@ -3165,51 +3253,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 		padding: "5px"
 	});
 	// name
-	let tokenNames = tokens.map(t => t.options.name);
-	let uniqueNames = [...new Set(tokenNames)];
-	let nameInput = $(`<input title="Token Name" placeholder="Token Name" name="name" type="text" />`);
-	if (uniqueNames.length === 1) {
-		nameInput.val(tokenNames[0]);
-	} else {
-		nameInput.attr("placeholder", "Multiple Values");
-	}
-
-	nameInput.on('keyup', function(event) {
-		let newName = event.target.value;
-		if (event.key == "Enter" && newName !== undefined && newName.length > 0) {
-			tokens.forEach(token => {
-				if(window.JOURNAL.notes[token.options.id]){
-					window.JOURNAL.notes[token.options.id].title = newName;
-					window.JOURNAL.persist();
-				}
-				token.options.name = newName;
-				token.place_sync_persist();
-
-			});
-		}
-	});
-	nameInput.on('focusout', function(event) {
-		let newName = event.target.value;
-		if (newName !== undefined && newName.length > 0) {
-			tokens.forEach(token => {
-				if(window.JOURNAL.notes[token.options.id]){
-					window.JOURNAL.notes[token.options.id].title = newName;
-					window.JOURNAL.persist();
-				}
-				token.options.name = newName;
-				token.place_sync_persist();		
-			});
-
-		}
-	});
-	let nameWrapper = $(`
-		<div class="token-image-modal-url-label-wrapper">
-			<div class="token-image-modal-footer-title">Token Name</div>
-		</div>
-	`);
-	nameWrapper.append(nameInput); // input below label
-	body.append(nameWrapper);
-
+	
 	let tokenSizes = [];
 	tokens.forEach(t => {
 		if(t.isLineAoe()){
@@ -3369,19 +3413,124 @@ function build_adjustments_flyout_menu(tokenIds) {
 		});
 		body.append(borderColorWrapper);
 
-		let changeImageMenuButton = $("<button id='changeTokenImage' class='material-icons'>Change Token Image</button>")
-		body.append(changeImageMenuButton)
 
-		changeImageMenuButton.off().on("click", function() {
-			close_token_context_menu();
-			id = tokens[0].options.id;
-			if (!(id in window.TOKEN_OBJECTS)) {
-				return;
+	}
+	if(window.DM){
+		let token_settings = token_setting_options();
+		if (tokens.length === 1 && !tokens[0].isPlayer()){
+			let removename = "hidestat";
+			token_settings = $.grep(token_settings, function(e){
+			     return e.name != removename;
+			});
+		}
+		for (let i = 0; i < tokens.length; i++) {
+		    if(tokens[i].isPlayer()){
+		    	player_selected = true;
+		    	break;
+		    }
+		}
+		if (player_selected){
+			let removename = "player_owned";
+			token_settings = $.grep(token_settings, function(e){
+			     return e.name != removename;
+			});
+		}
+		for(let i = 0; i < token_settings.length; i++) {
+			let setting = token_settings[i];
+			if (allTokensAreAoe && !availableToAoe.includes(setting.name)) {
+				continue;
+			} else if(setting.hiddenSetting || setting.name == 'maxAge' || setting.name == 'defaultmaxhptype' || setting.name == 'placeType' || setting.globalSettingOnly || setting.name == 'lockRestrictDrop' || setting.name == 'hidden' ) {
+				continue;
 			}
-			let tok = window.TOKEN_OBJECTS[id];
-			display_change_image_modal(tok);
+
+			let tokenSettings = tokens.map(t => t.options[setting.name]);
+			let uniqueSettings = [...new Set(tokenSettings)].filter(d => d != undefined);
+			let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
+			if (uniqueSettings.length === 1) {
+				currentValue = uniqueSettings[0];
+			}	else if(uniqueSettings.length === 0){
+				currentValue = undefined;
+			}
+
+
+			if (setting.type === "dropdown") {
+				let inputWrapper = build_dropdown_input(setting, currentValue, function(name, newValue) {
+					tokens.forEach(token => {
+						token.options[name] = newValue;
+						token.place_sync_persist();
+					});
+					if(setting.name =='tokenStyleSelect'){		
+						for(let j=0; j<token_settings.length; j++){
+							let setting = token_settings[j];
+							if(setting.type === "toggle"){
+								let tokenSettings = tokens.map(t => t.options[setting.name]);
+								let uniqueSettings = [...new Set(tokenSettings)].filter(d => d != undefined);
+								let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
+								if (uniqueSettings.length === 1) {
+									currentValue = uniqueSettings[0];
+								}
+								$(`#adjustments-flyout button[name='${setting.name}']`).toggleClass('rc-switch-checked', currentValue == '1')
+							}
+							
+						}
+					}
+				});
+				if(setting.menuPosition != undefined){
+					body.find(`>div:nth-of-type(${setting.menuPosition})`).before(inputWrapper)
+				}
+				else{
+					body.append(inputWrapper);
+				}
+				
+			} else if (setting.type === "toggle") {
+				let inputWrapper = build_toggle_input(setting, currentValue, function (name, newValue) {
+					tokens.forEach(token => {
+						token.options[name] = newValue;
+						token.place_sync_persist(true);
+					});
+				});
+				if(setting.menuPosition != undefined){
+					body.find(`>div:nth-of-type(${setting.menuPosition})`).before(inputWrapper)
+				}
+				else{
+					body.append(inputWrapper);
+				}
+			} else {
+				console.warn("build_options_flyout_menu failed to handle token setting option with type", setting.type);
+			}
+		}
+		
+		let tokenMaxAges = [];
+		let tokenAges = [];
+		tokens.forEach(t => {
+			tokenMaxAges.push(t.options.maxAge);
+			tokenAges.push(t.options.age);
+		});
+		let uniqueMaxAges = [...new Set(tokenMaxAges)]
+		let uniqueAges = [...new Set(tokenAges)]
+		body.append(build_age_inputs(uniqueAges, uniqueMaxAges, 
+			function(age){
+				tokens.forEach(token => {
+					token.options.age = age;
+					token.place_sync_persist();
+				});
+			
+			}, 
+			function(maxAge, updateToken){
+
+				tokens.forEach(token => {
+					token.options.maxAge = maxAge;
+					if(updateToken)
+						token.place_sync_persist();
+				});
+			}));	
+		$(".ageMenuInput").on('focus', function(event){
+			event.target.select();
 		});
 	}
+
+
+
 	return body;
 }
 
@@ -3663,10 +3812,15 @@ function build_options_flyout_menu(tokenIds) {
 		}
 
 		let tokenSettings = tokens.map(t => t.options[setting.name]);
-		let uniqueSettings = [...new Set(tokenSettings)];
+		let uniqueSettings = [...new Set(tokenSettings)].filter(d => d != undefined);
+		if(uniqueSettings.length = 0)
+			uniqueSettings = [undefined]
 		let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
 		if (uniqueSettings.length === 1) {
 			currentValue = uniqueSettings[0];
+		}
+		else if(uniqueSettings.length === 0){
+			currentValue = undefined;
 		}
 
 		if (setting.type === "dropdown") {
@@ -4517,7 +4671,8 @@ function add_to_quick_roll_menu(token){
 	qrm_entry_buttons = $("<td style='height:100%; text-align: right; width:100%; top: 1px; position: relative; white-space:nowrap; display:flex'>");
 	
 	qrm_resistance_button.off('click.resistance').on('click.resistance', function(){
-		$(this).toggleClass('enabled');
+		qrm_resistance_button.toggleClass('enabled');
+		qrm_update_popout();
 	});
 	qrm_entry_buttons.append(qrm_resistance_button);
 
@@ -4573,7 +4728,7 @@ function add_to_quick_roll_menu(token){
 	else if (token.isPlayer() == true) {
 		stat_block=$('<button title="Open Player Stat Block" class="qrm_buttons_bar" style="display:inline-flex;"><svg class="statSVG" xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><g><rect fill="none" height="24" width="24"/><g><path d="M19,5v14H5V5H19 M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3L19,3z"/></g><path d="M14,17H7v-2h7V17z M17,13H7v-2h10V13z M17,9H7V7h10V9z"/></g></svg></button>');
 		stat_block.click(function(){
-			open_player_sheet(token.options.id);
+			open_player_sheet(token.options.id, undefined, token.options.name);
 		});
 	}
 	else{
