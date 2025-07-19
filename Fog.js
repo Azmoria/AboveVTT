@@ -2426,6 +2426,7 @@ function stop_drawing() {
 	target.off('contextmenu', drawing_contextmenu);
 	window.StoredWalls = [];
 	window.wallToStore = [];
+	window.selectedWalls = [];
 }
 
 /**
@@ -2847,44 +2848,71 @@ function drawing_mousemove(e) {
 			else if(window.DraggingWallPoints == true && window.DRAWFUNCTION == 'wall-edit'){
 				
 				const currentSceneScale = window.CURRENT_SCENE_DATA.scale_factor ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor) : 1;
-					
+				const deltaY = window.BEGIN_MOUSEY - mouseY;
 				if(window.wallsBeingDragged.length == 0){
 					for(let j = 0; j < window.DRAWINGS.length; j++){
 						const wallData = window.selectedWalls.find(d=> d.wall == window.DRAWINGS[j]);
 						const [pt1, pt2] = [wallData?.pt1, wallData?.pt2]
-
+						const scale = window.DRAWINGS[j][8];
 						if(wallData){
-							window.wallsBeingDragged.push({'drawingIndex': j, 'pt1': pt1, 'pt2': pt2})
+							window.wallsBeingDragged.push({'drawingIndex': j, 'pt1': pt1, 'pt2': pt2, 'wallScale': scale})
 							wallData.drawIndex = j;
 						}
-						const scale = window.DRAWINGS[j][8];
-						if(pt1 != undefined){
-							window.DRAWINGS[j][3] = (pt1.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
-							window.DRAWINGS[j][4] = (pt1.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+			
+						if(window.shiftHeld){
+							if(pt1 != undefined || pt2 != undefined){
+
+								const changeScaleFactor = Math.min(deltaY*scale*0.001, 0.5);
+								window.DRAWINGS[j][8] += changeScaleFactor;
+								window.DRAWINGS[j][8] = Math.max(window.DRAWINGS[j][8], 0.1);
+							}
 						}
-						if(pt2 != undefined){
-							window.DRAWINGS[j][5] = (pt2.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
-							window.DRAWINGS[j][6] = (pt2.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+						else{
+							if(pt1 != undefined){
+								window.DRAWINGS[j][3] = (pt1.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
+								window.DRAWINGS[j][4] = (pt1.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+							}
+							if(pt2 != undefined){
+								window.DRAWINGS[j][5] = (pt2.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
+								window.DRAWINGS[j][6] = (pt2.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+							}
 						}
+						
 					}
 				}
 				else{
-					
+					const mousePt1 = new Vector(window.BEGIN_MOUSEX, window.BEGIN_MOUSEY);
+					const mousePt2 = new Vector(mouseX, mouseY);
+					const mouseDist = Vector.dist(mousePt1, mousePt2);
+					const angleDir = Math.atan2(mouseY - window.BEGIN_MOUSEY, mouseX - window.BEGIN_MOUSEX);
 					
 					for(let i in window.wallsBeingDragged){
 						const [pt1, pt2, drawIndex] = [window.wallsBeingDragged[i].pt1, window.wallsBeingDragged[i].pt2, window.wallsBeingDragged[i].drawingIndex]
 						const scale = window.DRAWINGS[drawIndex][8];
-						if(pt1 != undefined){
-							window.DRAWINGS[drawIndex][3] = (pt1.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
-							window.DRAWINGS[drawIndex][4] = (pt1.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+						if(window.shiftHeld){	
+							const changeScaleFactor =  Math.min(deltaY*scale*0.001, 0.5);
+							window.DRAWINGS[drawIndex][8] += changeScaleFactor;
+							window.DRAWINGS[drawIndex][8] = Math.max(window.DRAWINGS[drawIndex][8], 0.1);
 						}
-						if(pt2 != undefined){
-							window.DRAWINGS[drawIndex][5] = (pt2.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
-							window.DRAWINGS[drawIndex][6] = (pt2.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+						else{
+							if(pt1 != undefined){
+								window.DRAWINGS[drawIndex][3] = (pt1.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
+								window.DRAWINGS[drawIndex][4] = (pt1.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+							}
+							if(pt2 != undefined){
+								window.DRAWINGS[drawIndex][5] = (pt2.x + (mouseX - window.BEGIN_MOUSEX))*scale/currentSceneScale;
+								window.DRAWINGS[drawIndex][6] = (pt2.y + (mouseY - window.BEGIN_MOUSEY))*scale/currentSceneScale;
+							}
 						}
 
 					}
 				}
+				if(window.shiftHeld){
+					window.BEGIN_MOUSEX = mouseX;
+					window.BEGIN_MOUSEY = mouseY;
+				}
+
+				
 				
 				redraw_light_walls();
 			}
