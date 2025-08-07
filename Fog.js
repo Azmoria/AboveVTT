@@ -75,7 +75,7 @@ function sync_drawings(newDraw = true){
 			window.playerDrawUndo = [];
 		window.playerDrawUndo.push(window.DRAWINGS[window.DRAWINGS.length-1]);
 	}
-
+	
 	window.MB.sendMessage("custom/myVTT/drawdata",window.DRAWINGS);
 }
 
@@ -1011,6 +1011,9 @@ function clear_grid(){
 	gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
 }
 function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color=null, lineWidth=null, subdivide=null, dash=[], columns=true, drawGrid = window.CURRENT_SCENE_DATA.grid){
+	
+	window.gridCentersArray = [];
+	
 	const gridCanvas = document.getElementById("grid_overlay");
 	gridCanvas.width = $('#scene_map').width() / window.CURRENT_SCENE_DATA.scaleAdjustment.x
 	gridCanvas.height = $('#scene_map').height() / window.CURRENT_SCENE_DATA.scaleAdjustment.y;
@@ -1036,13 +1039,13 @@ function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color
 
 
 	if(window.CURRENT_SCENE_DATA.gridType == 2){
-		if(drawGrid == 1 || window.WIZARDING){
-			for (let x = startX, j = 0; x + hexSize * Math.sin(a) < gridCanvas.width+hexSize+startX; x += 2 ** ((j + 1) % 2) * hexSize * Math.sin(a), j = 0){
-			   for (let y = startY; y + hexSize * (1 + Math.cos(a)) < gridCanvas.height+hexSize+startY; y += hexSize * (1 + Math.cos(a)), x += (-1) ** j++ * hexSize * Math.sin(a)){		    
-			    drawHexagon(x, y);
-			  }
-			}	
-		}
+		
+		for (let x = startX-4*(hexSize * Math.sin(a)), j = 0; x + hexSize * Math.sin(a) < gridCanvas.width+4*hexSize+startX; x += 2 ** ((j + 1) % 2) * hexSize * Math.sin(a), j = 0){
+		   for (let y = startY-4*(hexSize * (1 + Math.cos(a))); y + hexSize * (1 + Math.cos(a)) < gridCanvas.height+4*hexSize+startY; y += hexSize * (1 + Math.cos(a)), x += (-1) ** j++ * hexSize * Math.sin(a)){		    
+		    drawHexagon(x, y);
+		  }
+		}	
+		
 			
 
 		let hexWidth = hexSize * Math.sin(a) * 2 * window.CURRENT_SCENE_DATA.scale_factor;
@@ -1053,13 +1056,13 @@ function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color
 		}
 	}
 	else{
-		if(drawGrid == 1 || window.WIZARDING){
-			for (let y = startY, j = 0; y + hexSize * Math.sin(a) < gridCanvas.height+startY+hexSize; y += 2 ** ((j + 1) % 2) * hexSize * Math.sin(a), j = 0){
-			   for (let x = startX; x + hexSize * (1 + Math.cos(a)) < gridCanvas.width+startX+hexSize; x += hexSize * (1 + Math.cos(a)), y += (-1) ** j++ * hexSize * Math.sin(a)){
-			    drawHexagon(x, y);
-			  }
-			}
+		
+		for (let y = startY-4*(hexSize * Math.sin(a)), j = 0; y + hexSize * Math.sin(a) < gridCanvas.height+startY+4*hexSize; y += 2 ** ((j + 1) % 2) * hexSize * Math.sin(a), j = 0){
+		   for (let x = startX-4*(hexSize * (1 + Math.cos(a))); x + hexSize * (1 + Math.cos(a)) < gridCanvas.width+startX+4*hexSize; x += hexSize * (1 + Math.cos(a)), y += (-1) ** j++ * hexSize * Math.sin(a)){
+		    drawHexagon(x, y);
+		  }
 		}
+		
 		let hexWidth = hexSize * (1 + Math.cos(a)) * window.CURRENT_SCENE_DATA.scale_factor;
 		let hexHeight = hexSize * Math.sin(a) * 2 * window.CURRENT_SCENE_DATA.scale_factor;
 		window.hexGridSize = {
@@ -1069,30 +1072,34 @@ function redraw_hex_grid(hpps=null, vpps=null, offsetX=null, offsetY=null, color
 	}
 
 	function drawHexagon(x, y) {
-		if(window.CURRENT_SCENE_DATA.gridType == 3){
-		  gridContext.beginPath();
-		  gridContext.moveTo(x + hexSize, y);
-		  for (let i = 1; i <= 6; i++) {
-		    let angle = i * Math.PI / 3;
-		    let dx = hexSize * Math.cos(angle);
-		    let dy = hexSize * Math.sin(angle);
-		    gridContext.lineTo(x + dx, y + dy);
-		  }
-		  gridContext.closePath();
-		  gridContext.stroke();
+		if(drawGrid == 1 || window.WIZARDING){
+			if(window.CURRENT_SCENE_DATA.gridType == 3){
+			  gridContext.beginPath();
+			  gridContext.moveTo(x + hexSize, y);
+			  for (let i = 1; i <= 6; i++) {
+			    let angle = i * Math.PI / 3;
+			    let dx = hexSize * Math.cos(angle);
+			    let dy = hexSize * Math.sin(angle);
+			    gridContext.lineTo(x + dx, y + dy);
+			  }
+			  gridContext.closePath();
+			  gridContext.stroke();
+			}
+			else{
+			  gridContext.beginPath();
+			  gridContext.moveTo(x, y + hexSize);
+			  for (let i = 1; i <= 6; i++) {
+			    let angle = i * Math.PI / 3;
+			    let dx = hexSize * Math.sin(angle);
+			    let dy = hexSize * Math.cos(angle);
+			    gridContext.lineTo(x + dx, y + dy);
+			  }
+			  gridContext.closePath();
+			  gridContext.stroke();
+			}
 		}
-		else{
-		  gridContext.beginPath();
-		  gridContext.moveTo(x, y + hexSize);
-		  for (let i = 1; i <= 6; i++) {
-		    let angle = i * Math.PI / 3;
-		    let dx = hexSize * Math.sin(angle);
-		    let dy = hexSize * Math.cos(angle);
-		    gridContext.lineTo(x + dx, y + dy);
-		  }
-		  gridContext.closePath();
-		  gridContext.stroke();
-		}
+		
+		window.gridCentersArray.push([x,y]);
 	}
 	$('#grid_overlay').css('transform', `scale(calc(var(--scene-scale) * ${window.CURRENT_SCENE_DATA.scaleAdjustment.x}), calc(var(--scene-scale) * ${window.CURRENT_SCENE_DATA.scaleAdjustment.y}))`)
 
@@ -1365,7 +1372,7 @@ function check_darkness_value(){
 	let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
 	let darknessfilter = (window.CURRENT_SCENE_DATA.darkness_filter != undefined) ? window.CURRENT_SCENE_DATA.darkness_filter : 0;
 	let darknessPercent = window.DM ? Math.max(40, 100 - parseInt(darknessfilter)) : 100 - parseInt(darknessfilter);
-
+	$('#raycastingCanvas').css('visibility', '');
 	if(selectedTokens.length>0){
 		if(window.SelectedTokenVision === true){
 			if(window.CURRENT_SCENE_DATA.darkness_filter > 0){
@@ -1468,10 +1475,42 @@ function redraw_fog() {
 	ctx.fillStyle = fogStyle;
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+	function drawHexagon(ctx, x, y) {
+		const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+		const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+		if(window.CURRENT_SCENE_DATA.gridType == 3){
+		  ctx.beginPath();
+		  ctx.moveTo(x + hexSize, y);
+		  for (let i = 1; i <= 6; i++) {
+		    let angle = i * Math.PI / 3;
+		    let dx = hexSize * Math.cos(angle);
+		    let dy = hexSize * Math.sin(angle);
+		    ctx.lineTo(x + dx, y + dy);
+		  }
+		  ctx.closePath();
+		  ctx.fill();
+		}
+		else{
+		  ctx.beginPath();
+		  ctx.moveTo(x, y + hexSize);
+		  for (let i = 1; i <= 6; i++) {
+		    let angle = i * Math.PI / 3;
+		    let dx = hexSize * Math.sin(angle);
+		    let dy = hexSize * Math.cos(angle);
+		    ctx.lineTo(x + dx, y + dy);
+		  }
+		  ctx.closePath();
+		  ctx.fill();
+		}
+	}
+
 	for (let i = 0; i < window.REVEALED.length; i++) {
 		let d = window.REVEALED[i];
 		let adjustedArray = [];
 		let revealedScale = (d[6] != undefined) ? d[6]/window.CURRENT_SCENE_DATA.conversion : window.CURRENT_SCENE_DATA.scale_factor/window.CURRENT_SCENE_DATA.conversion;
+		const revealedRatio = (revealedScale/window.CURRENT_SCENE_DATA.scale_factor);
 		if (d.length == 4) { // SIMPLE CASE OF RECT TO REVEAL
 			ctx.clearRect(d[0]/window.CURRENT_SCENE_DATA.scale_factor, d[1]/window.CURRENT_SCENE_DATA.scale_factor, d[2]/window.CURRENT_SCENE_DATA.scale_factor, d[3]/window.CURRENT_SCENE_DATA.scale_factor);
 			continue;
@@ -1480,13 +1519,13 @@ function redraw_fog() {
 
 			if (d[4] == 0) { // REVEAL SQUARE
 				for(let adjusted = 0; adjusted < 4; adjusted++){
-					adjustedArray[adjusted] = d[adjusted] / (revealedScale/window.CURRENT_SCENE_DATA.scale_factor);
+					adjustedArray[adjusted] = d[adjusted] / revealedRatio;
 				}
 				ctx.clearRect(adjustedArray[0]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[1]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[2]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[3]/window.CURRENT_SCENE_DATA.scale_factor);
 			}
 			if (d[4] == 1) { // REVEAL CIRCLE
 				for(let adjusted = 0; adjusted < 3; adjusted++){
-					adjustedArray[adjusted] = d[adjusted] / (revealedScale/window.CURRENT_SCENE_DATA.scale_factor);
+					adjustedArray[adjusted] = d[adjusted] / revealedRatio;
 				}
 				clearCircle(ctx, adjustedArray[0], adjustedArray[1], adjustedArray[2]);
 			}
@@ -1515,11 +1554,31 @@ function redraw_fog() {
 
 				ctx.globalCompositeOperation = 'source-over';
 			}
+			if(d[4] == 7){
+				ctx.globalCompositeOperation = 'destination-out';
+
+				if(window.CURRENT_SCENE_DATA.gridType == '1'){
+					for(let i=0; i<d[0].length; i++){
+						ctx.clearRect(d[0][i][0]/window.CURRENT_SCENE_DATA.scale_factor/revealedRatio, d[0][i][1]/window.CURRENT_SCENE_DATA.scale_factor/revealedRatio, window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor, window.CURRENT_SCENE_DATA.vpps/window.CURRENT_SCENE_DATA.scale_factor);
+					}
+ 				}
+				else{
+					ctx.fillStyle = "#000"
+					ctx.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+	 				for(let i=0; i<d[0].length; i++){
+	 					drawHexagon(ctx, d[0][i][0], d[0][i][1])
+	 				}
+	 				ctx.setTransform(1, 0, 0, 1, 0, 0);
+	 			}
+			
+
+				ctx.globalCompositeOperation = 'source-over';
+			}
 		}
 		if (d[5] == 1) { // HIDE
 			if (d[4] == 0) { // HIDE SQUARE
 				for(let adjusted = 0; adjusted < 4; adjusted++){
-					adjustedArray[adjusted] = d[adjusted] / (revealedScale/window.CURRENT_SCENE_DATA.scale_factor);
+					adjustedArray[adjusted] = d[adjusted] / revealedRatio;
 				}
 				ctx.clearRect(adjustedArray[0]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[1]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[2]/window.CURRENT_SCENE_DATA.scale_factor, adjustedArray[3]/window.CURRENT_SCENE_DATA.scale_factor);
 				ctx.fillStyle = fogStyle;
@@ -1527,7 +1586,7 @@ function redraw_fog() {
 			}
 			if (d[4] == 1) { // HIDE CIRCLE
 				for(let adjusted = 0; adjusted < 3; adjusted++){
-					adjustedArray[adjusted] = d[adjusted] / (revealedScale/window.CURRENT_SCENE_DATA.scale_factor);
+					adjustedArray[adjusted] = d[adjusted] / revealedRatio;
 				}
 				clearCircle(ctx, adjustedArray[0], adjustedArray[1], adjustedArray[2]);
 				drawCircle(ctx, adjustedArray[0], adjustedArray[1], adjustedArray[2], fogStyle);
@@ -1555,6 +1614,39 @@ function redraw_fog() {
 				ctx.globalCompositeOperation = 'source-over';
 				drawBrushstroke(ctx, d[0], fogStyle, d[1], d[6]/window.CURRENT_SCENE_DATA.conversion);
 			}
+			if(d[4] == 7){
+				
+				if(window.CURRENT_SCENE_DATA.gridType == '1'){
+					for(let i=0; i<d[0].length; i++){
+						ctx.clearRect(d[0][i][0]/window.CURRENT_SCENE_DATA.scale_factor/revealedRatio, d[0][i][1]/window.CURRENT_SCENE_DATA.scale_factor/revealedRatio, window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor, window.CURRENT_SCENE_DATA.vpps/window.CURRENT_SCENE_DATA.scale_factor);
+					}
+ 				}
+				else{
+					ctx.globalCompositeOperation = 'destination-out';
+					ctx.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+	 				ctx.fillStyle = "#000000";
+	 				for(let i=0; i<d[0].length; i++){
+	 					drawHexagon(ctx, d[0][i][0], d[0][i][1])
+	 				}
+	 				ctx.setTransform(1, 0, 0, 1, 0, 0);
+	 			}				
+
+				ctx.globalCompositeOperation = 'source-over';
+				ctx.fillStyle = fogStyle;
+
+				if(window.CURRENT_SCENE_DATA.gridType == '1'){
+					for(let i=0; i<d[0].length; i++){
+						drawRect(ctx, d[0][i][0]/revealedRatio, d[0][i][1]/revealedRatio, window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps);
+					}
+				}
+				else{
+					ctx.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+	 				for(let i=0; i<d[0].length; i++){
+	 					drawHexagon(ctx, d[0][i][0], d[0][i][1])
+	 				}
+	 				ctx.setTransform(1, 0, 0, 1, 0, 0);
+	 			}
+			}
 		}
 	}
 	fogContext.filter='blur(3px)'
@@ -1568,7 +1660,8 @@ function redraw_fog() {
 function redraw_text() {
 
 	$('#text_div').empty();
-	for(let drawing in window.DRAWINGS){
+	for(let drawing=0; drawing<window.DRAWINGS.length; drawing++){
+		
 		const [shape, x, y, width, height, text, font, stroke, rectColor, textid, scale, hidden] = window.DRAWINGS[drawing]
 
 		if(shape == 'text' && textid == undefined){
@@ -1998,10 +2091,10 @@ function redraw_light_walls(clear=true){
 		
         let type = Object.keys(doorColors).find(key => Object.keys(doorColors[key]).find(key2 => doorColors[key][key2] === color))
         let open;
-        let doorButton = $(`.door-button[data-x1='${x}'][data-y1='${y}'][data-x2='${width}'][data-y2='${height}']`);
+        let doorButton = $(`.door-button[data-x1='${x}'][data-y1='${y}'][data-x2='${width}'][data-y2='${height}'][data-scale='${scale}']`);
         let hiddenDoor = hidden ? ` hiddenDoor` : ``;
         let dataHidden = hidden;
-        let notVisible = doorButton?.hasClass('notVisible') ? true : false;
+        let notVisible = doorButton?.hasClass('notVisible') ? true : doorButton.length > 0 ? false : undefined;
 
         let doorType = (type == 1 || type == 3 || type == 6 || type == 7) ? `window` : (type == 8 || type == 9 || type == 10 || type == 11) ? `curtain` : (type == 12 || type == 13) ? `teleporter` : `door`;
 
@@ -2023,7 +2116,7 @@ function redraw_light_walls(clear=true){
 		
 			open = (/rgba.*0\.5\)/g).test(color) ? ` open` : ` closed`;
 			
-			let openCloseDoorButton = $(`<div class='door-button${locked}${secret}${open}${hiddenDoor}' ${dataHidden ? `data-hidden=true`: ''} data-x1='${x}' data-y1='${y}' data-x2='${width}' data-y2='${height}' style='--mid-x: ${midX}px; --mid-y: ${midY}px;'>
+			let openCloseDoorButton = $(`<div class='door-button ${locked}${secret}${open}${hiddenDoor}' ${dataHidden ? `data-hidden=true`: ''} data-x1='${x}' data-y1='${y}' data-x2='${width}' data-y2='${height}' data-scale='${scale}' style='--mid-x: ${midX}px; --mid-y: ${midY}px;'>
 												<div class='${doorType} background'><div></div></div>
 												<div class='${doorType} foreground'><div></div></div>
 												<div class='door-icon'></div>
@@ -2034,36 +2127,70 @@ function redraw_light_walls(clear=true){
 						
 
 						let alreadyHighlighted = false;
-						for(let i in window.CURRENTLY_SELECTED_TOKENS){
+						let tokenObject = window.TOKEN_OBJECTS[`${x}${y}${width}${height}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')]
 
-							let curr = window.TOKEN_OBJECTS[window.CURRENTLY_SELECTED_TOKENS[i]];
-							if(!window.DM && (curr.options.restrictPlayerMove || curr.options.locked) && !curr.isCurrentPlayer() && curr.options.groupId == undefined){
-								continue;
-							}
+							
+						if(tokenObject?.options?.teleporterCoords?.linkedPortalId != undefined){
+							copy_selected_tokens(tokenObject.options.teleporterCoords.linkedPortalId);
 
+	                        if(!window.DM){
+	                        	async function teleportScene(tokenObject){
+	                        		let currentScene = await AboveApi.getCurrentScene(true);
+		                        	let sceneIds = {}
+		                        	let playerId = window.PLAYER_ID;
+		                        	if(currentScene.playerscene && currentScene.playerscene.players){
+		                        	    sceneIds = {
+		                        	        ...currentScene.playerscene,         
+		                        	    };
+		                        	    sceneIds[playerId] = tokenObject.options.teleporterCoords.sceneId
+		                        	}
+		                        	else if(typeof currentScene.playerscene == 'string'){
+		                        	    sceneIds = {
+		                        	        players: currentScene.playerscene,
+		                        	    };
+		                        	    sceneIds[playerId] = tokenObject.options.teleporterCoords.sceneId
+		                        	}
+		                        	window.splitPlayerScenes = sceneIds;
+		                        	window.MB.sendMessage("custom/myVTT/switch_scene", { sceneId: sceneIds});
+		                        	window.MB.sendMessage("custom/myVTT/update_dm_player_scenes", {splitPlayerScenes: window.splitPlayerScenes});
+	                        	}
+	                        	teleportScene(tokenObject);
+	                        }
+	                        else{
+	                        	window.MB.sendMessage("custom/myVTT/switch_scene", { sceneId: tokenObject.options.teleporterCoords.sceneId, switch_dm: true });
+	                        }
+						}
+						else if(tokenObject?.options?.teleporterCoords != undefined){
 
-							let tokenObject = window.TOKEN_OBJECTS[`${x}${y}${width}${height}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')]
+						
+							for(let i=0; i<window.CURRENTLY_SELECTED_TOKENS.length; i++){
 
-							if(tokenObject.options.teleporterCoords != undefined){
+								let curr = window.TOKEN_OBJECTS[window.CURRENTLY_SELECTED_TOKENS[i]];
+								if(!window.DM && (curr.options.restrictPlayerMove || curr.options.locked) && !curr.isCurrentPlayer() && curr.options.groupId == undefined){
+									continue;
+								}
+									
 								const scaleCoversion = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor / tokenObject.options.teleporterCoords.scale : 1 / tokenObject.options.teleporterCoords.scale;
 								curr.options.left = `${tokenObject.options.teleporterCoords.left*scaleCoversion - curr.options.size/2}px`;
 								curr.options.top = `${tokenObject.options.teleporterCoords.top*scaleCoversion - curr.options.size/2}px`
-							}
-
-							curr.place(0);
-							let optionsClone = $.extend(true, {}, curr.options);
-							if(shiftHeld){
-								optionsClone.speedAnim = true;
-							}
 							
-							if(!alreadyHighlighted){
-								if(shiftHeld){					
-									optionsClone.highlightCenter = true;
+
+								curr.place(0);
+								let optionsClone = $.extend(true, {}, curr.options);
+								if(shiftHeld){
+									optionsClone.speedAnim = true;
 								}
-								alreadyHighlighted = true;
-								curr.highlight();
+								
+								if(!alreadyHighlighted){
+									if(shiftHeld){					
+										optionsClone.highlightCenter = true;
+									}
+									alreadyHighlighted = true;
+									curr.highlight();
+								}
+								curr.sync(optionsClone);
+							
 							}
-							curr.sync(optionsClone);
 						}
 						return;
 					}
@@ -2102,7 +2229,8 @@ function redraw_light_walls(clear=true){
 							redo: [[...doors[0]]]
 						})
 						redraw_light_walls();
-						redraw_light();
+				        redraw_drawn_light();
+				        redraw_light();
 
 
 						sync_drawings();
@@ -2123,8 +2251,8 @@ function redraw_light_walls(clear=true){
 	
 			let locked = (type == 2 || type == 3 || type == 5 || type == 7 || type == 9 || type == 11) ? ` locked` : ``;
 			open = (/rgba.*0\.5\)/g).test(color) ? ` open` : ` closed`;
-			if(doorButton.attr('class') != `door-button${locked}${secret}${open}${hiddenDoor}`){
-				doorButton.attr('class', `door-button${locked}${secret}${open}${hiddenDoor}`)
+			if(doorButton.attr('class') != `door-button ${locked}${secret}${open}${hiddenDoor}`){
+				doorButton.attr('class', `door-button ${locked}${secret}${open}${hiddenDoor}`)
 				doorButton.toggleClass('ignore-hover', true);
 			}
 			
@@ -2133,16 +2261,19 @@ function redraw_light_walls(clear=true){
 		if(doorButton.length ==1){
 			let id = `${x}${y}${width}${height}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','') 
 			doorButton.attr('data-id', `${x}${y}${width}${height}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.',''))
-			
-        	doorButton.toggleClass('notVisible', notVisible)
+			if(notVisible != undefined)
+        		doorButton.toggleClass('notVisible', notVisible)
 			doorButton.removeAttr('removeAfterDraw');
 
 			door_note_icon(id);
-			if(window.TOKEN_OBJECTS[id]?.options?.teleporterCoords != undefined){
+			if(window.TOKEN_OBJECTS[id]?.options?.teleporterCoords != undefined || window.TOKEN_OBJECTS[id]?.options?.teleporterCoords?.linkedPortalId !== undefined){
 				doorButton.toggleClass('linked', true);
 			}
+			if(window.TOKEN_OBJECTS[id] != undefined){
+				setTokenLight(doorButton, window.TOKEN_OBJECTS[id].options);
+			}
+			
 		}
-		
 		
 
 		if((/rgba.*0\.5\)/g).test(color))
@@ -2154,7 +2285,72 @@ function redraw_light_walls(clear=true){
 		drawnWall.scaleAdjustment = adjustedScale;
 		drawnWall.wallBottom = wallBottom;
 		drawnWall.wallTop = wallTop;
+		drawnWall.terrainWall = color === 'rgba(0, 180, 80, 1)'
 		window.walls.push(drawnWall);
+	}
+
+	if(window.DM && $('#wall_button').hasClass('button-enabled') && $('#edit_wall').hasClass('button-enabled')){
+		const selectedWallCanvas = document.createElement('canvas');
+		selectedWallCanvas.width = canvas.width;
+		selectedWallCanvas.height = canvas.height;
+		window.selectedWallCtx = selectedWallCanvas.getContext('2d')
+		window.selectedWallCtx.clearRect(0, 0, canvas.width, canvas.height);
+		const currentSceneScale = window.CURRENT_SCENE_DATA.scale_factor ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor)*window.CURRENT_SCENE_DATA.conversion : 1
+		const circleSize = 15*window.CURRENT_SCENE_DATA.scale_factor;
+		const centerDotSize = 4*window.CURRENT_SCENE_DATA.scale_factor;
+		if(window.wallsBeingDragged?.length > 0){
+			for(let i=0; i<window.wallsBeingDragged.length; i++){
+				const drawIndex = window.wallsBeingDragged[i].drawingIndex;
+				const pt1 = window.wallsBeingDragged[i].pt1;
+				const pt2 = window.wallsBeingDragged[i].pt2;
+				const scale = window.DRAWINGS[drawIndex][8];
+				if(pt1 !== undefined){
+					drawCircle(ctx, window.DRAWINGS[drawIndex][3]/scale*currentSceneScale, window.DRAWINGS[drawIndex][4]/scale*currentSceneScale, centerDotSize, '#FFF', true, 0)
+					drawCircle(ctx, window.DRAWINGS[drawIndex][3]/scale*currentSceneScale, window.DRAWINGS[drawIndex][4]/scale*currentSceneScale, centerDotSize, '#000000', false, 1)
+					
+					drawCircle(ctx, window.DRAWINGS[drawIndex][3]/scale*currentSceneScale, window.DRAWINGS[drawIndex][4]/scale*currentSceneScale, circleSize, '#000000', false, 1)	
+					drawCircle(ctx, window.DRAWINGS[drawIndex][3]/scale*currentSceneScale, window.DRAWINGS[drawIndex][4]/scale*currentSceneScale, circleSize, '#FFFFFF33', true, 0)
+						
+					drawCircle(window.selectedWallCtx, window.DRAWINGS[drawIndex][3]/scale*currentSceneScale, window.DRAWINGS[drawIndex][4]/scale*currentSceneScale, circleSize, '#FFFFFF33', true, 0)	
+				}
+				if(pt2 !== undefined){
+					drawCircle(ctx, window.DRAWINGS[drawIndex][5]/scale*currentSceneScale, window.DRAWINGS[drawIndex][6]/scale*currentSceneScale, centerDotSize, '#FFF', true, 0)
+					drawCircle(ctx, window.DRAWINGS[drawIndex][5]/scale*currentSceneScale, window.DRAWINGS[drawIndex][6]/scale*currentSceneScale, centerDotSize, '#000000', false, 1)
+					drawCircle(ctx, window.DRAWINGS[drawIndex][5]/scale*currentSceneScale, window.DRAWINGS[drawIndex][6]/scale*currentSceneScale, circleSize, '#000000', false, 1)
+					drawCircle(ctx, window.DRAWINGS[drawIndex][5]/scale*currentSceneScale, window.DRAWINGS[drawIndex][6]/scale*currentSceneScale, circleSize, '#FFFFFF33', true, 0)
+					
+					drawCircle(window.selectedWallCtx, window.DRAWINGS[drawIndex][5]/scale*currentSceneScale, window.DRAWINGS[drawIndex][6]/scale*currentSceneScale, circleSize, '#FFFFFF33', true, 0)
+				}
+			}
+		}
+		else if(window.selectedWalls != undefined){
+			for(let i=0; i<window.selectedWalls.length; i++){
+				
+				const pt1 = window.selectedWalls[i].pt1;
+				const pt2 = window.selectedWalls[i].pt2;
+				const scale = window.selectedWalls[i].wall[8];
+				if(pt1 !== undefined){			
+					drawCircle(ctx, pt1.x, pt1.y, centerDotSize, '#FFFFFF', true, 0)
+					drawCircle(ctx, pt1.x, pt1.y, centerDotSize, '#000000', false, 1)		
+					drawCircle(ctx, pt1.x, pt1.y, circleSize,  '#000000', false, 1)		
+					drawCircle(ctx, pt1.x, pt1.y, circleSize, '#FFFFFF33', true, 0)
+
+					drawCircle(window.selectedWallCtx, pt1.x, pt1.y, circleSize, '#FFFFFF33', true, 0)
+				}
+				if(pt2 !== undefined){
+					drawCircle(ctx, pt2.x, pt2.y, centerDotSize, '#FFFFFF', true, 0)
+					drawCircle(ctx, pt2.x, pt2.y, centerDotSize, '#000000', false, 1)
+					drawCircle(ctx, pt2.x, pt2.y, circleSize,  '#000000', false, 1)
+					drawCircle(ctx, pt2.x, pt2.y, circleSize, '#FFFFFF33', true, 0)
+
+					drawCircle(window.selectedWallCtx, pt2.x, pt2.y, circleSize, '#FFFFFF33', true, 0)
+				}
+			}
+		}
+	}
+	else if(window.DM){
+		delete window.selectedWallCanvas;
+		delete window.selectedWallCtx;
 	}
 
 	check_darkness_value();
@@ -2279,7 +2475,7 @@ function door_note_icon(id){
 				            flyout.append(buttonFooter);
 				            buttonFooter.append(sendToGamelogButton);
 				            flyout.find("a").attr("target","_blank");
-				      		flyout.off('click').on('click', '.int_source_link', function(event){
+				      		flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 								event.preventDefault();
 								render_source_chapter_in_iframe(event.target.href);
 							});
@@ -2350,6 +2546,8 @@ function stop_drawing() {
 	target.off('contextmenu', drawing_contextmenu);
 	window.StoredWalls = [];
 	window.wallToStore = [];
+	window.selectedWalls = [];
+	window.wallsBeingDragged = [];
 }
 
 /**
@@ -2465,8 +2663,8 @@ function drawing_mousedown(e) {
 	window.DRAWTYPE = (data.from == 'vision_menu') ? 'light' : data.fill
 	window.DRAWCOLOR = data.background_color
 	window.DRAWLOCATION = data.location
-	window.DRAWSHAPE = data.shape;
-	window.DRAWFUNCTION = data.function;
+	window.DRAWSHAPE = window.drawAudioPolygon ? 'polygon' : data.shape;
+	window.DRAWFUNCTION = window.drawAudioPolygon ? 'audio-polygon' : data.function;
 
 	//these are used with walls or elevation tool
 	window.wallTop = data.wall_top_height;
@@ -2505,6 +2703,8 @@ function drawing_mousedown(e) {
 	else if(window.DRAWFUNCTION === "wall"){
 		// semi transparent black
 		window.DRAWCOLOR = "rgba(0, 255, 0, 1)"
+		if(data.type == 'terrain')
+			window.DRAWCOLOR = "rgba(0, 180, 80, 1)"
 		if(window.DRAWSHAPE == 'line')
 			window.DRAWTYPE = "filled"
 		window.LINEWIDTH = 6;
@@ -2514,6 +2714,21 @@ function drawing_mousedown(e) {
 		window.DRAWCOLOR = doorColors[$('#door_types').val()].closed
 		window.DRAWTYPE = (window.DRAWFUNCTION === "door-door-convert") ? 'border' : "filled"
 		window.LINEWIDTH = 12;
+	}
+	else if(window.DRAWFUNCTION === "wall-edit"){
+			const [pointX, pointY] = get_event_cursor_position(e)
+			let pixeldata = window.selectedWallCtx.getImageData(pointX/window.CURRENT_SCENE_DATA.scale_factor, pointY/window.CURRENT_SCENE_DATA.scale_factor, 1, 1).data;
+			window.rescalingWalls = false;
+			if (pixeldata[0] >= 200 && pixeldata[1] >= 200 && pixeldata[2] >= 200){
+				window.DraggingWallPoints = true;
+				if(window.shiftHeld)
+					window.rescalingWalls = true;
+			}
+			else{
+				window.DraggingWallPoints = false;
+			}
+			window.DRAWCOLOR = "rgba(255, 255, 255, 1)"
+			context.setLineDash([10, 5])
 	}
 	else if (window.DRAWFUNCTION === "select"){
 		window.DRAWCOLOR = "rgba(255, 255, 255, 1)"
@@ -2530,18 +2745,18 @@ function drawing_mousedown(e) {
 		maxHeight = Math.max(Math.abs(minHeight), maxHeight);
 		window.DRAWCOLOR = numToColor(window.mapElev, 0.8, maxHeight);
 	}
-	// figure out what these 3 returns are supposed to be for.
+	
 	if ($(".context-menu-list.context-menu-root ~ .context-menu-list.context-menu-root:visible, .body-rpgcharacter-sheet .context-menu-list.context-menu-root").length>0){
-		return;
+		return; // if context menu open as we are interacting with that, causes drawing behind if no return
 	}
 
 	if (window.DRAGGING && window.DRAWSHAPE != 'align')
 		return;
 	if (!e.touches && e.button != 0 && window.DRAWFUNCTION != "measure" && window.DRAWFUNCTION != "wall" && window.DRAWFUNCTION != "wall-door" && window.DRAWFUNCTION != "wall-window" )
-		return;
+		return; // right click for tools other than measure/wall drawings that have right click waypoints
 
 	if (!e.touches && e.button == 0 && !shiftHeld && window.StoredWalls.length > 0 && (window.DRAWFUNCTION == "wall" || window.DRAWFUNCTION == "wall-door" || window.DRAWFUNCTION == "wall-window" ))
-		return;
+		return; // final point on waypointed wall - return and finish drawing
 
 	if((window.DRAWFUNCTION == "wall" || window.DRAWFUNCTION == "wall-door" || window.DRAWFUNCTION == "wall-window") && window.MOUSEDOWN && window.wallToStore != undefined){
 		if(window.StoredWalls == undefined){
@@ -2550,12 +2765,12 @@ function drawing_mousedown(e) {
 		window.StoredWalls.push(window.wallToStore);
 	}
 	if ((!e.touches && e.button != 0 || (shiftHeld && window.StoredWalls.length > 0)) && (window.DRAWFUNCTION == "wall" || window.DRAWFUNCTION == "wall-door" || window.DRAWFUNCTION == "wall-window") && !window.MOUSEDOWN)
-		return;
+		return; // right click or shift click without left click being down
 
 	if (shiftHeld == false || window.DRAWFUNCTION != 'select') {
 		deselect_all_tokens();
 	}
-	// end of wtf is this return block doing?
+	
 	const [pointX, pointY] = get_event_cursor_position(e)
 
 	if(window.DRAWSHAPE === "brush"){
@@ -2581,6 +2796,100 @@ function drawing_mousedown(e) {
 		window.BRUSHPOINTS.push({x:window.BEGIN_MOUSEX+1, y:window.BEGIN_MOUSEY+1});
 		window.BRUSHPOINTS.push({x:window.BEGIN_MOUSEX-1, y:window.BEGIN_MOUSEY-1});
 		drawBrushArrow(context, window.BRUSHPOINTS,window.DRAWCOLOR,window.LINEWIDTH, undefined, window.DRAWTYPE);
+	}
+	else if (window.DRAWSHAPE == "grid-brush"){
+		window.BEGIN_MOUSEX = pointX
+		window.BEGIN_MOUSEY = pointY
+		window.MOUSEDOWN = true;
+		window.BRUSHWAIT = false;
+		window.BRUSHPOINTS = [];
+		window.DRAWCOLOR = 'rgba(255,0,0,0.6)'
+
+		window.temp_context.fillStyle = window.DRAWCOLOR;
+		const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+		const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+		function drawHexagon(ctx, x, y) {
+			if(window.CURRENT_SCENE_DATA.gridType == 3){
+			  ctx.beginPath();
+			  ctx.moveTo(x + hexSize, y);
+			  for (let i = 1; i <= 6; i++) {
+			    let angle = i * Math.PI / 3;
+			    let dx = hexSize * Math.cos(angle);
+			    let dy = hexSize * Math.sin(angle);
+			    ctx.lineTo(x + dx, y + dy);
+			  }
+			  ctx.closePath();
+			  ctx.fill();
+			}
+			else{
+			  ctx.beginPath();
+			  ctx.moveTo(x, y + hexSize);
+			  for (let i = 1; i <= 6; i++) {
+			    let angle = i * Math.PI / 3;
+			    let dx = hexSize * Math.sin(angle);
+			    let dy = hexSize * Math.cos(angle);
+			    ctx.lineTo(x + dx, y + dy);
+			  }
+			  ctx.closePath();
+			  ctx.fill();
+			}
+		}
+
+
+		clear_temp_canvas()
+
+		const offscreen_canvas = document.createElement('canvas');
+		const offscreen_context = offscreen_canvas.getContext('2d');
+		offscreen_canvas.width = $('#scene_map')[0].width;
+		offscreen_canvas.height = $('#scene_map')[0].height;
+		offscreen_context.fillStyle = "#FFF";
+
+		const [scaledX,scaledY] = [window.BEGIN_MOUSEX/window.CURRENT_SCENE_DATA.scale_factor, window.BEGIN_MOUSEY/window.CURRENT_SCENE_DATA.scale_factor];
+	
+
+		
+		if(window.CURRENT_SCENE_DATA.gridType == '1'){
+			const {x,y} = snap_point_to_grid(window.BEGIN_MOUSEX, window.BEGIN_MOUSEY, true);
+			window.BRUSHPOINTS.push([Math.round(x), Math.round(y)])
+		}
+		else{
+			const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+			const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+			const closeHexes = window.gridCentersArray.filter(d => Math.abs(d[0]*window.CURRENT_SCENE_DATA.scaleAdjustment.x-scaledX) < hexSize && Math.abs(d[1]*window.CURRENT_SCENE_DATA.scaleAdjustment.y-scaledY)< hexSize);
+
+			for(let i in closeHexes){
+				const hexCenter = closeHexes[i];
+				const x = hexCenter[0];
+				const y = hexCenter[1];
+				offscreen_context.clearRect(0, 0, offscreen_canvas.width, offscreen_canvas.height); 
+				offscreen_context.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+				drawHexagon(offscreen_context, x, y);
+				const pixeldata = offscreen_context.getImageData(scaledX, scaledY, 1, 1).data;
+			    offscreen_context.setTransform(1, 0, 0, 1, 0, 0);
+			    if(pixeldata[1] > 200){
+			    	window.BRUSHPOINTS.push([Math.round(x),Math.round(y)]);
+				}
+			}	
+			window.BRUSHPOINTS = Array.from(new Set(window.BRUSHPOINTS.map(JSON.stringify)), JSON.parse)
+		
+		
+			if(window.CURRENT_SCENE_DATA.gridType == '1'){
+				for(let i in window.BRUSHPOINTS){
+						drawRect(window.temp_context, window.BRUSHPOINTS[i][0], window.BRUSHPOINTS[i][1], window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, window.DRAWCOLOR, true, window.DRAWTYPE);
+					}
+				}
+			else{
+			window.temp_context.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+				for(let i in window.BRUSHPOINTS){
+					drawHexagon(window.temp_context, window.BRUSHPOINTS[i][0], window.BRUSHPOINTS[i][1])
+				}
+				window.temp_context.setTransform(1, 0, 0, 1, 0, 0);
+			}
+		}
 	}
 	else if (window.DRAWSHAPE === "polygon") {
 		if (window.BEGIN_MOUSEX && window.BEGIN_MOUSEX.length > 0) {
@@ -2681,7 +2990,7 @@ function drawing_mousedown(e) {
  */
 function drawing_mousemove(e) {
 
-	if (window.MOUSEMOVEWAIT || (window.DRAWFUNCTION === "select" && e.touches != undefined) ) {
+	if ((window.MOUSEMOVEWAIT && window.DRAWSHAPE != "grid-brush") || (window.DRAWFUNCTION === "select" && e.touches != undefined) ) {
 		return;
 	}
 	// don't perform any drawing when dragging a token
@@ -2710,7 +3019,7 @@ function drawing_mousemove(e) {
 	}
 
 	if (window.MOUSEDOWN) {
-		if(window.DRAWFUNCTION != "measure" && !window.DRAGGING)
+		if(window.DRAWFUNCTION != "measure" && !window.DRAGGING && window.DRAWSHAPE != "grid-brush")
 			clear_temp_canvas()
 		const width = mouseX - window.BEGIN_MOUSEX;
 		const height = mouseY - window.BEGIN_MOUSEY;
@@ -2754,6 +3063,77 @@ function drawing_mousemove(e) {
 						3,
 						undefined,
 						true);
+			}
+			else if(window.DraggingWallPoints == true && window.DRAWFUNCTION == 'wall-edit'){
+				
+				const currentSceneScale = window.CURRENT_SCENE_DATA.scale_factor ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor) : 1;
+				
+				
+				const mouseDifX = mouseX - window.BEGIN_MOUSEX;
+				const mouseDifY = mouseY - window.BEGIN_MOUSEY;
+				
+				const scaleAdjustFactor = window.BEGIN_MOUSEY/mouseY
+			
+						
+
+
+
+				if(window.wallsBeingDragged.length == 0){
+					for(let j = 0; j < window.DRAWINGS.length; j++){
+						const wallData = window.selectedWalls.find(d => JSON.stringify(d.wall)==JSON.stringify(window.DRAWINGS[j]));
+						const [pt1, pt2, tokenId] = [wallData?.pt1, wallData?.pt2, wallData?.tokenId]
+						const scale = window.DRAWINGS[j][8]/window.CURRENT_SCENE_DATA.conversion;
+						const newScale = window.DRAWINGS[j][8]/scaleAdjustFactor;
+						if(wallData){
+							window.wallsBeingDragged.push({'drawingIndex': j, 'pt1': pt1, 'pt2': pt2, 'wallScale': window.DRAWINGS[j][8], 'tokenId': tokenId})
+						}
+			
+						if(window.rescalingWalls == true){
+							if(pt1 != undefined || pt2 != undefined){
+								window.DRAWINGS[j][8] *= scaleAdjustFactor;
+								window.DRAWINGS[j][8] = Math.max(window.DRAWINGS[j][8], 0.1);
+							}
+						}
+						else{
+							if(pt1 != undefined){
+								window.DRAWINGS[j][3] = (pt1.x + mouseDifX)*scale/currentSceneScale;
+								window.DRAWINGS[j][4] = (pt1.y + mouseDifY)*scale/currentSceneScale;
+							}
+							if(pt2 != undefined){
+								window.DRAWINGS[j][5] = (pt2.x + mouseDifX)*scale/currentSceneScale;
+								window.DRAWINGS[j][6] = (pt2.y + mouseDifY)*scale/currentSceneScale;
+							}
+						}
+						
+					}
+				}
+				else{					
+					for(let i=0; i<window.wallsBeingDragged.length; i++){
+						const [pt1, pt2, drawIndex, tokenId] = [window.wallsBeingDragged[i].pt1, window.wallsBeingDragged[i].pt2, window.wallsBeingDragged[i].drawingIndex, window.wallsBeingDragged[i].tokenId]
+						const scale = window.DRAWINGS[drawIndex][8]/window.CURRENT_SCENE_DATA.conversion;
+						const originalScale = window.wallsBeingDragged[i].wallScale;
+						if(window.rescalingWalls == true){	
+							window.DRAWINGS[drawIndex][8] = originalScale*scaleAdjustFactor;
+							window.DRAWINGS[drawIndex][8] = Math.max(window.DRAWINGS[drawIndex][8], 0.1);
+						}
+						else{
+							if(pt1 != undefined){
+								window.DRAWINGS[drawIndex][3] = (pt1.x + mouseDifX)*scale/currentSceneScale;
+								window.DRAWINGS[drawIndex][4] = (pt1.y + mouseDifY)*scale/currentSceneScale;
+							}
+							if(pt2 != undefined){
+								window.DRAWINGS[drawIndex][5] = (pt2.x + mouseDifX)*scale/currentSceneScale;
+								window.DRAWINGS[drawIndex][6] = (pt2.y + mouseDifY)*scale/currentSceneScale;
+							}
+						}
+
+					}
+				}
+	
+
+				
+				
+				redraw_light_walls();
 			}
 			else{
 				drawRect(window.temp_context,
@@ -2880,7 +3260,100 @@ function drawing_mousemove(e) {
 				}
 			}
 		}
+		else if (window.DRAWSHAPE == "grid-brush"){
+			
+			window.temp_context.fillStyle = window.DRAWCOLOR;
+			const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+			const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+			function drawHexagon(ctx, x, y) {
+				if(window.CURRENT_SCENE_DATA.gridType == 3){
+				  ctx.beginPath();
+				  ctx.moveTo(x + hexSize, y);
+				  for (let i = 1; i <= 6; i++) {
+				    let angle = i * Math.PI / 3;
+				    let dx = hexSize * Math.cos(angle);
+				    let dy = hexSize * Math.sin(angle);
+				    ctx.lineTo(x + dx, y + dy);
+				  }
+				  ctx.closePath();
+				  ctx.fill();
+				}
+				else{
+				  ctx.beginPath();
+				  ctx.moveTo(x, y + hexSize);
+				  for (let i = 1; i <= 6; i++) {
+				    let angle = i * Math.PI / 3;
+				    let dx = hexSize * Math.sin(angle);
+				    let dy = hexSize * Math.cos(angle);
+				    ctx.lineTo(x + dx, y + dy);
+				  }
+				  ctx.closePath();
+				  ctx.fill();
+				}
+			}
+		
+
+			clear_temp_canvas()
+
+			const offscreen_canvas = document.createElement('canvas');
+			const offscreen_context = offscreen_canvas.getContext('2d');
+			offscreen_canvas.width = $('#scene_map')[0].width;
+			offscreen_canvas.height = $('#scene_map')[0].height;
+			offscreen_context.fillStyle = "#FFF";
+
+			const [scaledX,scaledY] = [mouseX/window.CURRENT_SCENE_DATA.scale_factor, mouseY/window.CURRENT_SCENE_DATA.scale_factor];
+			
+
+		
+
+			if(window.CURRENT_SCENE_DATA.gridType == '1'){
+				const {x,y} = snap_point_to_grid(mouseX, mouseY, true);
+				window.BRUSHPOINTS.push([Math.round(x), Math.round(y)])
+			}
+			else{
+				const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+				const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+				const closeHexes = window.gridCentersArray.filter(d => Math.abs(d[0]*window.CURRENT_SCENE_DATA.scaleAdjustment.x-scaledX) < hexSize && Math.abs(d[1]*window.CURRENT_SCENE_DATA.scaleAdjustment.y-scaledY)< hexSize);
+
+				for(let i in closeHexes){
+					const hexCenter = closeHexes[i];
+					const x = hexCenter[0];
+					const y = hexCenter[1];
+					offscreen_context.clearRect(0, 0, offscreen_canvas.width, offscreen_canvas.height); 
+					offscreen_context.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+					drawHexagon(offscreen_context, x, y);
+					const pixeldata = offscreen_context.getImageData(scaledX, scaledY, 1, 1).data;
+				    offscreen_context.setTransform(1, 0, 0, 1, 0, 0);
+				    if(pixeldata[1] > 200){
+				    	window.BRUSHPOINTS.push([Math.round(x),Math.round(y)]);
+					}
+				}	
+			}
+			
+			window.BRUSHPOINTS = Array.from(new Set(window.BRUSHPOINTS.map(JSON.stringify)), JSON.parse)
+			
+			
+			if(window.CURRENT_SCENE_DATA.gridType == '1'){
+				for(let i in window.BRUSHPOINTS){
+					drawRect(window.temp_context, window.BRUSHPOINTS[i][0], window.BRUSHPOINTS[i][1], window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, window.DRAWCOLOR, true, window.DRAWTYPE);
+					}
+				}
+			else{
+				window.temp_context.scale(window.CURRENT_SCENE_DATA.scaleAdjustment.x, window.CURRENT_SCENE_DATA.scaleAdjustment.y)
+ 				for(let i in window.BRUSHPOINTS){
+ 					drawHexagon(window.temp_context, window.BRUSHPOINTS[i][0], window.BRUSHPOINTS[i][1])
+ 				}
+ 				window.temp_context.setTransform(1, 0, 0, 1, 0, 0);
+ 			}
+		}
 	}
+			
+	
+
 	else if (window.DRAWSHAPE === "polygon" &&
 		window.BEGIN_MOUSEX && window.BEGIN_MOUSEX.length > 0) {
 		clear_temp_canvas()
@@ -2961,7 +3434,8 @@ function drawing_mouseup(e) {
 		window.DRAWFUNCTION == "hide" ||
 		window.DRAWFUNCTION == "draw_text" ||
 		window.DRAWFUNCTION === "select" || 
-		window.DRAWFUNCTION == "elev") && e.which !== 1 && !e.touches)
+		window.DRAWFUNCTION == "elev" || 
+		window.DRAWFUNCTION == "audio-polygon") && e.which !== 1 && !e.touches)
 	{
 		return;
 	}
@@ -3042,6 +3516,12 @@ function drawing_mouseup(e) {
 				data[5] = null
 				data[6] = null
 				break;
+			case "grid-brush":
+				data[0] = "grid-brush"
+				data[3] = Array.from(new Set(window.BRUSHPOINTS.map(JSON.stringify)), JSON.parse)
+				data[4] = null
+				data[5] = null
+				data[6] = window.CURRENT_SCENE_DATA.scale_factor
 			case "paint-bucket":
 				data[0] = "paint-bucket"
 				data[7] = 0
@@ -3151,7 +3631,7 @@ function drawing_mouseup(e) {
 			if ( e.button == 2) {
 				return;
 			}
-			for(let walls in window.StoredWalls){
+			for(let walls=0; walls<window.StoredWalls.length; walls++){
 					data = ['line',
 						"wall",
 						window.DRAWCOLOR,
@@ -3580,8 +4060,138 @@ function drawing_mouseup(e) {
 		});
 
 		redraw_light_walls();
-		redraw_light();
+        redraw_drawn_light();
+        redraw_light();
 		sync_drawings();
+	}
+	else if(window.DRAWFUNCTION === "wall-edit"){
+		if(window.DraggingWallPoints == undefined || window.DraggingWallPoints == false){
+			let walls = window.DRAWINGS.filter(d => (d[1] == "wall" && d[0].includes("line")));
+			let rectLine = {
+				rx: window.BEGIN_MOUSEX,
+				ry: window.BEGIN_MOUSEY,		
+				rw: width,
+				rh: height
+			};
+			let intersectingWalls = [];
+			let wallLine = [];
+			let eraserToRight  = rectLine.rw > 0;
+			let eraserToBottom = rectLine.rh > 0;
+			if(!eraserToRight){
+				rectLine.rx = rectLine.rx + rectLine.rw;
+				rectLine.rw = Math.abs(rectLine.rw);
+			}
+			if(!eraserToBottom){
+				rectLine.ry = rectLine.ry + rectLine.rh;
+				rectLine.rh = Math.abs(rectLine.rh);
+			}
+			if(!window.shiftHeld)
+				window.selectedWalls = [];	
+			
+			for(let i=0; i<walls.length; i++){
+				let wallInitialScale = walls[i][8];
+				let scale_factor = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1;
+				let adjustedScale = walls[i][8]/window.CURRENT_SCENE_DATA.scale_factor/window.CURRENT_SCENE_DATA.conversion;				
+
+				let pt1 = {
+						x: walls[i][3]/adjustedScale,
+						y: walls[i][4]/adjustedScale
+					};
+				let pt2 =  {
+						x: walls[i][5]/adjustedScale,
+						y: walls[i][6]/adjustedScale
+					};
+
+				
+				const pt1Inside = (rectLine.rx <= pt1.x) && (rectLine.rx+rectLine.rw >= pt1.x) && (rectLine.ry <= pt1.y) && (rectLine.ry+rectLine.rh >= pt1.y); 
+				const pt2Inside = (rectLine.rx <= pt2.x) && (rectLine.rx+rectLine.rw >= pt2.x) && (rectLine.ry <= pt2.y) && (rectLine.ry+rectLine.rh >= pt2.y);
+				
+				pt1 = pt1Inside ? pt1 : undefined;
+				pt2 = pt2Inside ? pt2 : undefined;
+
+				if(pt1Inside || pt2Inside){
+					const [x1,y1,x2,y2] = [walls[i][3], walls[i][4], walls[i][5], walls[i][6]];
+					const doorTokenId = `${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','');
+					const drawIndex = window.DRAWINGS.findIndex(d => JSON.stringify(d)==JSON.stringify(walls[i]));
+					if(window.shiftHeld){
+						const currentWall = window.selectedWalls.find(d => d.drawIndex == drawIndex);
+					    if(currentWall){
+					    	if(pt1 != undefined)
+					    		currentWall.pt1 = pt1;
+					    	if(pt2 != undefined)
+					    		currentWall.pt2 = pt2;
+					    }
+					    else{
+					    	window.selectedWalls.push({pt1: pt1, pt2: pt2, wall: [...walls[i]], tokenId: doorTokenId, drawIndex: drawIndex})
+					    }
+
+					}		
+					else{
+						window.selectedWalls.push({pt1: pt1, pt2: pt2, wall: [...walls[i]], tokenId: doorTokenId, drawIndex: drawIndex})
+					}
+				}
+	    	}
+
+
+		}
+		else{
+			const undoArray = [], redoArray = [];
+			const originalSelected = JSON.parse(JSON.stringify(window.selectedWalls));
+			for(let i=0; i<window.selectedWalls.length; i++){
+				const wall = window.selectedWalls[i];
+				const index = wall.drawIndex;
+				const pt1 = wall.pt1;
+				const pt2 = wall.pt2;
+				const tokenId = wall.tokenId;
+				const adjustedScale = window.DRAWINGS[index][8]/window.CURRENT_SCENE_DATA.scale_factor/window.CURRENT_SCENE_DATA.conversion;					
+				const [x1, y1, x2, y2] = [window.DRAWINGS[index][3]/adjustedScale, window.DRAWINGS[index][4]/adjustedScale, window.DRAWINGS[index][5]/adjustedScale, window.DRAWINGS[index][6]/adjustedScale]
+				
+				redoArray.push([...wall.wall]);	
+			
+				if(pt1 != undefined){
+					wall.pt1 = {'x':x1, 'y':y1};
+				}
+				if(pt2 != undefined){
+					wall.pt2 = {'x':x2, 'y':y2}
+				}
+						
+				if(window.rescalingWalls !== true && window.TOKEN_OBJECTS[tokenId] !== undefined){
+					const newOptions = $.extend(true, [], window.TOKEN_OBJECTS[tokenId].options);
+					const newId = `${x1*adjustedScale}${y1*adjustedScale}${x2*adjustedScale}${y2*adjustedScale}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','');
+	
+	
+					const midX = Math.floor((x1+x2)*adjustedScale/2);
+					const midY = Math.floor((y1+y2)*adjustedScale/2);
+					let options = {
+						...newOptions,
+						left: `${parseFloat(midX) - 25}px`,
+						top: `${parseFloat(midY) - 25}px`,
+						id: newId
+					};
+					window.ScenesHandler.create_update_token(options, noScale=true)
+					window.TOKEN_OBJECTS[tokenId].delete();
+					window.selectedWalls[i].tokenId = newId;
+				}
+				else if(window.TOKEN_OBJECTS[tokenId] !== undefined){
+					window.TOKEN_OBJECTS[tokenId].options.scaleCreated = window.DRAWINGS[index][8];
+					window.TOKEN_OBJECTS[tokenId].sync($.extend(true, {}, window.TOKEN_OBJECTS[tokenId].options));		
+
+					window.selectedWalls[i].pt1 = {'x':x1*adjustedScale, 'y':y1*adjustedScale};
+					window.selectedWalls[i].pt2 = {'x':x2*adjustedScale, 'y':y2*adjustedScale}
+				}
+				undoArray.push([...window.DRAWINGS[index]])
+				window.selectedWalls[i].wall = [...window.DRAWINGS[index]];	
+			}	
+			window.wallUndo.push({undo: [...undoArray], redo:[...redoArray], selectedWalls: originalSelected});
+		}
+
+      	redraw_light_walls();
+        redraw_drawn_light();
+        redraw_light(true);
+		sync_drawings();
+		window.MB.sendMessage("custom/myVTT/forceRedrawLight");
+		window.wallsBeingDragged = [];
+	
 	}
 	else if (window.DRAWFUNCTION === "draw_text"){
 		data[0] = "text";
@@ -3766,6 +4376,20 @@ function finalise_drawing_fog(mouseX, mouseY, width, height) {
 			sync_fog();
 			redraw_fog();
 	}
+	else if(window.DRAWSHAPE == 'grid-brush'){
+		data = [
+			window.BRUSHPOINTS,
+			window.LINEWIDTH,
+			null,
+			null,
+			7,
+			fog_type_to_int(), 
+			window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion
+		];
+		window.REVEALED.push(data);
+		sync_fog();
+		redraw_fog();
+	}
 }
 
 
@@ -3810,6 +4434,7 @@ function get_draw_data(button, menu){
 		const selectedInMenu = $(menu).find(".ddbc-tab-options__header-heading--is-active")
 		const selectedShape = $(menu).find(".ddbc-tab-options__header-heading--is-active[data-shape]").attr("data-shape")
 		const selectedFunction = $(menu).find(".ddbc-tab-options__header-heading--is-active[data-function]").attr("data-function")
+		const selectedType = $(menu).find(".ddbc-tab-options__header-heading--is-active[data-type]")?.attr("data-type");
 
 		const requiredOptions = $(requiredValuesInMenu).map(function() {
 			const key = $(this).attr("id")
@@ -3832,6 +4457,7 @@ function get_draw_data(button, menu){
 			shape:selectedShape,
 			function:selectedFunction,
 			from:menu.attr("id"),
+			type: selectedType,
 			...options
 		}
 	}
@@ -4429,7 +5055,8 @@ function save3PointRect(e){
 
 		window.MOUSEDOWN = false;
 		redraw_light_walls();
-		redraw_light();
+        redraw_drawn_light();
+        redraw_light();
 	}
 	else if(window.DRAWFUNCTION === "elev"){
 		data = [
@@ -4507,6 +5134,15 @@ function savePolygon(e) {
 		redraw_elev();
 		redraw_drawn_light();
 		redraw_drawings();
+	}
+	else if(window.DRAWFUNCTION === 'audio-polygon'){
+		const token = window.TOKEN_OBJECTS[window.drawingAudioTokenId];
+		token.options.audioChannel.audioArea = polygonPoints;
+		token.options.audioChannel.audioAreaOrigScale = window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion;
+		token.place_sync_persist();
+		debounceAudioChecks();
+		delete window.drawingAudioTokenId 
+		delete window.drawAudioPolygon
 	}
 	else{
 		data = [
@@ -4703,6 +5339,13 @@ function init_fog_menu(buttons){
 		</div>`);
 	fog_menu.append(
 		`<div class='ddbc-tab-options--layout-pill'>
+			<button id='draw_grid_brush_r' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+				data-shape='grid-brush' data-function="reveal" data-unique-with="fog">
+					Grid Brush
+			</button>
+		</div>`);
+	fog_menu.append(
+		`<div class='ddbc-tab-options--layout-pill'>
 			<button id='fog_polygon_r' class='ddbc-tab-options__header-heading drawbutton menu-option fog-option'
 				data-shape='polygon' data-function="reveal" data-unique-with="fog">
 					Polygon
@@ -4756,6 +5399,13 @@ function init_fog_menu(buttons){
 			<button id='draw_brush' class='drawbutton menu-option  ddbc-tab-options__header-heading'
 				data-shape='brush' data-function="hide" data-unique-with="fog">
 					Brush
+			</button>
+		</div>`);
+	fog_menu.append(
+		`<div class='ddbc-tab-options--layout-pill'>
+			<button id='draw_grid_brush_h' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+				data-shape='grid-brush' data-function="hide" data-unique-with="fog">
+					Grid Brush
 			</button>
 		</div>`);
 	fog_menu.append(
@@ -5088,6 +5738,13 @@ function init_walls_menu(buttons){
 		</button>
 	</div>`);
 	wall_menu.append(
+	`<div class='ddbc-tab-options--layout-pill'>
+		<button id='draw_line' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+			data-shape='line' data-function="wall" data-type="terrain" data-unique-with="draw">
+				Object Wall
+		</button>
+	</div>`);
+	wall_menu.append(
 		`<div class='ddbc-tab-options--layout-pill menu-option data-skip='true''>
 			<button id='draw_height_convert' class='drawbutton menu-option  ddbc-tab-options__header-heading'
 				data-shape='rect' data-function="wall-height-convert" data-unique-with="draw">
@@ -5149,6 +5806,13 @@ function init_walls_menu(buttons){
 	wall_menu.append("<div class='menu-subtitle'>Controls</div>");
 	wall_menu.append(
 		`<div class='ddbc-tab-options--layout-pill menu-option data-skip='true''>
+			<button id='edit_wall' class='drawbutton menu-option  ddbc-tab-options__header-heading'
+				data-shape='rect' data-function="wall-edit" data-unique-with="draw">
+				 	Edit Points
+			</button>
+		</div>`);
+	wall_menu.append(
+		`<div class='ddbc-tab-options--layout-pill menu-option data-skip='true''>
 			<button id='draw_erase' class='drawbutton menu-option  ddbc-tab-options__header-heading'
 				data-shape='rect' data-function="wall-eraser-one" data-unique-with="draw">
 				 	Erase Line
@@ -5184,6 +5848,7 @@ function init_walls_menu(buttons){
 		r = confirm("DELETE ALL WALLS (cannot be undone!)");
 		if (r === true) {
 			// keep only non wall
+			window.selectedWalls = [];
 			window.DRAWINGS = window.DRAWINGS.filter(d => d[1] !== "wall");
 			for(let token in window.TOKEN_OBJECTS){
 				if(window.TOKEN_OBJECTS[token].options.type=='door'){
@@ -5191,6 +5856,7 @@ function init_walls_menu(buttons){
 				}
 			}
 			redraw_light_walls();
+			redraw_drawn_light();
 			redraw_light();
 			sync_drawings();
 		}
@@ -5200,7 +5866,7 @@ function init_walls_menu(buttons){
         let wallUndo = window.wallUndo.pop();
         if(wallUndo){
         	if(wallUndo.undo != undefined){
-				for(let i in wallUndo.undo){
+				for(let i=0; i<wallUndo.undo.length; i++){
 					let x = wallUndo.undo[i][3],
 					y = wallUndo.undo[i][4],
 					width = wallUndo.undo[i][5],
@@ -5216,9 +5882,12 @@ function init_walls_menu(buttons){
 	        	}
 	        }
 	        if(wallUndo.redo != undefined){
-	        	for(let i in wallUndo.redo){
+	        	for(let i=0; i<wallUndo.redo.length; i++){
 	        		window.DRAWINGS.push(wallUndo.redo[i])
 	        	}
+	        }
+	        if(wallUndo.selectedWalls != undefined){
+	        	window.selectedWalls = [...wallUndo.selectedWalls]
 	        }
           	redraw_light_walls();
 	        redraw_drawn_light();
@@ -5315,7 +5984,8 @@ function init_elev_menu(buttons){
 			window.DRAWINGS = window.DRAWINGS.filter(d => d[1] !== "elev");
 			redraw_elev();
 			redraw_light_walls();
-			redraw_light();
+	        redraw_drawn_light();
+	        redraw_light();
 			sync_drawings();
 		}
 	});
@@ -5329,7 +5999,8 @@ function init_elev_menu(buttons){
                 window.DRAWINGS.splice(currentElement, 1)
                 redraw_elev();
                 redraw_light_walls();
-				redraw_light();
+		        redraw_drawn_light();
+		        redraw_light();
 				sync_drawings()
                 break
             }
@@ -5755,22 +6426,15 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
     let closestWall = null;
     let closestBarrier = null;
     let closestNoDarknessWall = null;
-    let token;
-    let x1;
-    let x2;
-    let y1;
-    let y2;
-    let tokenIsDoor;
 
+    let secondClosestWall = null;
+    let secondClosestBarrier = null;
+    let secondClosestNoDarknessWall = null;
 
-    if(auraId){
-    	let token = $(`#tokens [data-id='${auraId}']`)
-    	tokenIsDoor = token.hasClass('door-button');
-    	x1 = tokenIsDoor ? parseFloat(token.attr('data-x1')) / window.CURRENT_SCENE_DATA.scale_factor : 0;
-    	x2 = tokenIsDoor ? parseFloat(token.attr('data-x2')) / window.CURRENT_SCENE_DATA.scale_factor : 0;
-    	y1 = tokenIsDoor ? parseFloat(token.attr('data-y1')) / window.CURRENT_SCENE_DATA.scale_factor : 0;
-    	y2 = tokenIsDoor ? parseFloat(token.attr('data-y2')) / window.CURRENT_SCENE_DATA.scale_factor : 0;
-    }
+    const tokenIsDoor = window.TOKEN_OBJECTS[auraId]?.options?.type =='door';
+
+	const diffNeedForTerrainWalls = 5;
+    
     let notBlockVision = [1, 3, 6, 7, 12, 13, '1', '3', '6', '7', '12', '13'];
     let notBlockMove = [8, 9, 10, 11, 12, 13, '8', '9', '10', '11', '12', '13'];
 	for (let i = 0; i < window.PARTICLE.rays.length; i++) {
@@ -5781,6 +6445,13 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 	    let recordMove = Infinity;
 	    let closestNoDarkness = null;
 	    let recordNoDarkness = Infinity;
+
+	    let secondClosestLight = null;
+	    let secondClosestMove = null;
+	    let secondClosestNoDarkness = null;
+	    let secondRecordLight = Infinity;
+	    let secondRecordMove = Infinity;
+	    let secondRecordNoDarkness = Infinity;
 
 
 	    for (let j = 0; j < walls.length; j++) {
@@ -5805,11 +6476,17 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 				let pointDistance = Vector.dist(window.PARTICLE.pos, pt);
 				if(pointDistance < lightRadius)
 					dist = pointDistance;
-			
+				
+				const recordLightFurtherThanNeed = Math.abs(recordLight - dist) > diffNeedForTerrainWalls;
+				const recordNoDarknessFurtherThanNeed = Math.abs(recordNoDarkness - dist) > diffNeedForTerrainWalls;
+				const recordMoveFurtherThanNeed = Math.abs(recordMove - dist) > diffNeedForTerrainWalls;
 				
 				if (dist < recordLight && !notBlockVision.includes(walls[j].c)) {
-				  	if(!tokenIsDoor || walls[j].a.x*walls[j].scaleAdjustment != x1 || walls[j].a.y*walls[j].scaleAdjustment != y1 || walls[j].b.x*walls[j].scaleAdjustment != x2 || walls[j].b.y*walls[j].scaleAdjustment != y2)
+				  	if(!tokenIsDoor || auraId != `${walls[j].a.x}${walls[j].a.y}${walls[j].b.x}${walls[j].b.y}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.', ''))
 						{
+						
+						if(recordLightFurtherThanNeed)
+							secondRecordLight = recordLight;
 				      	recordLight = dist;         
 				      	
 				        if(dist == lightRadius){
@@ -5817,20 +6494,42 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 					          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
 					          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
 					          }
-				   		}	           	
+				   		}	       
+				   		if(recordLightFurtherThanNeed)    		
+			   				secondClosestLight = closestLight;
 				      	closestLight = pt;
 
-				        if(dist != lightRadius){    	
+				        if(dist != lightRadius){    
+				        	if(recordLightFurtherThanNeed)   
+			        			secondClosestWall = closestWall;	
 				          	closestWall = walls[j];
 				        }      
 			       }
 				}
+				else if(dist < secondRecordLight && !notBlockVision.includes(walls[j].c) && recordLightFurtherThanNeed){
+					secondRecordLight = dist;       
+			     	
+			        if(dist == lightRadius){
+			          	pt = {
+				          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
+				          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
+				          }
+			   		}	           	
+			   		
+		      		secondClosestLight = pt;
+
+			           
+		        	
+	        		secondClosestWall = walls[j];	
+			        
+				}
 
 				if(canSeeDarkness === true && walls[j].darkness !== true){
 				    if (dist < recordNoDarkness && !notBlockMove.includes(walls[j].c)) {
-				      	if(!tokenIsDoor || walls[j].a.x*walls[j].scaleAdjustment != x1 || walls[j].a.y*walls[j].scaleAdjustment != y1 || walls[j].b.x*walls[j].scaleAdjustment != x2 || walls[j].b.y*walls[j].scaleAdjustment != y2)
+				      	if(!tokenIsDoor || auraId != `${walls[j].a.x}${walls[j].a.y}${walls[j].b.x}${walls[j].b.y}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.', ''))
 						{
-
+							if(recordNoDarknessFurtherThanNeed)
+								secondRecordNoDarkness = recordNoDarkness;
 				          	recordNoDarkness = dist;         
 				          	
 					        if(dist == lightRadius){
@@ -5838,30 +6537,78 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 						          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
 						          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
 						          }
-				       		}	           	
+				       		}	 
+				       		if(recordNoDarknessFurtherThanNeed)
+			       				secondClosestNoDarkness = closestNoDarkness;          	
 				          	closestNoDarkness = pt;
 
 					        if(dist != lightRadius){    	
+					        	if(recordNoDarknessFurtherThanNeed)
+				        			secondClosestNoDarknessWall = closestNoDarknessWall;
 					          	closestNoDarknessWall = walls[j];
 				       	 	}      
 			       		}
 			   	 	}
+	   	 		    else if (dist < secondRecordNoDarkness && !notBlockMove.includes(walls[j].c) && recordNoDarknessFurtherThanNeed) {
+	   	 		      	if(!tokenIsDoor || auraId != `${walls[j].a.x}${walls[j].a.y}${walls[j].b.x}${walls[j].b.y}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.', ''))
+	   	 				{
+	   	 					secondRecordNoDarkness = dist;       
+	   	 		          	
+	   	 			        if(dist == lightRadius){
+	   	 			          	pt = {
+	   	 				          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
+	   	 				          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
+	   	 				          }
+	   	 		       		}	 
+	   	 		       		secondClosestNoDarkness = pt;          	
+
+
+	   	 			        if(dist != lightRadius){    	
+	   	 			        	secondClosestNoDarknessWall = walls[j];
+	   	 		       	 	}      
+	   	 	       		}
+	   	 	   	 	}
 				}
 				if(walls[j].darkness !== true && !notBlockMove.includes(walls[j].c)){
 
 
 				    if(dist < recordMove){
+				    	if(recordMoveFurtherThanNeed)
+				    		secondRecordMove = recordMove;
 				    	recordMove = dist;
-				    	 if(dist == lightRadius){
-				          	pt = {
-					          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
-					          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
-					          }
-				   		}
-				   		closestMove = pt;
-				   		if(dist != lightRadius){
-				          	closestBarrier = walls[j];
-				        }	
+			    		if(!tokenIsDoor || auraId != `${walls[j].a.x}${walls[j].a.y}${walls[j].b.x}${walls[j].b.y}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.', ''))
+						{
+				    	 	if(dist == lightRadius){
+					          	pt = {
+						          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
+						          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
+						          }
+					   		}
+					   		if(recordMoveFurtherThanNeed)
+				   				secondClosestMove = closestMove;
+					   		closestMove = pt;
+					   		if(dist != lightRadius){
+					   			if(recordMoveFurtherThanNeed)
+				   					secondClosestBarrier = closestBarrier;
+					          	closestBarrier = walls[j];
+					        }	
+				    	}
+				    }
+				    else if(dist < secondRecordMove && recordMoveFurtherThanNeed){
+				    	secondRecordMove = dist;
+			    		if(!tokenIsDoor || auraId != `${walls[j].a.x}${walls[j].a.y}${walls[j].b.x}${walls[j].b.y}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.', ''))
+						{
+				    	 	if(dist == lightRadius){
+					          	pt = {
+						          	x: window.PARTICLE.pos.x+window.PARTICLE.rays[i].dir.x * lightRadius,
+						          	y: window.PARTICLE.pos.y+window.PARTICLE.rays[i].dir.y * lightRadius
+						          }
+					   		}
+					   		secondClosestMove = pt;
+					   		if(dist != lightRadius){
+					   			secondClosestBarrier = walls[j];
+					        }	
+				    	}
 				    }
 				}
 
@@ -5869,6 +6616,21 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 
 	    }	    
 	   
+	    if(closestWall?.terrainWall == true && secondClosestWall != null){
+	    	closestWall = secondClosestWall;
+	    	closestLight = secondClosestLight;
+	    }
+
+    	if(closestNoDarknessWall?.terrainWall == true && secondClosestNoDarknessWall != null){
+    		closestNoDarknessWall = secondClosestNoDarknessWall;
+    		closestNoDarkness = secondClosestNoDarkness;
+    	}
+
+	 	if(closestBarrier?.terrainWall == true && secondClosestBarrier != null){
+	 		closestBarrier = secondClosestBarrier;
+	 		closestMove = secondClosestMove;
+	 	}
+
     	if (closestLight !== null && (closestWall != prevClosestWall || i === 359 || closestWall?.radius !== undefined)) {
     		if(closestWall !== prevClosestWall && prevClosestWall !== null && prevClosestPoint !== null){	    		
     			lightPolygon.push({x: prevClosestPoint.x*window.CURRENT_SCENE_DATA.scale_factor, y: prevClosestPoint.y*window.CURRENT_SCENE_DATA.scale_factor}) 		
@@ -6149,7 +6911,10 @@ function redraw_light(darknessMoved = false){
 			x: (parseInt(window.TOKEN_OBJECTS[auraId].options.left)+tokenHalfWidth)/ window.CURRENT_SCENE_DATA.scale_factor,
 			y: (parseInt(window.TOKEN_OBJECTS[auraId].options.top)+tokenHalfHeight)/ window.CURRENT_SCENE_DATA.scale_factor
 		}
-
+		if(window.TOKEN_OBJECTS[auraId].options.type == 'door' && window.TOKEN_OBJECTS[auraId].options.scaleCreated){
+			tokenPos.x = tokenPos.x / (window.TOKEN_OBJECTS[auraId].options.scaleCreated/ window.CURRENT_SCENE_DATA.scale_factor);
+			tokenPos.y = tokenPos.y / (window.TOKEN_OBJECTS[auraId].options.scaleCreated/ window.CURRENT_SCENE_DATA.scale_factor);
+		}
 		if(window.lineOfSightPolygons === undefined){
 			window.lineOfSightPolygons = {};
 		}
@@ -6158,6 +6923,7 @@ function redraw_light(darknessMoved = false){
 			window.lineOfSightPolygons[auraId].y === tokenPos.y && 
 			window.lineOfSightPolygons[auraId].numberofwalls === allWalls.length  &&
 			window.lineOfSightPolygons[auraId].visionType === window.TOKEN_OBJECTS[auraId].options.sight &&
+			window.lineOfSightPolygons[auraId].scaleCreated === window.TOKEN_OBJECTS[auraId].options.scaleCreated &&
 			darknessMoved !== true){
 			lightPolygon = window.lineOfSightPolygons[auraId].polygon;  // if the token hasn't moved and walls haven't changed don't look for a new poly.
 			movePolygon = window.lineOfSightPolygons[auraId].move;  // if the token hasn't moved and walls haven't changed don't look for a new poly.
@@ -6182,7 +6948,8 @@ function redraw_light(darknessMoved = false){
 				y: tokenPos.y,
 				numberofwalls: walls.length+darknessBoundarys.length,
 				clippath: path,
-				visionType: window.TOKEN_OBJECTS[auraId].options.sight
+				visionType: window.TOKEN_OBJECTS[auraId].options.sight,
+				scaleCreated: window.TOKEN_OBJECTS[auraId].options.scaleCreated
 			}
 
 		
@@ -6624,6 +7391,10 @@ function clipped_light(auraId, maskPolygon, playerTokenId, canvasWidth = getScen
 	darkvisionRadius += (window.TOKEN_OBJECTS[auraId].options.size / 2);
 	let horizontalTokenMiddle = (parseInt(window.TOKEN_OBJECTS[auraId].options.left) + (window.TOKEN_OBJECTS[auraId].options.size / 2));
 	let verticalTokenMiddle = (parseInt(window.TOKEN_OBJECTS[auraId].options.top) + (window.TOKEN_OBJECTS[auraId].options.size / 2));
+	if(window.TOKEN_OBJECTS[auraId].options.type == 'door' && window.TOKEN_OBJECTS[auraId].options.scaleCreated){
+		horizontalTokenMiddle /=  window.TOKEN_OBJECTS[auraId].options.scaleCreated;
+		verticalTokenMiddle /=  window.TOKEN_OBJECTS[auraId].options.scaleCreated;
+	}
 	if(window.lightAuraClipPolygon[auraId] !== undefined){
 		if(circleRadius === 0){
 			delete window.lightAuraClipPolygon[auraId];

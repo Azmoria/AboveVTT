@@ -20,7 +20,7 @@ $(function() {
   $("head").append('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />');
   if (is_encounters_page()) {
     window.DM = true; // the DM plays from the encounters page
-    dmAvatarUrl = $('#site-bar').attr('user-avatar');
+    dmAvatarUrl = $('#site-bar').attr('user-avatar') != undefined ? $('#site-bar').attr('user-avatar') : $('.site-bar .user-interactions-profile-img').attr('src');
   } else if (is_campaign_page()) {
     // The owner of the campaign (the DM) is the only one with private notes on the campaign page
     window.DM = $(".ddb-campaigns-detail-body-dm-notes-private").length === 1;
@@ -726,7 +726,35 @@ function add_aoe_statblock_click(target, tokenId = undefined){
     }
   })
 }
+function create_update_token(options, save = true) {
+  console.log("create_update_token");
+  let self = this;
+  let id = options.id;
+  options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
 
+  if (!(id in window.TOKEN_OBJECTS)) {
+    window.TOKEN_OBJECTS[id] = new Token(options);
+
+    window.TOKEN_OBJECTS[id].sync = mydebounce(function(options) {
+      window.MB.sendMessage('custom/myVTT/token', options);
+    }, 300);
+  }
+
+  if(options.repositionAoe != undefined){
+    window.TOKEN_OBJECTS[id].place(0);
+    let origin, dx, dy;   
+    origin = getOrigin(window.TOKEN_OBJECTS[id]);
+    dx = origin.x - options.repositionAoe.x;
+    dy = origin.y - options.repositionAoe.y;        
+    options.left = `${parseFloat(options.left) - dx}px`;
+    options.top = `${parseFloat(options.top) - dy}px`;
+    delete options.repositionAoe;
+  }
+  
+  window.TOKEN_OBJECTS[id].place(0);
+  window.TOKEN_OBJECTS[id].sync($.extend(true, {}, options));
+
+}
 function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undefined, specificName=undefined){
   console.group("add_journal_roll_buttons")
   
@@ -984,7 +1012,127 @@ function process_monitored_logs() {
   });
   return processedLogs.join('\n');
 }
+function inject_dice(){
+  window.encounterObserver = new MutationObserver(function(mutationList, observer) {
 
+    mutationList.forEach(mutation => {
+      try {
+        let mutationTarget = $(mutation.target);
+        
+        if(mutationTarget.hasClass(['encounter-details', 'encounter-builder', 'release-indicator'])){
+          mutationTarget.remove();
+
+        }
+        if($(mutation.addedNodes).is('.encounter-builder, .release-indicator')){
+          $(mutation.addedNodes).remove();
+        }
+        
+      } catch{
+        console.warn("non_sheet_observer failed to parse mutation", error, mutation);
+      }
+    });
+  })
+
+
+  const mutation_target = $('body')[0];
+  //observers changes to body direct children being removed/added
+  const mutation_config = { attributes: false, childList: true, characterData: false, subtree: true };
+  window.encounterObserver.observe(mutation_target, mutation_config) 
+
+  $('body .container').append(`
+        <div id="encounter-builder-root" data-config="{&quot;assetBasePath&quot;:&quot;https://media.dndbeyond.com/encounter-builder&quot;,&quot;authUrl&quot;:&quot;https://auth-service.dndbeyond.com/v1/cobalt-token&quot;,&quot;campaignDetailsPageBaseUrl&quot;:&quot;https://www.dndbeyond.com/campaigns&quot;,&quot;campaignServiceUrlBase&quot;:&quot;https://www.dndbeyond.com/api/campaign&quot;,&quot;characterServiceUrlBase&quot;:&quot;https://character-service-scds.dndbeyond.com/v2/characters&quot;,&quot;diceApi&quot;:&quot;https://dice-service.dndbeyond.com&quot;,&quot;gameLogBaseUrl&quot;:&quot;https://www.dndbeyond.com&quot;,&quot;ddbApiUrl&quot;:&quot;https://api.dndbeyond.com&quot;,&quot;ddbBaseUrl&quot;:&quot;https://www.dndbeyond.com&quot;,&quot;ddbConfigUrl&quot;:&quot;https://www.dndbeyond.com/api/config/json&quot;,&quot;debug&quot;:false,&quot;encounterServiceUrl&quot;:&quot;https://encounter-service.dndbeyond.com/v1&quot;,&quot;featureFlagsDomain&quot;:&quot;https://api.dndbeyond.com&quot;,&quot;mediaBucket&quot;:&quot;https://media.dndbeyond.com&quot;,&quot;monsterServiceUrl&quot;:&quot;https://monster-service.dndbeyond.com/v1/Monster&quot;,&quot;sourceUrlBase&quot;:&quot;https://www.dndbeyond.com/sources/&quot;,&quot;subscriptionUrl&quot;:&quot;https://www.dndbeyond.com/subscribe&quot;}" >
+           <div class="dice-rolling-panel">
+              <div class="dice-toolbar  ">
+                 <div class="dice-toolbar__dropdown ">
+                    <div class=" dice-toolbar__dropdown-die"><span class="dice-icon-die dice-icon-die--d20"></span></div>
+                    <div role="group" class="MuiButtonGroup-root MuiButtonGroup-outlined dice-toolbar__target css-3fjwge" aria-label="roll actions">
+                       <button class="MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButtonGroup-grouped MuiButtonGroup-groupedHorizontal MuiButtonGroup-groupedOutlined MuiButtonGroup-groupedOutlinedHorizontal MuiButtonGroup-groupedOutlinedPrimary MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButtonGroup-grouped MuiButtonGroup-groupedHorizontal MuiButtonGroup-groupedOutlined MuiButtonGroup-groupedOutlinedHorizontal MuiButtonGroup-groupedOutlinedPrimary css-79xub" tabindex="0" type="button">
+                          <div class="MuiBox-root css-dgzhqv">
+                             <p class="MuiTypography-root MuiTypography-body1 dice-toolbar__target-roll css-9l3uo3">Roll</p>
+                          </div>
+                       </button>
+                    </div>
+                    <div class="dice-toolbar__dropdown-top" style="display: none;">
+                       <div class="dice-die-button" data-dice="d20">
+                          <span class="dice-icon-die dice-icon-die--d20"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d20
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d12">
+                          <span class="dice-icon-die dice-icon-die--d12"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d12
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d10">
+                          <span class="dice-icon-die dice-icon-die--d10"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d10
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d100">
+                          <span class="dice-icon-die dice-icon-die--d100"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d100
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d8">
+                          <span class="dice-icon-die dice-icon-die--d8"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d8
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d6">
+                          <span class="dice-icon-die dice-icon-die--d6"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d6
+                          </div>
+                       </div>
+                       <div class="dice-die-button" data-dice="d4">
+                          <span class="dice-icon-die dice-icon-die--d4"></span>
+                          <div class="dice-die-button__tooltip">
+                             <div class="dice-die-button__tooltip__pip"></div>
+                             d4
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+              <canvas class="dice-rolling-panel__container" width="1917" height="908" data-engine="Babylon.js v6.3.0" touch-action="none" tabindex="1" style="touch-action: none; -webkit-tap-highlight-color: transparent;"></canvas>
+           </div>
+        </div>
+        <script src="https://media.dndbeyond.com/encounter-builder/static/js/main.221d749b.js"></script>
+
+        <style>
+
+          .dice-rolling-panel,.dice-rolling-panel__container {
+              width: 100%;
+              height: 100%;
+              position: fixed;
+              top: 0;
+              pointer-events: none;
+              left: 0;
+          }
+
+          .dice-rolling-panel .dice-toolbar {
+              position: fixed;
+              z-index: 1;
+              bottom: 10px;
+              left: 10px;
+              pointer-events: all
+          }
+        </style>
+
+  `);
+  
+}
 function is_release_build() {
   return (!is_beta_build() && !is_local_build());
 }
@@ -1013,12 +1161,12 @@ function is_characters_builder_page() {
 
 /** @return {boolean} true if the current page url includes "/campaigns/"  */
 function is_campaign_page() {
-  return window.location.pathname.includes("/campaigns/");
+  return window.location.pathname.includes("/campaigns/") && !window.location.search.includes("dm=true");
 }
 
 /** @return {boolean} true if the current page url includes "/encounters/"  */
 function is_encounters_page() {
-  return window.location.pathname.includes("/encounters/");
+  return window.location.search.includes("dm=true");
 }
 
 /** @return {boolean} true if the url has abovevtt=true, and is one of the pages that we allow the app to run on */
@@ -1545,7 +1693,7 @@ const debounce_pc_token_update = mydebounce(() => {
         imgsrc: (token.options.alternativeImages?.length == 0) ? pc.image : currentImage,
         id: pc.sheet // pc.id is DDB characterId, but we use the sheet as an id for tokens
       };  
-      for(let i in unusedPlayerData){
+      for(let i =0; i<unusedPlayerData.length; i++){
         delete token.options[unusedPlayerData[i]];
       }    
       if (window.DM) {
@@ -1564,7 +1712,7 @@ const debounce_pc_token_update = mydebounce(() => {
         imgsrc: (token.options.alternativeImages?.length == 0) ? pc.image : currentImage,
         id: pc.sheet // pc.id is DDB characterId, but we use the sheet as an id for tokens
       };
-      for(let i in unusedPlayerData){
+      for(let i =0; i<unusedPlayerData.length; i++){
         delete token.options[unusedPlayerData[i]];
       }
     }     
@@ -1626,9 +1774,7 @@ async function harvest_game_id() {
   }
 
   if (is_encounters_page()) {
-    const encounterId = window.location.pathname.split("/").pop();
-    const encounterData = await DDBApi.fetchEncounter(encounterId);
-    return encounterData.campaign.id.toString();
+    return window.location.pathname.split("/").pop();;
   }
 
   if (is_characters_page()) {
@@ -2157,11 +2303,19 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
   $("#site").append(container);
 
   if (addLoadingIndicator) {
-    container.append(build_combat_tracker_loading_indicator(`Loading ${titleBarText}`));
-    const loadingIndicator = container.find(".sidebar-panel-loading-indicator");
+    const loadingIndicator = build_combat_tracker_loading_indicator(`Loading ${titleBarText}`)
+
+    container.append(loadingIndicator);
     loadingIndicator.css({
+      'height': 'calc(100% - 26px)',
+      'width': 'calc(100% - 4px)',
+      'top': '24px',
+      'left': '2px',
+    });
+    loadingIndicator.find('svg').css({
       "top": "25px",
-      "height": "calc(100% - 25px)"
+      "margin": '0px',
+      "max-height": "calc(100% - 25px)"
     });
   }
   if(showSlow){

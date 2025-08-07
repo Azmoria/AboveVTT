@@ -295,7 +295,11 @@ Mousetrap.bind(["1","2","3","4","5","6","7","8","9","shift+1","shift+2","shift+3
 
 
 Mousetrap.bind("n", function (e) {
-    $('#combat_next_button').click();
+    if(window.DM)
+        $('#combat_next_button').click();
+    else
+        $('#combat_tracker_inside #endplayerturn').click();
+
 });
 Mousetrap.bind("p", function (e) {
     $('#combat_prev_button').click();
@@ -664,20 +668,70 @@ Mousetrap.bind('shift+h', function () {
 });
 
 Mousetrap.bind('mod+c', function(e) {
-    copy_selected_tokens();
+    if(window.selectedWalls?.length==0){
+        copy_selected_tokens();
+    }
+    else{
+        copy_selected_walls();
+    }
+    
 });
 
 
 Mousetrap.bind('mod+v', function(e) {
     if($('#temp_overlay:hover').length>0){
-        paste_selected_tokens(window.cursor_x, window.cursor_y);
+        if(window.TOKEN_PASTE_BUFFER?.[0]?.wall == undefined){
+            paste_selected_tokens(window.cursor_x, window.cursor_y);
+        }else{
+            paste_selected_walls(window.cursor_x, window.cursor_y);
+        }
+        
     } 
     else {
+
         let center = center_of_view();
-        paste_selected_tokens(center.x, center.y);
+        if(window.TOKEN_PASTE_BUFFER?.[0]?.wall == undefined){
+            paste_selected_tokens(center.x, center.y);
+        }else{
+            paste_selected_walls(center.x, center.y);
+        }
     }
 });
+Mousetrap.bind('mod+a', function (e) {    
+    if($('#wall_button').hasClass('button-enabled') && $('#edit_wall').hasClass('button-enabled')){
+        e.preventDefault();
+        window.selectedWalls = [];  
+        const walls = window.DRAWINGS.filter(d => (d[1] == "wall" && d[0].includes("line")));
+        for(let i=0; i<walls.length; i++){
 
+            let wallInitialScale = walls[i][8];
+            let scale_factor = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1;
+            let adjustedScale = walls[i][8]/window.CURRENT_SCENE_DATA.scale_factor/window.CURRENT_SCENE_DATA.conversion;                
+
+            let pt1 = {
+                x: walls[i][3]/adjustedScale,
+                y: walls[i][4]/adjustedScale
+            };
+            let pt2 =  {
+                x: walls[i][5]/adjustedScale,
+                y: walls[i][6]/adjustedScale
+            };
+
+
+        
+            const [x1,y1,x2,y2] = [walls[i][3], walls[i][4], walls[i][5], walls[i][6]];
+            const doorTokenId = `${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','');
+            const drawIndex = window.DRAWINGS.findIndex(d => JSON.stringify(d)==JSON.stringify(walls[i]));        
+            window.selectedWalls.push({pt1: pt1, pt2: pt2, wall: walls[i], tokenId: doorTokenId, drawIndex: drawIndex})
+        
+        }
+        redraw_light_walls();
+        redraw_drawn_light();
+        redraw_light(true);
+        sync_drawings();
+        window.wallsBeingDragged = [];
+    }
+});
 
 document.onmousemove = function(event)
 {
@@ -687,6 +741,7 @@ document.onmousemove = function(event)
 
 Mousetrap.bind(['backspace', 'del'], function(e) {
     delete_selected_tokens();
+    delete_selected_walls();
 });
 Mousetrap.bind('mod+z', function(e) {
     if($('input:focus').length ==0){

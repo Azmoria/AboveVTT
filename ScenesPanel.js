@@ -1561,6 +1561,9 @@ function edit_scene_dialog(scene_id) {
 			if(sceneData.UVTTFile==1){
 				container.append(build_combat_tracker_loading_indicator('One moment while we load the UVTT File'));
 			}
+			else{
+				container.append(build_combat_tracker_loading_indicator('Loading Wizard'));
+			}
 			window.ScenesHandler.scenes[scene_id] = sceneData;
 
 
@@ -1854,7 +1857,7 @@ function mega_importer(DDB = false, ddbSource, ddbChapter) {
 
 
 function default_scene_data() {
-	return {
+	let defaultData = {
 		id: uuid(),
 		title: "New Scene",
 		dm_map: "",
@@ -1881,7 +1884,16 @@ function default_scene_data() {
 		gridType: 1,
 		scale_check: 1
 	};
+	const sceneCustomDefaults = window.SCENE_DEFAULT_SETTINGS;
+	if(sceneCustomDefaults != false){
+		defaultData = {
+			...defaultData,
+			...sceneCustomDefaults
+		}
+	}
+	return defaultData;
 }
+
 
 function init_scenes_panel() {
 	console.log("init_scenes_panel");
@@ -2816,10 +2828,10 @@ function build_source_book_chapter_import_section(sceneSet) {
 
 	sceneSet.forEach(scene => {
 		if (scene.uuid in DDB_EXTRAS) {
-			scene = {...default_scene_data(), ...scene, ...DDB_EXTRAS[scene.uuid]}
+			scene = {...default_scene_data(), ...scene, ...DDB_EXTRAS[scene.uuid], ... get_custom_scene_settings()}
 		}
 		else if(scene.uuid.replace('dnd/', '') in DDB_EXTRAS){
-			scene = {...scene, ...DDB_EXTRAS[scene.uuid.replace('dnd/', '')]}
+			scene = {...scene, ...DDB_EXTRAS[scene.uuid.replace('dnd/', '')], ...get_custom_scene_settings()}
 		}
 
 		
@@ -2847,13 +2859,14 @@ function build_source_book_chapter_import_section(sceneSet) {
 
 	import_chapter.off('click.importChap').on('click.importChap', function(){
 		build_import_loading_indicator(`Importing Chapter`);
-		for(let i in sceneData){
+		for(let i=0; i<sceneData.length; i++){
 			sceneData[i] = {
 				...default_scene_data(),
 				...sceneData[i],
 				id: uuid(),
 				folderPath: folderPath,
-				parentId: parentId
+				parentId: parentId,
+				...get_custom_scene_settings()
 			}
 			if(Array.isArray(sceneData[i].tokens)){
 				let tokensObject = {}
@@ -2870,7 +2883,7 @@ function build_source_book_chapter_import_section(sceneSet) {
 		AboveApi.migrateScenes(window.gameId, sceneData)
 			.then(() => {
 				let journalUpdated = false;
-				for(let i in sceneData){
+				for(let i=0; i<sceneData.length; i++){
 					if(sceneData[i].notes != undefined){
 						journalUpdated = true;
 						for(let id in sceneData[i].notes){
@@ -3135,7 +3148,8 @@ function build_tutorial_import_list_item(scene, logo, allowMagnific = true) {
 			...scene,
 			id: uuid(),
 			folderPath: folderPath,
-			parentId: parentId
+			parentId: parentId,
+			...get_custom_scene_settings()
 		};
 		if(Array.isArray(importData.tokens)){
 			let tokensObject = {}
@@ -3146,16 +3160,15 @@ function build_tutorial_import_list_item(scene, logo, allowMagnific = true) {
 			}	
 			importData.tokens = tokensObject;
 		}
-
+		if(importData.notes != undefined){
+			for(let id in importData.notes){
+				window.JOURNAL.notes[id] = {...importData.notes[id]};
+			}
+			window.JOURNAL.persist();
+			delete importData.notes;
+		}
 		AboveApi.migrateScenes(window.gameId, [importData])
 			.then(() => {
-				if(importData.notes != undefined){
-					for(let id in importData.notes){
-						window.JOURNAL.notes[id] = {...importData.notes[id]};
-					}
-					window.JOURNAL.persist();
-					delete importData.notes;
-				}
 				window.ScenesHandler.scenes.push(importData);
 				did_update_scenes();
 				$(`.scene-item[data-scene-id='${importData.id}'] .dm_scenes_button`).click();

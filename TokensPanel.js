@@ -188,6 +188,15 @@ function list_item_from_player_id(playerId) {
     let pc = window.pcs.find(p => p.sheet.includes(playerId));
     if (pc === undefined) return undefined;
     let fullPath = sanitize_folder_path(`${RootFolder.Players.path}/${pc.name}`);
+    const pcCustomization = window.TOKEN_CUSTOMIZATIONS.find(d => d.id.includes(playerId))
+    if(pcCustomization){
+        fullPath = sanitize_folder_path(pcCustomization.fullPath());
+    }
+    else{
+        fullPath = sanitize_folder_path(`${RootFolder.Players.path}/${pc.name}`);
+    }
+   
+    
     return find_sidebar_list_item_from_path(fullPath);
 }
 
@@ -427,7 +436,7 @@ function inject_monster_tokens(searchTerm, skip, addedList=[]) {
             }
             let m = monsterSearchResponse.data[i];
             let item = SidebarListItem.Monster(m)
-            if(window.ownedMonstersOnly && !item.monsterData.isReleased && item.monsterData.homebrewStatus != 1){
+            if(window.ownedMonstersOnly && !item.monsterData.isReleased && item.monsterData.homebrewStatus == 0){
                 continue;   
             }
             window.monsterListItems.push(item);
@@ -622,7 +631,7 @@ function redraw_token_list(searchTerm, enableDraggable = true, leaveEmpty=false)
             let row = build_sidebar_list_row(item);
 
             if(item.encounterData?.tokenItems != undefined){
-                for(let i in item.encounterData.tokenItems){
+                for(let i=0; i<item.encounterData.tokenItems.length; i++){
                     if(item.encounterData.tokenItems[i].type != 'pc'){
                         if(item.encounterData.tokenItems[i].quantity != undefined){
                             for(let j = 0; j<item.encounterData.tokenItems[i].quantity; j++){
@@ -1012,7 +1021,7 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
                 .filter(item => item.folderPath === fullPath);
 
             if(listItem.encounterData?.tokenItems != undefined){
-                for(let i in listItem.encounterData.tokenItems){
+                for(let i=0; i<listItem.encounterData.tokenItems.length; i++){
                     if(listItem.encounterData.tokenItems[i].type != 'pc'){
                         if(listItem.encounterData.tokenItems[i].quantity != undefined){
                             for(let j = 0; j<listItem.encounterData.tokenItems[i].quantity; j++){
@@ -2825,7 +2834,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         defaultValue: false
     };
     let auraRevealVisionEnabled = (customization.tokenOptions.share_vision != undefined) ? customization.tokenOptions.share_vision : false;
-    for(let i in window.playerUsers){
+    for(let i=0; i<window.playerUsers.length; i++){
         if(!revealvisionOption.options.some(d => d.value == window.playerUsers[i].userId)){
             let option = {value: window.playerUsers[i].userId, label: window.playerUsers[i].userName, desciption: `Token vision is shared with ${window.playerUsers[i].userName}`};
             revealvisionOption.options.push(option);

@@ -761,7 +761,7 @@ function change_sidbar_tab(clickedTab, isCharacterSheetInfo = false) {
 		// This only happens when `is_character_page() == true` and the user clicked the gamelog tab.
 		// This is an important distinction, because we switch to the gamelog tab when the user clicks info on their character sheet that causes details to be displayed instead of the gamelog.
 		// Since the user clicked the tab, we need to show the gamelog instead of any detail info that was previously shown.
-    let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button")
+    let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button']")
     if(gameLogButton.length == 0){
       gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
     }
@@ -1043,13 +1043,6 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 
 function build_draggable_monster_window() {
 
-	const draggable_resizable_div = $(`<div id='resizeDragMon' style="display:none; left:300px"></div>`);
-
-	// check if the monster pane is not open
-	if (! $("#resizeDragMon").length) {
-		$("body").append(draggable_resizable_div)
-		draggable_resizable_div.show("slow")
-	}
 	$("#resizeDragMon").append(build_combat_tracker_loading_indicator())
 	let container = $("<div id='resizeDragMon'/>");
 
@@ -1139,7 +1132,7 @@ function build_draggable_monster_window() {
 	});
 	minimize_player_monster_window_double_click($("#resizeDragMon"));
 
-	return $("#resizeDragMon");
+	return container;
 }
 
 
@@ -1208,7 +1201,7 @@ function init_controls() {
 	$(".sidebar").css("height", "calc(100vh - 24px)");
 
 	$(".ct-sidebar__inner button[aria-label='Unlocked']").click(); // Click on the padlock icon  // This is safe to call multiple times
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button")
+	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button']")
  	if(gameLogButton.length == 0){
    	gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
  	}
@@ -1317,7 +1310,7 @@ function init_controls() {
 		sidebarControls.addClass("player");
 	}
 	addGamelogPopoutButton()
-	$('ol[class*="GameLogEntries"]').off('click').on('click', '.int_source_link', function(event){
+	$('ol[class*="GameLogEntries"]').off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 		event.preventDefault();
 		render_source_chapter_in_iframe(event.target.href);
 	});
@@ -2043,7 +2036,7 @@ function init_character_page_sidebar() {
 		}, 1000);
 		return;
 	}
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button")
+	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button']")
 	if(gameLogButton.length == 0){
 	  gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
 	}
@@ -2125,7 +2118,7 @@ function init_character_page_sidebar() {
  * Any time they do that, we need to react to those changes.
  */
 function monitor_character_sidebar_changes() {
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button")
+	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button']")
 	 if(gameLogButton.length == 0){
 	   gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
 	 }
@@ -2158,8 +2151,6 @@ function init_ui() {
 	window.VTTMargin = 1000;
 
 	// ATTIVA GAMELOG
-	$(".sidebar__control").click(); // 15/03/2022 .. DDB broke the gamelog button.
-	$(".sidebar__control--lock").closest("span.sidebar__control-group.sidebar__control-group--lock > button").click(); // lock it open immediately. This is safe to call multiple times
 	$(".glc-game-log").addClass("sidepanel-content");
 	$(".sidebar").css("z-index", 9999);
 	if (is_characters_page()) {
@@ -2395,6 +2386,10 @@ function init_ui() {
 	black_layer.animate({ opacity: "1" }, 1000);
 	black_layer.css("z-index", "1");
 
+	black_layer.off('contextmenu').on('contextmenu', function(e){
+		e.preventDefault();
+	})
+
 	init_controls();
 	init_sheet();
 	init_my_dice_details()
@@ -2508,24 +2503,21 @@ function init_ui() {
 	// do token dragging operations with measure paths
 	window.disable_window_mouse_handlers = function () {
 
-		$(window).off("mousemove", mousemove);
-		$(window).off("mousedown", mousedown);
-		$(window).off("mouseup", mouseup);
+		$(window.document).off("mousemove.mouseHandler", mousemove);
+		$(window.document).off("mousedown.mouseHandler", mousedown);
+		$(window.document).off("mouseup.mouseHandler", mouseup);
 	}
 
 	// Helper function to enable mouse handlers, required when we
 	// do token dragging operations with measure paths
 	window.enable_window_mouse_handlers = function () {
 
-		$(window).on("mousemove", mousemove);
-		$(window).on("mousedown", mousedown);
-		$(window).on("mouseup", mouseup);
+		$(window.document).on("mousemove.mouseHandler", mousemove);
+		$(window.document).on("mousedown.mouseHandler", mousedown);
+		$(window.document).on("mouseup.mouseHandler", mouseup);
 	}
 
-	// Set basic mouse event handlers
-	$(window).mousemove(mousemove);
-	$(window).mousedown(mousedown);
-	$(window).mouseup(mouseup);
+	window.enable_window_mouse_handlers();
 
 	$("#temp_overlay").bind("contextmenu", function (e) {
 		return false;
@@ -2535,6 +2527,7 @@ function init_ui() {
 
 	init_help_menu();
   hide_or_unhide_scrollbar()
+  
 
 }
 
@@ -3125,11 +3118,11 @@ function init_help_menu() {
 						</dl>
 						<dl>
 							<dt>${getModKeyName()}+C</dt>
-							<dd>Copy Selected Token</dd>
+							<dd>Copy Selected Token/Walls</dd>
 						</dl>
 						<dl>
 							<dt>${getModKeyName()}+V</dt>
-							<dd>Paste Selected Tokens</dd>
+							<dd>Paste Selected Tokens/Walls</dd>
 						</dl>
 						<dl>
 							<dt>${getShiftKeyName()}+L</dt>
@@ -3172,8 +3165,16 @@ function init_help_menu() {
 							<dd>Force recenter camera and instant teleport token for those receiving the message. (Always does this for those clicking the portal)</dd>
 						</dl>
 						<dl>
-							<dt>Hold ${getShiftKeyName()} while drawing walls</dt>
-							<dd>Create Segemented Wall. This keeps walls from having pin point holes.</dd>
+							<dt>${getModKeyName()}+A while edit wall points tool is selected</dt>
+							<dd>Select all wall points</dd>
+						</dl>
+						<dl>
+							<dt>Hold ${getShiftKeyName()} while selecting wall points with edit point tool</dt>
+							<dd>Adds any selected points to already selected group of points.</dd>
+						</dl>
+						<dl>
+							<dt>Hold ${getShiftKeyName()} while editting wall points</dt>
+							<dd>Instead of moving all selected points, it will rescale all lines that have a point selected.</dd>
 						</dl>
 						<dl>
 							<dt>${getModKeyName()}+click scenes/tokens while reordering (DM only)</dt>
@@ -3542,12 +3543,12 @@ function show_player_sheet() {
 	});
 	$(".ct-character-sheet__inner, [class*='styles_mobileNav']>div>button[class*='styles_navToggle']").css({
 		"display": "",
-		"z-index": 110
+		"z-index": 21000
 	});
 	$("[class*='styles_mobileNav']").toggleClass('visibleMobileNav', true);
 	$(".site-bar").css({
 		"display": "",
-		"z-index": 110
+		"z-index": 21000
 	});
 	if (window.innerWidth > 1540) { // DDB resize point + sidebar width
 		// the reactive nature of the character sheet starts messing with our thin layout so don't allow the thin layout on smaller screens. Let DDB do their condensed/tablet/mobile view instead
@@ -3870,7 +3871,15 @@ function addGamelogPopoutButton(){
 		childWindows["Gamelog"].gameId = window.gameId;
 
 	});
-	$(`.glc-game-log>[class*='Container-Flex']>[class*='Title']`).append(gamelog_popout);
+	
+	const gamelogTitle = $(`.glc-game-log>[class*='Container-Flex']>[class*='Title']`);
+	if(gamelogTitle.children('[class*="-Flex"]').length>0){
+		gamelogTitle.children('[class*="-Flex"]').before(gamelog_popout);
+	}
+	else{
+		gamelogTitle.append(gamelog_popout);
+	}
+	
 }
 // This will popout the selector and it's children. Use a unique name for windows you want to open seperately. If you want to override an open window use the same name.
 function popoutWindow(name, cloneSelector, width=400, height=800, windowTarget=``){
@@ -3922,11 +3931,11 @@ function popoutGamelogCleanup(){
 		img.magnify{
 			pointer-events:none;
 		}
-		.body-rpgcampaign-details .sidebar {
+		.encounter-builder .sidebar {
 		    top: 0 !important;
 		    height: 100% !important;
 		}
-		.body-rpgcampaign select#chat-language {
+		.body-rpgcampaign:not(.encounter-builder) select#chat-language {
 	    bottom:0px;
 	    right: 20px;
 		}

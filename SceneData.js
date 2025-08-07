@@ -78,12 +78,12 @@ async function export_scene_data(){
 	let removeArray = ['scale_check', 'daylightColor', 'undefined', 'isnewscene', 'disableSceneVision', 'snap', 'fog_of_war', 'folderPath', 'id', 'itemType', 'order', 'parentId', 'playlist', 'uuid', 'visionTrail', 'height', 'width']
 	let removeDdbArray = ['dm_map', 'player_map', 'map', 'thumb', 'dm_map_is_video', 'map', 'player_map_is_video']
 	
-	for(let i in removeArray){
+	for(let i=0; i<removeArray.length; i++){
 		delete data[removeArray[i]];
 	}
 
 	if(data?.dm_map?.includes('dndbeyond.com') || data?.map?.includes('dndbeyond.com') || data?.player_map?.includes('dndbeyond.com') ){
-		for(let i in removeDdbArray){
+		for(let i=0; i<removeDdbArray.length; i++){
 			delete data[removeDdbArray[i]];
 		}
 	}
@@ -113863,7 +113863,8 @@ function get_ddb_extras() {
 		...get_scene_data_gotsf(),
 		...get_scene_data_gos(),
 		...get_scene_data_hbtd(),
-		...get_scene_data_ottg()
+		...get_scene_data_ottg(),
+		...get_scene_data_wel()
 	}
 }
 

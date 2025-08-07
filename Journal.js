@@ -805,7 +805,7 @@ class JournalManager{
 			chapterImport.append($(`<option value='/feats'>Feats</option>`));
 			chapterImport.append($(`<option value='/spells'>Spells</option>`));
 			
-			for(let source in window.ddbConfigJson.sources){
+			for(let source=0; source<window.ddbConfigJson.sources.length; source++){
 				const currentSource = window.ddbConfigJson.sources[source]
 				if(currentSource.sourceURL == '' || currentSource.name == 'HotDQ' || currentSource.name == 'RoT')
 					continue;
@@ -1293,7 +1293,7 @@ class JournalManager{
 					            flyout.append(buttonFooter);
 					            buttonFooter.append(sendToGamelogButton);
 					            flyout.find("a").attr("target","_blank");
-					      		flyout.off('click').on('click', '.int_source_link', function(event){
+					      		flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 									event.preventDefault();
 									render_source_chapter_in_iframe(event.target.href);
 								});
@@ -1353,7 +1353,7 @@ class JournalManager{
 				});
 
 
-				for(let i in window.playerUsers){
+				for(let i =0; i<window.playerUsers.length; i++){
 					if(toggle_container.find(`input[name='${window.playerUsers[i].userId}']`).length == 0){
 						let visibility_toggle=$(`<input type='checkbox' name='${window.playerUsers[i].userId}'/>`);
 						let visibility_row = $(`<div class='visibility_toggle_row'><label for='${window.playerUsers[i].userId}'>${window.playerUsers[i].userName}</label></div>`)
@@ -1520,7 +1520,7 @@ class JournalManager{
 				
 				$(this).siblings(".ui-dialog-titlebar").children(".ui-dialog-titlebar-close").click();
 			});
-			note.off('click').on('click', '.int_source_link', function(event){
+			note.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 				event.preventDefault();
 				render_source_chapter_in_iframe(event.target.href);
 			});
@@ -1608,7 +1608,7 @@ class JournalManager{
 						            flyout.append(buttonFooter);
 						            buttonFooter.append(sendToGamelogButton);
 						            flyout.find("a").attr("target","_blank");
-						      		flyout.off('click').on('click', '.int_source_link', function(event){
+						      		flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 										event.preventDefault();
 										render_source_chapter_in_iframe(event.target.href);
 									});
@@ -1718,7 +1718,7 @@ class JournalManager{
 
 	    const whisper_container=$("<div class='whisper-container'/>");
 
-        for(let i in window.playerUsers){
+        for(let i=0; i<window.playerUsers; i++){
 			if(whisper_container.find(`input[name='${window.playerUsers[i].userId}']`).length == 0){
 				const randomId = uuid();
 				let whisper_toggle=$(`<input type='checkbox' name='${window.playerUsers[i].userId}'/>`);
@@ -1831,6 +1831,7 @@ class JournalManager{
     translateHtmlAndBlocks(target, displayNoteId) {
     	let pastedButtons = target.find('.avtt-roll-button, [data-rolltype="recharge"], .integrated-dice__container, span[data-dicenotation]');
     	target.find('>style:first-of-type, >style#contentStyles').remove();
+		
 		for(let i=0; i<pastedButtons.length; i++){
 			$(pastedButtons[i]).replaceWith($(pastedButtons[i]).text());
 		}
@@ -1839,7 +1840,7 @@ class JournalManager{
 			if($(emStrong[i]).text().match(/recharge/gi))
 				$(emStrong[i]).replaceWith($(emStrong[i]).text());
 		}
-		
+		target.find('a.ignore-abovevtt-formating').wrap('<span class="ignore-abovevtt-formating"></span>')
 
 		const trackerSpans = target.find('.note-tracker');
 		for(let i=0; i<trackerSpans.length; i++){
@@ -1856,6 +1857,8 @@ class JournalManager{
 			}
 			$(iframes[i]).replaceWith(`<iframe class='journal-site-embed' src='${url}'></iframe>`);
 		}
+
+
     	let data = $(target).clone().html();
 
 
@@ -2202,9 +2205,11 @@ class JournalManager{
 		
 		const debounceNoteSave = mydebounce(function(e, editor){
 		    if(editor.isDirty()){
-		    	self.notes[id].text = editor.getContent();
-		    	self.notes[id].plain= editor.getContent({ format: 'text' });
-		    	self.notes[id].statBlock=statBlock;
+				let parser = new DOMParser()
+				let html = parser.parseFromString(editor.getContent(), 'text/html');
+				self.notes[id].text = $(html).find('body').html();
+		    	self.notes[id].plain = editor.getContent({ format: 'text' });
+		    	self.notes[id].statBlock = statBlock;
 		    	self.persist();
 		    }
 		}, 800)
@@ -2269,6 +2274,9 @@ class JournalManager{
 			}
 			.ignore-abovevtt-formating{
 				 border: 2px dotted #b100ff;
+			}
+			.ignore-abovevtt-formating.no-border{
+				border: none;
 			}
 			.note-tracker{
 				 border: 1px dotted #bb5600;
@@ -3185,7 +3193,7 @@ class JournalManager{
 			    {
 			    	"title": "2024 Monster Sheet",
 			    	"description": "Add a monster sheet template",
-			    	"content": `<style>${contentStyles}</style><div class="stat-block">
+			    	"content": `<style id='contentStyles'>${contentStyles}</style><div class="stat-block">
 						<div class="monster-header">Skeleton</div>
 						<p>Medium Undead, Lawful Evil</p>
 						<p><strong>AC</strong> 13 <strong>Initiative</strong> +3 (13)</p>
@@ -3271,7 +3279,7 @@ class JournalManager{
 			    {
 			    	"title": "Caster Spell List",
 			    	"description": "Add a spell block for casters.",
-			    	"content": `<style>${contentStyles}</style><p>Spellcasting. The mage is a 9th-level spellcaster. Its spellcasting ability is Intelligence (spell save DC 14, +6 to hit with spell attacks). The mage has the following wizard spells prepared:</p>
+			    	"content": `<style id='contentStyles'>${contentStyles}</style><p>Spellcasting. The mage is a 9th-level spellcaster. Its spellcasting ability is Intelligence (spell save DC 14, +6 to hit with spell attacks). The mage has the following wizard spells prepared:</p>
 <p>Cantrips (at will): fire bolt, light, mage hand, prestidigitation</p>
 <p>1st level (4 slots): detect magic, mage armor, magic missile, shield</p>
 <p>2nd level (3 slots): misty step, suggestion</p>
@@ -3289,9 +3297,8 @@ class JournalManager{
 				'image': "/content/1-0-1688-0/js/tinymce/tiny_mce/plugins/image/plugin.min.js",
 			},
 			link_class_list: [
-			   {title: 'External Link', value: 'ext_link'},
-			   {title: 'DDB Sourcebook Link', value: 'int_source_link'},
-			   {title: 'DDB Tooltip Link (Spells, Monsters, Magic Items, Source)', value: 'tooltip-hover'}
+			   {title: 'External Link', value: 'ext_link no-border ignore-abovevtt-formating'},
+			   {title: 'DDB Tooltip Link (Spells, Monsters, Magic Items, Source)', value: 'tooltip-hover no-border ignore-abovevtt-formating'}
 			],
 			valid_children : '+body[style]',
 			setup: function (editor) { 
@@ -3352,9 +3359,11 @@ class JournalManager{
 			save_onsavecallback: function(e) {
 				// @todo !IMPORTANT grab the id somewhere from the form, so that you can use this safely
 				let note_id = $(this.getElement()).attr('data-note-id');
-				self.notes[note_id].text =tinymce.activeEditor.getContent();
-				self.notes[note_id].plain=tinymce.activeEditor.getContent({ format: 'text' });
-				self.notes[note_id].statBlock=statBlock;
+				let parser = new DOMParser();
+				let html = parser.parseFromString(tinymce.activeEditor.getContent(), 'text/html');
+				self.notes[note_id].text = $(html).find('body').html(); // we do this to get rid of style tags used in templates that aren't needed to be stored - it was causing notes to be too large from message size limits
+				self.notes[note_id].plain = tinymce.activeEditor.getContent({ format: 'text' });
+				self.notes[note_id].statBlock = statBlock;
 				self.persist();
 				if(note_id in window.TOKEN_OBJECTS){
 					window.TOKEN_OBJECTS[note_id].place(); // trigger display of the "note" condition
@@ -3419,7 +3428,7 @@ function render_source_chapter_in_iframe(url) {
 	const iframeId = 'sourceChapterIframe';
 	const containerId = `${iframeId}_resizeDrag`;
 	const container = find_or_create_generic_draggable_window(containerId, 'Source Book', true, true, `#${iframeId}`);
-
+	frame_z_index_when_click(container);
 	let iframe = $(`#${iframeId}`);
 	if (iframe.length > 0) {
 
@@ -3498,7 +3507,7 @@ function render_source_chapter_in_iframe(url) {
 		iframeContents.find("body").append($(`<style id='ddbSourceStyles'>
 
 		body, html body.responsive-enabled{
-			background: var(--theme-page-bg-image-1024, url('')) no-repeat center 0px, var(--theme-page-bg-color,#f9f9f9) !important;
+			background: var(--theme-page-bg-color,#f9f9f9) !important;
 			background-position: center 0px !important;
 		}
 		#site-main header.main[role="banner"]{

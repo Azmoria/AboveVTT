@@ -40,7 +40,7 @@ const availableToAoe = [
 
 
 
-const throttleLight = throttle((darknessMoved = false) => {requestAnimationFrame(()=>{redraw_light(darknessMoved)})}, 1000/30);
+const throttleLight = throttle((darknessMoved = false) => {requestAnimationFrame(()=>{redraw_light(darknessMoved)})}, 1000/16);
 const throttleTokenCheck = throttle(() => {requestAnimationFrame(()=>{do_check_token_visibility()})}, 1000/4);
 const debounceStoreExplored = mydebounce((exploredCanvas) => {		
 	let dataURI = exploredCanvas.toDataURL('image/jpg')
@@ -676,7 +676,12 @@ class Token {
 		this.prepareWalkableArea()
 		
 		let tinyToken = (Math.round(this.options.gridSquares*2)/2 < 1) || this.isAoe();
-		let tokenPosition = snap_point_to_grid(left, top, true, tinyToken)
+
+
+		
+		let tokenPosition = snap_point_to_grid(left, top, true, tinyToken, this.options.size, true)
+		
+		
 
 		// Stop movement if new position is outside of the scene
 		if (
@@ -1116,11 +1121,11 @@ class Token {
 			durationBadge.find('span').text(condition.duration);
 		}
 
-		for(let i in this.options.conditions){
+		for(let i=0; i<this.options.conditions.length; i++){
 			const condition = this.options.conditions[i]
 			setDurationBadgeText(this, condition);
 		}	
-		for(let i in this.options.custom_conditions){
+		for(let i=0; i<this.options.custom_conditions.length; i++){
 			const condition = this.options.custom_conditions[i];
 			setDurationBadgeText(this, condition);
 		}
@@ -1965,7 +1970,7 @@ class Token {
 					            flyout.append(buttonFooter);
 					            buttonFooter.append(sendToGamelogButton);
 					            flyout.find("a").attr("target","_blank");
-					      		flyout.off('click').on('click', '.int_source_link', function(event){
+					      		flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function(event){
 									event.preventDefault();
 									render_source_chapter_in_iframe(event.target.href);
 								});
@@ -2032,7 +2037,7 @@ class Token {
 			}
 			if(this.isPlayer() && this.options.campaign != undefined){ // put this here so it's removed from existing tokens for now
 				const unusedPlayerData = ['attacks', 'attunedItems', 'campaign', 'campaignSetting', 'castingInfo', 'classes', 'deathSaveInfo', 'decorations', 'extras', 'immunities', 'level', 'passiveInsight', 'passiveInvestigation', 'passivePerception', 'proficiencyBonus', 'proficiencyGroups', 'race', 'readOnlyUrl', 'resistances', 'senses', 'skills', 'speeds', 'vulnerabilities'];
-				for(let i in unusedPlayerData){
+				for(let i =0; i<unusedPlayerData.length; i++){
 					delete this.options[unusedPlayerData[i]];
 				}
 			}
@@ -2881,7 +2886,7 @@ class Token {
 				tok.draggable({
 					stop: function (event) {
 							event.stopPropagation();
-							
+							window.enable_window_mouse_handlers();
 							if(window.TOKEN_OBJECTS[self.options.id] != undefined){
 								self.place_sync_persist();
 							}
@@ -2937,6 +2942,7 @@ class Token {
 						},
 					start: function (event) {
 						event.stopPropagation();
+						window.disable_window_mouse_handlers();
 						pauseCursorEventListener = true; // we're going to send events from drag, so we don't need the eventListener sending events, too
 						if (get_avtt_setting_value("allowTokenMeasurement")) {
 							$("#temp_overlay").css("z-index", "50");
@@ -3124,7 +3130,7 @@ class Token {
 							tokenY +=  !(tinyToken) ? (parseFloat(window.CURRENT_SCENE_DATA.vpps) / 2) : (parseFloat(window.CURRENT_SCENE_DATA.vpps) / 4) ;
 						}
 						
-						let tokenPosition = snap_point_to_grid(tokenX, tokenY, undefined, tinyToken);
+						let tokenPosition = snap_point_to_grid(tokenX, tokenY, undefined, tinyToken, self.options.size);
 
 						if(self.walkableArea.bottom != null && self.walkableArea.right != null){ // need to figure out what's causing these to be null but this is a workaround for the error for now
 							// Constrain token within scene
@@ -3667,8 +3673,33 @@ function should_snap_to_grid() {
 		|| ((window.CURRENT_SCENE_DATA.snap != "1") && window.toggleSnap);
 }
 
-function snap_point_to_grid(mapX, mapY, forceSnap = false, tinyToken = false) {
+function snap_point_to_grid(mapX, mapY, forceSnap = false, tinyToken = false, tokenWidth = 0, arrowKeys=false) {
 	if (forceSnap || should_snap_to_grid()) {
+		const gridSquaresWide = Math.round(tokenWidth/window.CURRENT_SCENE_DATA.hpps)
+		const hpps = window.CURRENT_SCENE_DATA.gridType == 2 ? window.CURRENT_SCENE_DATA.vpps : window.CURRENT_SCENE_DATA.hpps;
+
+		const hexSize = hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor || window.CURRENT_SCENE_DATA.hpps/1.5 / window.CURRENT_SCENE_DATA.scale_factor;
+
+		if(!arrowKeys && (window.CURRENT_SCENE_DATA.gridType == 3 || window.CURRENT_SCENE_DATA.gridType == 2)){
+			
+			
+		
+			const closeHexes = window.gridCentersArray.filter(d => Math.abs(d[0]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.x-mapX) < hexSize*window.CURRENT_SCENE_DATA.scale_factor && Math.abs(d[1]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.y-mapY)< hexSize*window.CURRENT_SCENE_DATA.scale_factor);
+			if(window.CURRENT_SCENE_DATA.gridType == 3){
+				return {
+					x: closeHexes[0][0]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.x - tokenWidth/2 + ((1-(gridSquaresWide%2))*hexSize*window.CURRENT_SCENE_DATA.scaleAdjustment.x*window.CURRENT_SCENE_DATA.scale_factor),
+					y: closeHexes[0][1]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.y - tokenWidth/2 
+				}
+
+				
+			}else if(window.CURRENT_SCENE_DATA.gridType == 2){
+				return {
+					x: closeHexes[0][0]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.x - tokenWidth/2,
+					y: closeHexes[0][1]*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.scaleAdjustment.y - tokenWidth/2 + ((1-(gridSquaresWide%2))*hexSize*window.CURRENT_SCENE_DATA.scaleAdjustment.y*window.CURRENT_SCENE_DATA.scale_factor) 
+				}
+			}
+
+		}
 		// adjust to the nearest square coordinate
 		let startX = parseFloat(window.CURRENT_SCENE_DATA.offsetx);
 		let startY = parseFloat(window.CURRENT_SCENE_DATA.offsety); 
@@ -3676,6 +3707,14 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false, tinyToken = false) {
 
 		const gridWidth = (window.CURRENT_SCENE_DATA.gridType && window.CURRENT_SCENE_DATA.gridType != 1) ? parseFloat(window.hexGridSize.width) * parseFloat(window.CURRENT_SCENE_DATA.scaleAdjustment.x) : (!tinyToken) ? parseFloat(window.CURRENT_SCENE_DATA.hpps) : parseFloat(window.CURRENT_SCENE_DATA.hpps)/2;
 		const gridHeight = (window.CURRENT_SCENE_DATA.gridType && window.CURRENT_SCENE_DATA.gridType != 1) ? parseFloat(window.hexGridSize.height) * parseFloat(window.CURRENT_SCENE_DATA.scaleAdjustment.y) : (!tinyToken) ? parseFloat(window.CURRENT_SCENE_DATA.vpps) : parseFloat(window.CURRENT_SCENE_DATA.vpps/2);
+		
+		if(window.CURRENT_SCENE_DATA.gridType == 3){
+			startX = startX*window.CURRENT_SCENE_DATA.scaleAdjustment.x+gridWidth - tokenWidth/2 - ((1-(gridSquaresWide%2))*hexSize*window.CURRENT_SCENE_DATA.scaleAdjustment.x*window.CURRENT_SCENE_DATA.scale_factor);
+			startY = startY*window.CURRENT_SCENE_DATA.scaleAdjustment.y+gridHeight/2 - tokenWidth/2;
+		}else if(window.CURRENT_SCENE_DATA.gridType == 2){
+			startX = startX*window.CURRENT_SCENE_DATA.scaleAdjustment.x+gridWidth/2 - tokenWidth/2;
+			startY = startY*window.CURRENT_SCENE_DATA.scaleAdjustment.y+gridHeight - tokenWidth/2 - ((1-(gridSquaresWide%2))*hexSize*window.CURRENT_SCENE_DATA.scaleAdjustment.y*window.CURRENT_SCENE_DATA.scale_factor);
+		}
 		
 		let currentGridX = Math.floor((mapX - startX) / gridWidth);
 		let currentGridY = Math.floor((mapY - startY) / gridHeight);
@@ -3685,12 +3724,6 @@ function snap_point_to_grid(mapX, mapY, forceSnap = false, tinyToken = false) {
 		else if(window.CURRENT_SCENE_DATA.gridType == 2 && currentGridY % 2 == 1){//replace with current scene when setting exists
 			currentGridX += 0.5;
 		} 
-
-		if(window.CURRENT_SCENE_DATA.gridType == 3){
-			startX = startX + window.hexGridSize.width/2 * window.CURRENT_SCENE_DATA.scaleAdjustment.x;
-		}else if(window.CURRENT_SCENE_DATA.gridType == 2){
-			startY = startY + window.hexGridSize.height/2 * window.CURRENT_SCENE_DATA.scaleAdjustment.y;
-		}
 		return {
 			x: Math.ceil((currentGridX * gridWidth) + startX),
 			y: Math.ceil((currentGridY * gridHeight) + startY)
@@ -3733,7 +3766,7 @@ function place_token_at_view_point(tokenObject, pageX, pageY) {
 	place_token_at_map_point(tokenObject, mapPosition.x, mapPosition.y);
 }
 
-function place_token_at_map_point(tokenObject, x, y) {
+function place_token_at_map_point(tokenObject, x, y, forcePlaceAndSize = false) {
 
 	console.log(`attempting to place token at ${x}, ${y}; options: ${JSON.stringify(tokenObject)}`);
 
@@ -3741,7 +3774,7 @@ function place_token_at_map_point(tokenObject, x, y) {
 		tokenObject.id = uuid();
 	}
 	// if this is a player token, check if the token is already on the map
-	if(tokenObject.id in window.TOKEN_OBJECTS && window.TOKEN_OBJECTS[tokenObject.id].isPlayer()){
+	if(!forcePlaceAndSize && tokenObject.id in window.TOKEN_OBJECTS && window.TOKEN_OBJECTS[tokenObject.id].isPlayer()){
 		window.TOKEN_OBJECTS[tokenObject.id].highlight();
 		return;
 	}
@@ -3771,7 +3804,7 @@ function place_token_at_map_point(tokenObject, x, y) {
 		options.imgsrc = parse_img(options.imgsrc);
 	}
 
-	if (options.size == undefined) {
+	if (options.size == undefined || forcePlaceAndSize) {
 		if (options.tokenSize != undefined && parseFloat(options.tokenSize) != NaN) {
 			// tokenSize was specified, convert it to size. tokenSize is the number of squares this token fills
 			options.size = Math.round(window.CURRENT_SCENE_DATA.hpps) * parseFloat(options.tokenSize);
@@ -3817,7 +3850,14 @@ function place_token_at_map_point(tokenObject, x, y) {
 	setReasonableDefault("hidden", false);
 
 	// place the token
-	window.ScenesHandler.create_update_token(options);
+	if(forcePlaceAndSize && options.id in window.TOKEN_OBJECTS){
+		window.TOKEN_OBJECTS[options.id].options = options;
+		window.TOKEN_OBJECTS[options.id].place_sync_persist();
+	}
+	else{
+		create_update_token(options);
+	}
+	
 
 	if (is_player_id(options.id)) {
 		update_pc_token_rows();
@@ -4054,13 +4094,14 @@ function checkAudioVolume(){
 		let attenuate = currAudioToken.options.audioChannel.attenuate;
 		let wallsBlocked = currAudioToken.options.audioChannel.wallsBlocked;
 		let range = currAudioToken.options.audioChannel.range/parseFloat(window.CURRENT_SCENE_DATA.fpsq) * parseFloat(window.CURRENT_SCENE_DATA.hpps);
-
+		const audioPolygon = currAudioToken.options.audioChannel.audioArea;
+		const audioPolygonOrigScale = currAudioToken.options.audioChannel.audioAreaOrigScale;
 
 		let currAudioPosition ={
 			x: parseInt(currAudioToken.options.left) + currAudioToken.sizeWidth()/2,
 			y: parseInt(currAudioToken.options.top) + currAudioToken.sizeHeight()/2
 		}
-		for(let checkedTokenId in tokensToCheck){
+		for(let checkedTokenId=0; checkedTokenId<tokensToCheck.length; checkedTokenId++){
 			let checkedToken = window.TOKEN_OBJECTS[tokensToCheck[checkedTokenId]];	
 
 			
@@ -4071,8 +4112,14 @@ function checkAudioVolume(){
 			audioCanvas.width = $("#raycastingCanvas").width();
 			audioCanvas.height =  $("#raycastingCanvas").height();
 			
-			
-			if(tokenMovePolygon != undefined){
+			if(audioPolygon != undefined){
+				drawPolygon(audioCanvasCtx, audioPolygon, 'rgba(255, 255, 255, 1)', true, undefined, undefined, undefined, audioPolygonOrigScale);
+				if(wallsBlocked){
+					audioCanvasCtx.globalCompositeOperation = "destination-in";
+					drawPolygon(audioCanvasCtx, tokenMovePolygon, 'rgba(255, 255, 255, 1)', true);
+					audioCanvasCtx.globalCompositeOperation = "source-over";
+				}
+			} else if(tokenMovePolygon != undefined){
 				drawPolygon(audioCanvasCtx, tokenMovePolygon, 'rgba(255, 255, 255, 1)', true); 	
 			}
 
@@ -4087,12 +4134,15 @@ function checkAudioVolume(){
 		    let distanceApart = Math.sqrt(dx * dx + dy * dy) 
 		 	let inRange =  distanceApart <= range;
 
-		 	
-		 	
-		 	let tempCalcVolume = (attenuate && inRange) ? ((range-distanceApart)/range) : (inRange) ? 1 : 0
-		 	 
 
-			let setAudio = (inRange && !wallsBlocked) || (inRange && wallsBlocked && tokenMovePolygon != undefined && is_token_in_raycasting_context($(audioTokens[i]).attr('data-id'), audioCanvasCtx))
+		 	let tempCalcVolume = (attenuate && inRange) ? ((range-distanceApart)/range) : (inRange || (!attenuate && audioPolygon != undefined)) ? 1 : 0
+	 	 
+	 	 	let setAudio;
+	 	 	if(audioPolygon != undefined){
+	 	 		setAudio = is_token_in_raycasting_context(tokensToCheck[checkedTokenId], audioCanvasCtx) && (!wallsBlocked || (tokenMovePolygon != undefined && is_token_in_raycasting_context($(audioTokens[i]).attr('data-id'), audioCanvasCtx)));
+		 	} else if(tokenMovePolygon != undefined){
+				setAudio = (inRange && !wallsBlocked) || (inRange && wallsBlocked && tokenMovePolygon != undefined && is_token_in_raycasting_context($(audioTokens[i]).attr('data-id'), audioCanvasCtx))
+		 	}
 			if(setAudio){
 			//set volume to calculated volume
 				calcVolume = (tempCalcVolume > calcVolume) ? tempCalcVolume : calcVolume
@@ -4128,7 +4178,6 @@ function setAudioAura (token, options){
 							`;
 
 		token.find('.audio-radius').attr('style', auraStyles)
-
 }
 
 
@@ -4372,7 +4421,7 @@ function setTokenLight (token, options) {
 		}
 	}
 
-	if(options.type == 'door' && $(`.door-button[data-id='${options.id}']`).hasClass('closed') && $(`.door-button[data-id='${options.id}'] .door`).length > 0){
+	if(options.type == 'door' && $(`.door-button[data-id='${options.id}']`).hasClass('closed') && $(`.door-button[data-id='${options.id}'] :is(.door, .curtain)`).length > 0){
 		$(".aura-element-container-clip[id='" + options.id +"']").css("display", "none")
 	}
 	else if(options.type == 'door'){
@@ -4619,6 +4668,7 @@ function draw_selected_token_bounding_box(){
 
 /// draws a rectangle around every selected token, and adds a rotation grabber
 async function do_draw_selected_token_bounding_box() {
+	clear_temp_canvas();
 	remove_selected_token_bounding_box()
 	// hold a separate list of selected ids so we don't have to iterate all tokens during bulk token operations like rotation
 	window.CURRENTLY_SELECTED_TOKENS = [];
@@ -4646,7 +4696,7 @@ async function do_draw_selected_token_bounding_box() {
 									
 	}
 
-	for(let index in groupIDs){
+	for(let index=0; index<groupIDs.length; index++){
 		let tokens = $(`.token[data-group-id='${groupIDs[index]}']`)
 		tokens.each(function(){
 			if(window.CURRENTLY_SELECTED_TOKENS.includes($(this).attr('data-id')))
@@ -4703,8 +4753,11 @@ async function do_draw_selected_token_bounding_box() {
 				} else {
 					right = Math.max(right, tokenRight);
 				}
+				if(token.options.audioChannel?.audioArea != undefined){
+					drawPolygon(temp_context, token.options.audioChannel.audioArea, 'rgba(255, 0, 0, 0.3)', true, undefined, undefined, undefined, token.options.audioChannel.audioAreaOrigScale);
+				}
 			}
-
+			
 			// add 10px to each side of out bounding box to give the tokens a little space
 			let borderOffset = 10;
 			top = (top - borderOffset);
@@ -4987,10 +5040,10 @@ function remove_selected_token_bounding_box() {
 
 }
 
-function copy_selected_tokens() {
+function copy_selected_walls(teleporterTokenId=undefined) {
+	
 	if (!window.DM) return;
 	window.TOKEN_PASTE_BUFFER = [];
-	let redrawBoundingBox = false;
 	let bounds = {
 		top: Infinity,
 		left: Infinity,
@@ -4999,91 +5052,263 @@ function copy_selected_tokens() {
 		hpps: window.CURRENT_SCENE_DATA.hpps,
 		vpps: window.CURRENT_SCENE_DATA.vpps
 	};
-	for (let id in window.TOKEN_OBJECTS) {
-		let token = window.TOKEN_OBJECTS[id];
-
-		if (token.selected) { 
-			bounds = {
-				...bounds,
-				top: parseInt(token.options.top) < bounds.top ? parseInt(token.options.top) : bounds.top,
-				left: parseInt(token.options.left) < bounds.left ? parseInt(token.options.left) : bounds.left,
-				bottom: parseInt(token.options.top) > bounds.bottom ? parseInt(token.options.top) : bounds.bottom,
-				right: parseInt(token.options.left) > bounds.right ? parseInt(token.options.left) : bounds.right
-			}
-			window.TOKEN_PASTE_BUFFER.push({id: id, left: token.options.left, top: token.options.top});
+	for (let i=0; i<window.selectedWalls.length; i++) {
+		let wall = window.selectedWalls[i].wall;
+		const pt1 ={ 
+			x: wall[3],
+			y:wall[4],
 		}
+		const pt2 ={ 
+			x: wall[5],
+			y:wall[6],
+		}
+		
+		bounds = {
+			...bounds,
+			top: pt1.y < bounds.top ? pt1.y : bounds.top,
+			left: pt1.x < bounds.left ? pt1.x : bounds.left,
+			bottom: pt1.y  > bounds.bottom ? pt1.y : bounds.bottom,
+			right: pt1.x > bounds.right ? pt1.x : bounds.right
+		}
+		bounds = {
+			...bounds,
+			top: pt2.y < bounds.top ? pt2.y : bounds.top,
+			left: pt2.x < bounds.left ? pt2.x : bounds.left,
+			bottom: pt2.y  > bounds.bottom ? pt2.y : bounds.bottom,
+			right: pt2.x > bounds.right ? pt2.x : bounds.right
+		}
+
+		const tokenId = window.selectedWalls[i].tokenId;
+		let token;
+		if(window.TOKEN_OBJECTS[tokenId] != undefined){
+			token = $.extend(true, {}, window.TOKEN_OBJECTS[tokenId]);
+		}
+		window.TOKEN_PASTE_BUFFER.push({wall:wall, token:token});
+		
 	}
-
-
 	window.TOKEN_PASTE_BOUNDS = bounds;
-	if (redrawBoundingBox) {
-		draw_selected_token_bounding_box();
-	}
+	
+	
 }
-
-function paste_selected_tokens(x, y) {
+function paste_selected_walls(x, y) {
 	if (!window.DM) return;
 	if (window.TOKEN_PASTE_BUFFER == undefined) {
 		window.TOKEN_PASTE_BUFFER = [];
 	}
 	deselect_all_tokens();
+	const originalSelected = JSON.parse(JSON.stringify(window.selectedWalls));
+	window.selectedWalls = [];
+	const undoArray =[];
 	for (let i = 0; i < window.TOKEN_PASTE_BUFFER.length; i++) {
-		let id = window.TOKEN_PASTE_BUFFER[i]?.id;
-		let token = window.all_token_objects[id];
-		if(token == undefined || (token.isPlayer() && window.TOKEN_OBJECTS[id])) continue;
-		let options = $.extend(true, {}, token.options);
-		let newId = token.isPlayer() ? id : uuid();
-		options.id = newId;
-		if(options.audioChannel != undefined){
-			options.audioChannel.token = newId;
-			options.audioChannel.audioId = uuid();
+		const wall = [...window.TOKEN_PASTE_BUFFER[i].wall]
+		
+		const pt1 ={
+			x: wall[3],
+			y: wall[4]
+
+		};
+		const pt2 = {
+			x: wall[5],
+			y: wall[6]
 		}
-		// TODO: figure out the location under the cursor and paste there instead of doing center of view
-		options.init = token.isPlayer() ? options.init : undefined;
-		options.ct_show = token.isPlayer() ? options.ct_show : undefined;
-		options.combatGroup = token.isPlayer() ? options.combatGroup : undefined;
-		options.selected = true;
-		let center = center_of_view(); 
-		let mapView = convert_point_from_view_to_map(x, y, false);
+
+
+		
+		let mapView = convert_point_from_view_to_map(x, y, true);
 
 		let bounds = window.TOKEN_PASTE_BOUNDS;
-		let left = (parseInt(window.TOKEN_PASTE_BUFFER[i]?.left) - (bounds.right + bounds.left)/2)/bounds.hpps;
-		let top = (parseInt(window.TOKEN_PASTE_BUFFER[i]?.top) - (bounds.bottom + bounds.top)/2)/bounds.vpps;
+		let newX1 = (pt1.x - (bounds.right + bounds.left)/2)/bounds.hpps;
+		let newY1 = (pt1.y - (bounds.bottom + bounds.top)/2)/bounds.vpps;
+
+		let newX2 = (pt2.x - (bounds.right + bounds.left)/2)/bounds.hpps;
+		let newY2 = (pt2.y - (bounds.bottom + bounds.top)/2)/bounds.vpps;
+
+		const scale = wall[8];
+		const adjustedScale = wall[8]/window.CURRENT_SCENE_DATA.scale_factor/window.CURRENT_SCENE_DATA.conversion;					
+				
+		
+
+		wall[3] = Math.round(mapView.x*adjustedScale + newX1*window.CURRENT_SCENE_DATA.hpps)
+		wall[4] = Math.round(mapView.y*adjustedScale + newY1*window.CURRENT_SCENE_DATA.vpps)
+		wall[5] = Math.round(mapView.x*adjustedScale + newX2*window.CURRENT_SCENE_DATA.hpps)
+		wall[6] = Math.round(mapView.y*adjustedScale + newY2*window.CURRENT_SCENE_DATA.vpps)
+
+		window.DRAWINGS.push([...wall]);
+		undoArray.push([...wall]);
 
 
-		options.top = `${mapView.y + top*window.CURRENT_SCENE_DATA.vpps}px`;
-		options.left = `${mapView.x + left*window.CURRENT_SCENE_DATA.hpps}px`;
-		window.ScenesHandler.create_update_token(options);
-		// deselect the old and select the new so the user can easily move the new tokens around after pasting them
-		if(typeof window.TOKEN_OBJECTS[id] !== "undefined"){
-			window.TOKEN_OBJECTS[id].selected = false;
-			window.TOKEN_OBJECTS[id].place_sync_persist();
+		pt1.x = wall[3]/scale*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion;
+		pt1.y = wall[4]/scale*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion;
+		pt2.x = wall[5]/scale*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion;
+		pt2.y = wall[6]/scale*window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion;
+		const [x1,y1,x2,y2] = [wall[3]/scale, wall[4]/scale, wall[5]/scale, wall[6]/scale];
+		const doorTokenId = `${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','');
+		const drawIndex = window.DRAWINGS.findIndex(d => JSON.stringify(d)==JSON.stringify(wall));
+		const token = window.TOKEN_PASTE_BUFFER[i].token;
+
+		if(token != undefined){
+			const newOptions = $.extend(true, [], token.options);
+			const midX = Math.floor((x1+x2)*adjustedScale/2);
+			const midY = Math.floor((y1+y2)*adjustedScale/2);
+			let options = {
+				...newOptions,
+				left: `${parseFloat(midX) - 25}px`,
+				top: `${parseFloat(midY) - 25}px`,
+				id: doorTokenId
+			};
+			window.ScenesHandler.create_update_token(options, noScale=true)
 		}
+		window.selectedWalls.push({pt1: pt1, pt2: pt2, wall: wall, tokenId: doorTokenId, drawIndex: drawIndex})
+	}
 
-		if (id in window.JOURNAL.notes) {
-			window.JOURNAL.notes[newId] = structuredClone(window.JOURNAL.notes[id]);
-			let copiedNote = window.JOURNAL.notes[newId];
-			copiedNote.title = window.all_token_objects[id].options.name;
-			window.JOURNAL.persist();
-			window.MB.sendMessage('custom/myVTT/note',{
-				id: newId,
-				note:copiedNote
-			});
+	window.wallUndo.push({undo: [...undoArray], selectedWalls: originalSelected});
+	
+	redraw_light_walls();
+	redraw_drawn_light();
+	redraw_light();
+	sync_drawings();
+
+}
+function copy_selected_tokens(teleporterTokenId=undefined) {
+	if(teleporterTokenId){
+		window.TELEPORTER_PASTE_BUFFER = {
+			'targetToken': teleporterTokenId,
+			'tokens': window.CURRENTLY_SELECTED_TOKENS.slice(0)
 		}
+	}
+	else{
+		if (!window.DM) return;
+		window.TOKEN_PASTE_BUFFER = [];
+		let bounds = {
+			top: Infinity,
+			left: Infinity,
+			bottom: -Infinity,
+			right: -Infinity,
+			hpps: window.CURRENT_SCENE_DATA.hpps,
+			vpps: window.CURRENT_SCENE_DATA.vpps
+		};
+		for (let id in window.TOKEN_OBJECTS) {
+			let token = window.TOKEN_OBJECTS[id];
 
-		window.TOKEN_OBJECTS[newId].selected = true;
-		window.TOKEN_OBJECTS[newId].place_sync_persist();
-		if(token.isPlayer() && options.ct_show != undefined){
-			let findSVG = $('<svg class="findSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 11c1.33 0 4 .67 4 2v.16c-.97 1.12-2.4 1.84-4 1.84s-3.03-.72-4-1.84V13c0-1.33 2.67-2 4-2zm0-1c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 .2C18 6.57 15.35 4 12 4s-6 2.57-6 6.2c0 2.34 1.95 5.44 6 9.14 4.05-3.7 6-6.8 6-9.14zM12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2z"/></svg>')
-			let playerCTRow = $(`#combat_area tr[data-target='${token.options.id}']`);
-			let findButton = playerCTRow.find('.findTokenCombatButton')
-			findButton.empty().append(findSVG);
+			if (token.selected) { 
+				bounds = {
+					...bounds,
+					top: parseInt(token.options.top) < bounds.top ? parseInt(token.options.top) : bounds.top,
+					left: parseInt(token.options.left) < bounds.left ? parseInt(token.options.left) : bounds.left,
+					bottom: parseInt(token.options.top)+parseInt(token.options.size) > bounds.bottom ? parseInt(token.options.top)+parseInt(token.options.size) : bounds.bottom,
+					right: parseInt(token.options.left)+parseInt(token.options.size) > bounds.right ? parseInt(token.options.left)+parseInt(token.options.size) : bounds.right
+				}
+				window.TOKEN_PASTE_BUFFER.push({id: id, left: token.options.left, top: token.options.top});
+			}
+		}
+		window.TOKEN_PASTE_BOUNDS = bounds;
+	}
+	
+}
+
+function paste_selected_tokens(x, y, teleporter=undefined) {
+	if (!teleporter && !window.DM) return;
+	if (window.TOKEN_PASTE_BUFFER == undefined) {
+		window.TOKEN_PASTE_BUFFER = [];
+	}
+	deselect_all_tokens();
+	if(teleporter){
+		for (let i in window.TELEPORTER_PASTE_BUFFER.tokens) {
+			const id = window.TELEPORTER_PASTE_BUFFER.tokens[i];
+			let token = window.TOKEN_OBJECTS[id] != undefined ? window.TOKEN_OBJECTS[id] : window.all_token_objects[id];
+			if(token == undefined) continue;
+			let options = $.extend(true, {}, token.options);
+			
+			options.selected = true;
+
+			place_token_at_map_point(options, x, y, forceSize=true);				
+		}
+		window.TELEPORTER_PASTE_BUFFER = undefined;
+	}
+	else{
+		for (let i = 0; i < window.TOKEN_PASTE_BUFFER.length; i++) {
+			let id = window.TOKEN_PASTE_BUFFER[i]?.id;
+			let token = window.all_token_objects[id];
+			if(token == undefined || (token.isPlayer() && window.TOKEN_OBJECTS[id])) continue;
+			let options = $.extend(true, {}, token.options);
+			let newId = token.isPlayer() ? id : uuid();
+			options.id = newId;
+			if(options.audioChannel != undefined){
+				options.audioChannel.token = newId;
+				options.audioChannel.audioId = uuid();
+			}
+			// TODO: figure out the location under the cursor and paste there instead of doing center of view
+			options.init = token.isPlayer() ? options.init : undefined;
+			options.ct_show = token.isPlayer() ? options.ct_show : undefined;
+			options.combatGroup = token.isPlayer() ? options.combatGroup : undefined;
+			options.selected = true;
+			
+			let mapView = convert_point_from_view_to_map(x, y, true);
+
+			let bounds = window.TOKEN_PASTE_BOUNDS;
+			let left = (parseFloat(window.TOKEN_PASTE_BUFFER[i]?.left) - (bounds.right+bounds.left)/2)/bounds.hpps;
+			let top = (parseFloat(window.TOKEN_PASTE_BUFFER[i]?.top) - (bounds.bottom+bounds.top)/2)/bounds.vpps;
+
+
+			options.top = `${mapView.y + top*window.CURRENT_SCENE_DATA.vpps}px`;
+			options.left = `${mapView.x + left*window.CURRENT_SCENE_DATA.hpps}px`;
+			window.ScenesHandler.create_update_token(options);
+			// deselect the old and select the new so the user can easily move the new tokens around after pasting them
+			if(typeof window.TOKEN_OBJECTS[id] !== "undefined"){
+				window.TOKEN_OBJECTS[id].selected = false;
+				window.TOKEN_OBJECTS[id].place_sync_persist();
+			}
+
+			if (id in window.JOURNAL.notes) {
+				window.JOURNAL.notes[newId] = structuredClone(window.JOURNAL.notes[id]);
+				let copiedNote = window.JOURNAL.notes[newId];
+				copiedNote.title = window.all_token_objects[id].options.name;
+				window.JOURNAL.persist();
+				window.MB.sendMessage('custom/myVTT/note',{
+					id: newId,
+					note:copiedNote
+				});
+			}
+
+			window.TOKEN_OBJECTS[newId].selected = true;
+			window.TOKEN_OBJECTS[newId].place_sync_persist();
+			if(token.isPlayer() && options.ct_show != undefined){
+				let findSVG = $('<svg class="findSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 11c1.33 0 4 .67 4 2v.16c-.97 1.12-2.4 1.84-4 1.84s-3.03-.72-4-1.84V13c0-1.33 2.67-2 4-2zm0-1c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 .2C18 6.57 15.35 4 12 4s-6 2.57-6 6.2c0 2.34 1.95 5.44 6 9.14 4.05-3.7 6-6.8 6-9.14zM12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2z"/></svg>')
+				let playerCTRow = $(`#combat_area tr[data-target='${token.options.id}']`);
+				let findButton = playerCTRow.find('.findTokenCombatButton')
+				findButton.empty().append(findSVG);
+			}
 		}
 	}
 
+	
+
 	draw_selected_token_bounding_box();
 }
-
+function delete_selected_walls() {
+	if(window.DM && window.selectedWalls?.length>0){
+		const originalSelected = JSON.parse(JSON.stringify(window.selectedWalls));
+		const redoArray = [];
+		for(let i=0; i<window.selectedWalls.length; i++){
+			const wall = window.selectedWalls[i].wall;
+			redoArray.push([...wall]);
+			const drawIndex = window.DRAWINGS.findIndex(d => JSON.stringify(d)==JSON.stringify(wall));
+			if (drawIndex > -1) { 
+			  window.DRAWINGS.splice(drawIndex, 1); 
+			}
+			const tokenId = window.selectedWalls.tokenId;
+			if(window.TOKEN_OBJECTS[tokenId] != undefined){
+				window.TOKEN_OBJECTS[tokenId].delete();
+			}
+		}
+		window.wallUndo.push({redo: [...redoArray], selectedWalls: originalSelected});
+		window.selectedWalls =[];
+		redraw_light_walls();
+		redraw_drawn_light();
+		redraw_light();
+		sync_drawings();
+	}
+}
 function delete_selected_tokens() {
 	// move all the tokens into a separate list so the DM can "undo" the deletion
 	let tokensToDelete = [];

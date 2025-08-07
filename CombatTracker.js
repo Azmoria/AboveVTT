@@ -40,7 +40,7 @@ function adjust_condition_duration(token, amt) {
 
 function adjust_reaction_condition(token){
 	token.options.custom_conditions = token.options.custom_conditions.filter(d=> d.name !='Reaction Used');
-	$(`#tokens .token[data-id='${token.options.id}'] .conditions [id='Reaction Used']`).remove();
+	$(`:is(#tokens, #combat_area_carousel, #combat_area) :is(.token[data-id='${token.options.id}'], tr[data-target='${token.options.id}']) .conditions [id='Reaction Used']`).remove();
 }
 
 function init_combat_tracker(){
@@ -332,13 +332,14 @@ function init_combat_tracker(){
 
 				delete window.TOKEN_OBJECTS[currentTarget].options.current;
 				delete window.TOKEN_OBJECTS[currentTarget].options.round;
-				window.TOKEN_OBJECTS[currentTarget].update_and_sync();
+				window.TOKEN_OBJECTS[currentTarget].place_sync_persist();
+				window.TOKEN_OBJECTS[currentTarget].build_conditions(current, true);
 			}
 			if(window.TOKEN_OBJECTS[newTarget] != undefined){
 				window.TOKEN_OBJECTS[newTarget].options.current = true;
 				window.TOKEN_OBJECTS[newTarget].options.round = window.ROUND_NUMBER;
 				adjust_reaction_condition(window.TOKEN_OBJECTS[newTarget]);
-				window.TOKEN_OBJECTS[newTarget].update_and_sync();
+				window.TOKEN_OBJECTS[newTarget].place_sync_persist();
 				let combatSettingData = getCombatTrackersettings();
 				let group = false;
 				if(window.TOKEN_OBJECTS[newTarget].options.combatGroupToken){
@@ -396,14 +397,15 @@ function init_combat_tracker(){
 			if(window.TOKEN_OBJECTS[currentTarget] != undefined){
 				delete window.TOKEN_OBJECTS[currentTarget].options.current;
 				delete window.TOKEN_OBJECTS[currentTarget].options.round;
-				window.TOKEN_OBJECTS[currentTarget].update_and_sync();
+				window.TOKEN_OBJECTS[currentTarget].place_sync_persist();;
 			}
 			if(window.TOKEN_OBJECTS[newTarget] != undefined){
 				adjust_age(window.TOKEN_OBJECTS[newTarget], 1)
 				adjust_condition_duration(window.TOKEN_OBJECTS[newTarget], 1)
 				window.TOKEN_OBJECTS[newTarget].options.current = true;
 				window.TOKEN_OBJECTS[newTarget].options.round = window.ROUND_NUMBER;
-				window.TOKEN_OBJECTS[newTarget].update_and_sync();
+				window.TOKEN_OBJECTS[newTarget].place_sync_persist();
+				window.TOKEN_OBJECTS[newTarget].build_conditions(prev, true);
 				let combatSettingData = getCombatTrackersettings();
 				let group = false;
 				if(window.TOKEN_OBJECTS[newTarget].options.combatGroupToken){
@@ -435,14 +437,16 @@ function init_combat_tracker(){
 		$("#site tr[data-current=1]")[0].scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });	
 	});
 
-	let endplayerturn=$('<button id="endplayerturn">End Turn</button>');
-	endplayerturn.click(function(){
+	let endplayerturn=$('<button id="endplayerturn">E<u>n</u>d Turn</button>');
+	endplayerturn.click(function(e){
+
+		$(e.target).removeClass('enabled');
+		$("#endplayerturn").toggleClass('enabled', false);
+		$("#endplayerturn").prop('disabled', true);
 		let data = {
 			from: window.PLAYER_ID,
 		}
 		window.MB.sendMessage('custom/myVTT/endplayerturn', data);
-		$("#endplayerturn").toggleClass('enabled', false);
-		$("#endplayerturn").prop('disabled', true);
 	});
 	let rollplayerinit=$('<button id="rollplayerinit" class="roll-init-button">Roll Initiative</button>');
 	rollplayerinit.click(function(){
@@ -672,24 +676,27 @@ function init_carousel_combat_tracker(){
     	}
 
     	#combat_carousel_container tr td:last-of-type button svg{
-    	    filter: drop-shadow(#000 0px 0px 2px)
+  	    filter: drop-shadow(#000 0px 0px 2px)
     	}
     	#combat_carousel_container tr td:last-of-type button:hover svg{
-    	    filter: drop-shadow(#fff 0px 0px 2px)
+    		filter: drop-shadow(#000 0px 0px 2px) drop-shadow(#ffffff 0px 0px 2px);
     	}
     	#combat_carousel_container{
-			    display:flex;
+		    display:flex;
 			}
 			#combat_carousel_container #combat_prev_button {
 			  left:10px;
 			}
 
-			#combat_carousel_container #combat_next_button{
+			#combat_carousel_container #combat_next_button,
+			#combat_carousel_container #endplayerturn {
 			  right:10px; 
 			}
 
+
 			#combat_carousel_container #combat_prev_button, 
-			#combat_carousel_container #combat_next_button {
+			#combat_carousel_container #combat_next_button,
+			#combat_carousel_container #endplayerturn  {
 			    background: none !important;
 			    border: none;
 			    color: #fffd;
@@ -704,9 +711,16 @@ function init_carousel_combat_tracker(){
 			    opacity: 0.8;
 			    outline:none;
 			}
-
+			#combat_carousel_container #endplayerturn{
+    		display: none;
+    		position:absolute;
+			}
+    	#combat_carousel_container #endplayerturn.enabled{
+    		display:flex;
+			}
 			#combat_carousel_container #combat_prev_button:hover, 
-			#combat_carousel_container #combat_next_button:hover{
+			#combat_carousel_container #combat_next_button:hover,
+			#combat_carousel_container #endplayerturn.enabled:hover{
 			   opacity:1; 
 			}
 
@@ -777,21 +791,22 @@ function update_carousel_combat_tracker(){
 
 
 	    if(window.DM){
-	    	if(carouselContainer.find('#combat_prev_button').length == 0){
+	    		carouselContainer.find('#combat_prev_button, #combat_next_button').remove();
 	    		const prevButtonClone = $('#combat_prev_button').clone(true, true);
 			    const nextButtonClone = $('#combat_next_button').clone(true, true);
 
 			    prevButtonClone.text('<');
 			    nextButtonClone.text('>');
-			    carouselContainer.append(prevButtonClone, nextButtonClone);
-	    	}
-	    	
-
-
-	    	carouselContainer.find('#combat_next_button').before(table);
+			    carouselContainer.append(prevButtonClone, table, nextButtonClone);
 	    }
 	    else{
-	    	carouselContainer.append(table);
+
+    		carouselContainer.find('#endplayerturn').remove();
+  			const nextButtonClone = $('#endplayerturn').clone(true, true);
+  			nextButtonClone.text('>');
+  			carouselContainer.append(table, nextButtonClone);
+
+	    	
 	    }
     }
 
@@ -809,7 +824,8 @@ function getCombatTrackersettings(){
 			select_next: 0,
 			auto_init: 0,
 			remove_init: 0,
-			carousel: 0
+			carousel: 0,
+			autoGroup: 0
 		}
 	}else{
 		combatSettingData = $.parseJSON(localStorage.getItem(`abovevtt-combat-tracker-settings-${window.DM}`));
@@ -930,6 +946,16 @@ function openCombatTrackerSettings(){
 	});
 	let carouselRow = form_row(`carousel`, `${window.DM ? 'Display Combat Tracker Carousel' : 'Always displays some combat data as a carousel'}`, carouselToggle)
 	form.append(carouselRow);
+
+	if(window.DM){
+		let autoGroupToggle = form_toggle('autoGroup', `Auto Group Tokens by stat block when using the 'Add to Combat Tracker' button. Players will be added individually. You can still create custom groups using the add a group button.`, combatSettingData['autoGroup'] == '1', function(e){
+			handle_basic_form_toggle_click(e);
+		});
+		let autoGroupRow = form_row(`autoGroup`, `Auto Group Tokens by Stat Block`, autoGroupToggle)
+		form.append(autoGroupRow);
+	}
+
+
 
 	const cancel = $("<button type='button' id='cancel_importer'>Cancel</button>");
 	cancel.click(function() {
@@ -1643,7 +1669,7 @@ function ct_load(data=null){
 	data=$.parseJSON(localStorage.getItem(itemkey));
 	if(data !== undefined && data !== null){
 		if(!(data[0]['already-loaded'])){
-			for(let i in data){
+			for(let i=0; i<data.length; i++){
 				if (data[i]['data-target'] === 'round'){
 					window.ROUND_NUMBER = data[i]['round_number'];
 					document.getElementById('round_number').value = window.ROUND_NUMBER;

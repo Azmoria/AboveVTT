@@ -571,23 +571,14 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		$("#grid_overlay").show();
 
 
-		if (self.scene.fog_of_war == 1) {
-			window.FOG_OF_WAR = true;
-			//$("#fog_overlay").show();
-			window.REVEALED = [[0, 0, 0, 0, 2, 0]].concat(self.scene.reveals);
-		}
-		else {
-			window.FOG_OF_WAR = false;
-			window.REVEALED = [];
-			//$("#fog_overlay").hide();
-		}
 
-		if (typeof self.scene.drawings !== 'undefined') {
-			window.DRAWINGS = self.scene.drawings;
-		}
-		else {
-			window.DRAWINGS = [];
-		}
+		window.FOG_OF_WAR = true;
+		window.REVEALED = [[0, 0, 0, 0, 2, 0]].concat(self.scene.reveals);
+
+
+	
+		window.DRAWINGS = [];
+		
 		
 		let map_url = "";
 		let map_is_video = false;
@@ -606,60 +597,12 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		//This is still used for grid wizard loading since we load so many times -- it is not used for other scene loading though. You can find that in message broker handleScene
 		load_scenemap(map_url, map_is_video, window.CURRENT_SCENE_DATA.width, window.CURRENT_SCENE_DATA.height, window.CURRENT_SCENE_DATA.UVTTFile, function() {
-
-
-
-			let mapHeight = $("#scene_map").height();
-			let mapWidth = $("#scene_map").width();
-
-
-			let owidth = mapHeight;
-			let oheight = mapWidth;
-			let max_length = get_canvas_max_length();
-			let max_area = get_canvas_max_area();
-			console.log("Map size is " + owidth + "x" + oheight + " (with scale factor of " + scene.scale_factor + ") and browser supports max length of " + max_length + "px and max area of " + max_area + "px");
-
-			// Check if the map size is too large
-			if (owidth > max_length || oheight > max_length || (owidth * oheight) > max_area) {
-				alert("Your map is too large! Your browser supports max width and height of " + max_length + " and a max area (width*height) of " + max_area);
-			} else if (scene.scale_factor > 1) {
-				let scaled_owidth = (owidth * scene.scale_factor);
-				let scaled_oheight = (oheight * scene.scale_factor);
-				if (scaled_owidth > max_length || scaled_oheight > max_length || (scaled_owidth * scaled_oheight) > max_area) {
-					alert("Your grid size is too large! We try to keep grid squares at least 50px for nice looking token.\nWe had to scale the map size, making it unsupported on your browser.\nTry to re-grid your map and reduce the number of grid squares.");
-				}
-			}
-		
 			$("#scene_map").off("load");
 			reset_canvas();
-
-
 			set_default_vttwrapper_size()
-
-			let found_data_tokens=false;
-			for (const property in scene.tokens) {
-				self.create_update_token(scene.tokens[property]);
-				if(scene.tokens[property].imgsrc.startsWith("data:"))
-					found_data_tokens=true;
-			}
-
-			if(found_data_tokens){
-				alert('WARNING. This scene contains token with data: urls as images. Please only use http:// or https:// urls for images');
-			}
-
-			if (callback != null)
-				callback();
-
-			if (window.EncounterHandler !== undefined) {
-				fetch_and_cache_scene_monster_items();
-			} else {
-				console.log("Not updating avtt encounter");
-			}
 			align_grid(false, false, copiedSceneData);
 		});
 
-		// some things can't be done correctly until after the scene finishes loading
-		redraw_settings_panel_token_examples();
 
 	}
 
@@ -860,12 +803,47 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 				return;
 			}
 
+			const mapButtonDetails = {};
+			const mapButtons = iframe.contents().find(".map-button");
+			const frameBody = iframe.contents().find('body');
+			mapButtons.each(function(){
+				const id = this.id;
+				const href = this.href;
+				const mapImg = $(this).parent().find('img')
+				const mapImgSrc = mapImg.attr('src');
+				const naturalWidth = mapImg[0]?.naturalWidth;
+				const naturalHeight = mapImg[0]?.naturalHeight;
+				const left = parseFloat($(this).css('left'))/100;
+				const top = parseFloat($(this).css('top'))/100;
+				const text = $(this).text();
+			    const body = frameBody.clone();
+				const bodyClass = body.attr('class');
+				const subClasses = ['p-article-a', 'p-article-content'] 
+
+				const section = body.find(href.match(/#.*$/gi)[0]);
+				if(section.length == 0)
+					return // linking to another scene so return, don't add note or token
+				const sectionElementType = section[0].tagName;
+
+				const sectionHtml = $('<div>').append(section.nextUntil(`${sectionElementType}`).addBack());
+
+				if(mapButtonDetails[mapImgSrc] == undefined)
+					mapButtonDetails[mapImgSrc] = {};
+				mapButtonDetails[mapImgSrc][id] ={
+					'left': left*naturalWidth,
+					'top': top*naturalHeight,
+					'text': text,
+					'href': href,
+					'sectionHtml': sectionHtml.html()
+				}
+			})	
 
 			iframe.contents().find("figure").each(function(idx) { // FIGURE + FIGCAPTION. 
 				let id = $(this).attr('id');
 				if (typeof id == typeof undefined)
 					return;
-				let img1 = $(this).find(".compendium-image-center, .compendium-image-left, .compendium-image-right").attr("href");
+				let img1 = $(this).find(".compendium-image-center, .compendium-image-left, .compendium-image-right, .compendium-center-banner-img").attr("href") || $(this).children('img').attr('src');
+
 				let links = $(this).find("figcaption a");
 				let player_map = '';
 				let dm_map = '';
@@ -877,7 +855,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 					.text();
 
 				let thumb = $(this).find("img").attr('src');
-
+				const tokens = {};
+				const notes = {};
 				dm_map = img1;
 				if (links.length > 0) {
 					if(links.filter('[data-title*="Tokens"]').length>0){
@@ -892,6 +871,40 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 				else {
 					player_map = img1;
 				}
+
+				const currentMapNotes = mapButtonDetails[player_map] != undefined ? mapButtonDetails[player_map] :  mapButtonDetails[dm_map] != undefined ? mapButtonDetails[dm_map] : null;
+				if(currentMapNotes != null){
+					for(let i in currentMapNotes){
+						const currButton = currentMapNotes[i]
+
+
+						const newTokenId = uuid();
+						const options = {
+							...default_options(),
+							...window.TOKEN_SETTINGS,
+							id: newTokenId,
+							name: currButton.text,
+							left: `${currButton.left}px`,
+							top: `${currButton.top}px`,
+							imgsrc: `https://abovevtt-assets.s3.eu-central-1.amazonaws.com/numbers/${parseInt(currButton.text.replaceAll(/\D/gi, ''))}.png`,
+							hidden: true,
+							locked: true,
+							disableborder: true,
+							revealInFog: true
+
+						}
+						const newToken = new Token(options);
+						tokens[newTokenId] = newToken.options;
+
+						notes[newTokenId] = {
+							plain: '',
+							title: currButton.text,
+							statBlock: false,
+							text: currButton.sectionHtml,
+							player: false
+						}
+					}
+				}	
 				self.sources[source_keyword].chapters[chapter_keyword].scenes.push({
 					id: id,
 					uuid: source_keyword + "/" + chapter_keyword + "/" + id,
@@ -903,7 +916,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 					thumb: thumb,
 					scale: "100",
 					dm_map_usable: dm_map ? "1" : '0',
-					tokens: {},
+					tokens: tokens,
+					notes: notes
 				});
 			});
 
@@ -999,11 +1013,12 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		});
 	}
 
-	create_update_token(options, save = true) {
+	create_update_token(options, noScale = false ) {
 		console.log("create_update_token");
 		let self = this;
 		let id = options.id;
-		options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
+		if(!noScale)
+			options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
 		this.scene.tokens[id]=options;
 
 		if (!(id in window.TOKEN_OBJECTS)) {
@@ -1081,6 +1096,14 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		sceneData.isnewscene=false;
 		window.MB.sendMessage("custom/myVTT/update_scene",sceneData,dontswitch);
+		const currentPlayerScenes = Object.values(window.splitPlayerScenes);
+		if(window.DM && dontswitch == false && currentPlayerScenes.includes(sceneData.id)){
+			setTimeout(function(){
+				window.MB.sendMessage("custom/myVTT/switch_scene", { sceneId: window.splitPlayerScenes});
+			}, 100)
+		}
+		
+		
 	}
 
 	delete_scene(sceneId, reloadUI = true) { // not the index, but the actual id
