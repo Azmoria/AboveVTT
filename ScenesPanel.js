@@ -440,7 +440,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
 	console.log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
-	dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
+	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
 
@@ -931,7 +931,7 @@ function edit_scene_vision_settings(scene_id){
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
 	console.log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
-	dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
+	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
 
@@ -1217,7 +1217,7 @@ function edit_scene_dialog(scene_id) {
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
 	console.log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
-	dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
+	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
 	template_section = $("<div id='template_section'/>");
@@ -1453,6 +1453,25 @@ function edit_scene_dialog(scene_id) {
 	const playlistRow = form_row('playlistRow', 'Load Playlist', playlistSelect)
 	playlistRow.attr('title', `This playlist will load when the DM moves players to this scene. The playlist will not change if 'None' is selected.`)
 	form.append(playlistRow);
+
+	const weatherSelect = $(`<select id='weatherSceneSelect'><option value='0'>None</option></select>`)
+	for(const [weatherType, weatherName] of Object.entries(getWeatherTypes())){
+		weatherSelect.append($(`<option value='${weatherType}'>${weatherName}</option>`));
+	
+	}
+
+	
+
+	const weatherValue = scene.weather || 0;
+	weatherSelect.val(weatherValue);
+	weatherSelect.find(`option`).removeAttr('selected');
+	weatherSelect.find(`option[value='${weatherValue}']`).attr('selected', 'selected');
+	
+
+	const weatherRow = form_row('weatherRow', 'Select Weather Overlay', weatherSelect)
+	weatherRow.attr('title', `Applies a weather overlay to the scene. The weather overlay will persist until changed by the DM.`)
+	form.append(weatherRow);
+	
 	let initialPosition = form_row('initialPosition',
 			'Initial Position',
 			$(`<div>X:<input name='initial_x' step="any" type='number' value='${scene.initial_x || ''}'/> Y:<input type='number' step="any" name='initial_y' value='${scene.initial_y || ''}'/> Zoom:<input name='initial_zoom' step="any" type='number' value='${scene.initial_zoom || ''}'/><button id='initialPosition'>Set initial x,y and zoom to current view</button></div>`)
@@ -1512,7 +1531,7 @@ function edit_scene_dialog(scene_id) {
 			scene[key] = formData[key];
 		}
 		scene['playlist'] = playlistSelect.val();
-
+		scene['weather'] = weatherSelect.val();
 
 		const isNew = false;
 		window.ScenesHandler.persist_scene(scene_id, isNew);
@@ -1816,8 +1835,8 @@ function fill_importer(scene_set, start, searchState = '') {
 }
 
 function mega_importer(DDB = false, ddbSource, ddbChapter) {
-	container = $("<div id='mega_importer'/>");
-	toggles = $("<div id='importer_toggles'/>");
+	const container = $("<div id='mega_importer'/>");
+	const toggles = $("<div id='importer_toggles'/>");
 	container.append(toggles);
 	area = $("<div id='importer_area'/>");
 	container.append(area);
@@ -2842,7 +2861,7 @@ function build_source_book_chapter_import_section(sceneSet) {
 
  		const uuidString = scene.uuid.replace('dnd/', '');
  		const regEx = new RegExp(`v[0-9]+\/${uuidString}`, "gi");
-		const otherVersions = Object.keys(get_ddb_extras()).filter(d=>d.match(regEx));
+		const otherVersions = Object.keys(DDB_EXTRAS).filter(d=>d.match(regEx));
 		if(otherVersions.length > 0){
 			for(let i = 0; i<otherVersions.length; i++){
 				scene = {...default_scene_data(), ...scene, ...DDB_EXTRAS[scene.uuid], ...DDB_EXTRAS[otherVersions[i]]}
@@ -2852,6 +2871,7 @@ function build_source_book_chapter_import_section(sceneSet) {
 			}
 		}
 	});
+	DDB_EXTRAS = null;
 
 	const import_chapter = $(`<div class='listing-card__callout-button import-button'>Import Chapter</button>`)
 	const folderPath = decode_full_path($(`#sources-import-main-container`).attr("data-folder-path")).replace(RootFolder.Scenes.path, "");
