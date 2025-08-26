@@ -85,35 +85,6 @@ function update_old_discord_link(link){
   }
   return link;
 }
-/**
- * Waits for a global variable to be set.
- * Then triggers the callback function.
- * @param {String} name a global variable name
- * @param {Function} callback
- */
-function whenAvailable(name, callback) {
-    let interval = 10; // ms
-    window.setTimeout(function() {
-        if (window[name]) {
-            callback(window[name]);
-        } else {
-            whenAvailable(name, callback);
-        }
-    }, interval);
-}
-
-/**
- * Returns a random color in hex format.
- * @returns String
- */
-function getRandomColorOLD() {
-	let letters = '0123456789ABCDEF';
-	let color = '#';
-	for (let i = 0; i < 6; i++) {
-		color += letters[Math.floor(Math.random() * 16)];
-	}
-	return color;
-}
 
 
 
@@ -470,6 +441,8 @@ function map_load_error_cb(e) {
 			}
 		}
 	}
+	window.LOADING = false
+	window.MB.loadNextScene();
 }
 
 /**
@@ -520,6 +493,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 			height: height,
 			videoId: videoid,
 			playerVars: { 'autoplay': 0, 'controls': 1, 'rel': 0 },
+			host: 'https://www.youtube-nocookie.com',
 			events: {
 				'onStateChange': function(event) {  
 					if (event.data == 0) window.YTPLAYER.seekTo(0); 
@@ -589,12 +563,9 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 		}
 		let videoVolume = window.MIXER?.state()?.animatedMap?.volume != undefined ? window.MIXER?.state()?.animatedMap?.volume : $("#youtube_volume").val() != undefined ? $("#youtube_volume").val() : 0.25;
 		
-		if(window.DM){
-			videoVolume = videoVolume/100 * $("#master-volume input").val();
-		}
-		else{
-			videoVolume = videoVolume * $("#master-volume input").val()
-		}
+		
+		videoVolume = videoVolume * $("#master-volume input").val();
+		
 		if(url.includes('google')){
 	    if (url.startsWith("https://drive.google.com") && url.indexOf("uc?id=") < 0 && url.indexOf("thumbnail?id=") < 0 ) {
 	        const parsed = 'https://drive.google.com/uc?id=' + url.split('/')[5];
@@ -617,7 +588,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 		{
 		  url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
 		}
-		let newmap = $(`<video style="${newmapSize} position: absolute; top: 0; left: 0;z-index:10" playsinline autoplay loop data-volume='0.25' onloadstart="this.volume=${videoVolume/100}" id="scene_map" src="${url}" />`);
+		let newmap = $(`<video style="${newmapSize} position: absolute; top: 0; left: 0;z-index:10" playsinline autoplay loop data-volume='0.25' onplay="this.volume=${videoVolume/100}" id="scene_map" src="${url}" />`);
 		newmap.off("loadeddata").one("loadeddata", callback);
 		newmap.off("error").on("error", map_load_error_cb);
 
@@ -1360,7 +1331,7 @@ function init_mouse_zoom() {
 		}
 	}
 	let suppressed = null;
-	function move_pinch(ev, busy) {
+	function move_pinch(ev) {
 		if(ev && touchMode == 2) {
 			ev.preventDefault()
 			ev.stopPropagation();
@@ -1372,30 +1343,33 @@ function init_mouse_zoom() {
 			}
 	        }
         }
-	window.addEventListener('touchstart', start_pinch, {passive: false});
-	window.addEventListener('touchmove', move_pinch, {passive: false});
-	window.addEventListener("touchend", function (e) {
-		if(touchTimeout) clearTimeout(touchTimeout);
-		if (e.touches.length === 0) {
-			touchTimeout = setTimeout(() => {
-				touchMode = 0;
-			}, 100);
-		}
-	});
-        window.addEventListener("touchcancel", function (e) {
-		//still needs to be tested - not sure how to trigger
-		if ((e.touches == undefined || e.touches.length === 0) && touchMode === 2) {
-			console.log("Touch interrupted. Resetting.");
-			touchMode = 0;
-			throttledZoom(start_scale,1); //todo: x,y?
-		}
-	});
 
-	//disable browser gestures (not sure: is there a more subtle way in CSS?)
-	function prevent(e) { e.preventDefault(); }
-	document.addEventListener("gesturestart", prevent);
-	document.addEventListener("gesturechange", prevent);
-	document.addEventListener("gestureend", prevent);
+		document.addEventListener('touchstart', start_pinch, { passive: false });
+		document.addEventListener('touchmove', move_pinch, { passive: false });
+		document.addEventListener("touchend", function (e) {
+			if (touchTimeout) clearTimeout(touchTimeout);
+			if (e.touches.length === 0) {
+				touchTimeout = setTimeout(() => {
+					touchMode = 0;
+				}, 100);
+			}
+		});
+		document.addEventListener("touchcancel", function (e) {
+			//still needs to be tested - not sure how to trigger
+			if ((e.touches == undefined || e.touches.length === 0) && touchMode === 2) {
+				console.log("Touch interrupted. Resetting.");
+				touchMode = 0;
+				throttledZoom(start_scale, 1); //todo: x,y?
+			}
+		});
+
+		//disable browser gestures (not sure: is there a more subtle way in CSS?)
+		function prevent(e) { e.preventDefault(); }
+		document.addEventListener("gesturestart", prevent);
+		document.addEventListener("gesturechange", prevent);
+		document.addEventListener("gestureend", prevent);
+
+
 }
 
 
@@ -1730,38 +1704,7 @@ function  init_sheet() {
 	}
 }
 
-/**
- * Loads the given URL in the character sheet window.
- * @param {String} pc_sheet URL to a player character on DDB
- * @param {Boolean} loadWait
- * @returns
- */
-function init_player_sheet(pc_sheet, loadWait = 0) {
 
-	if (is_characters_page()) {
-		// characters page manipulates the html on the page instead of loading an iframe
-		return;
-	}
-	if (pc_sheet === undefined || pc_sheet.length == 0) {
-		// This happens for the DM representation.
-		return;
-	}
-
-	let container = $("#sheet");
-	let iframe = container.find("iframe");
-	iframe.attr('src', '');
-	iframe.attr('data-sheet_url', pc_sheet);
-	iframe.attr('data-init_load', 0);
-
-	if((!window.DM) || (window.KEEP_PLAYER_SHEET_LOADED)) {
-		console.error('here');
-		let  loadSheet = function (sheetFrame, sheet_url) {
-			sheetFrame.attr('src', sheet_url);
-		};
-		// TODO: these parameters are not correct: iframe, pc_sheet
-		setTimeout(loadSheet, loadWait, iframe, pc_sheet);
-	}
-}
 
 
 /**
@@ -1968,11 +1911,29 @@ function close_player_sheet()
 			observe_character_sheet_changes($('#site-main, .ct-sidebar__portal'));
 	}
 }
+/**
+ * Waits for a global variable to be set.
+ * Then triggers the callback function.
+ * @param {String} name a global variable name
+ * @param {Function} callback
+ */
+function whenAvailable(name, callback) {
+	let interval = 1000; // ms
+	setTimeout(function () {
+		if (window[name]) {
+			callback(window[name]);
+		} else {
+			whenAvailable(name, callback);
+		}
+	}, interval);
+}
 
 /**
  * Notifie about player joining the game.
  */
 function notify_player_join() {
+	if(window.DM)
+		return;
 	const playerdata = {
 		abovevtt_version: window.AVTT_VERSION,
 		player_id: window.PLAYER_ID,
@@ -1980,7 +1941,7 @@ function notify_player_join() {
 	};
 
 	console.log("Sending playerjoin msg, abovevtt version: " + playerdata.abovevtt_version + ", sheet ID:" + window.PLAYER_ID);
-	window.MB.sendMessage("custom/myVTT/playerjoin", playerdata);
+	whenAvailable('JOURNAL', function(){window.MB.sendMessage("custom/myVTT/playerjoin", playerdata)});
 }
 
 /**
@@ -2142,7 +2103,7 @@ function init_ui() {
 
 	// On iOS make sure browser zoom is zero-d out
 	if (isIOS()) { //might also be useful on other mobile. not sure.
-		var meta = document.createElement('meta');
+		const meta = document.createElement('meta');
 		meta.name = "viewport";
 		meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";
 		document.getElementsByTagName('head')[0].appendChild(meta);
@@ -2177,7 +2138,7 @@ function init_ui() {
 	drawOverlayUnderFogDarkness.css("position", "absolute");
 	drawOverlayUnderFogDarkness.css("top", "0");
 	drawOverlayUnderFogDarkness.css("left", "0");
-	drawOverlayUnderFogDarkness.css("z-index", "18");
+	drawOverlayUnderFogDarkness.css("z-index", "11");
 
 	const mapItems = $("<div id='map_items'></div>");
 	mapItems.css("top", "0");
@@ -2404,16 +2365,13 @@ function init_ui() {
 
 	init_controls();
 	init_sheet();
-	init_my_dice_details()
-	setTimeout(function() {
-		find_and_set_player_color();
-		if(!window.DM) {
-			notify_player_join();
-			init_player_sheet(window.PLAYER_SHEET);
-			report_connection();
-		}
-		configure_peer_manager_from_settings();
-	}, 5000);
+	init_my_dice_details();
+	
+	window.WaypointManager = new WaypointManagerClass();
+
+	find_and_set_player_color();
+	configure_peer_manager_from_settings();
+	
 
 	$(".sidebar__pane-content").css("background", "rgba(255,255,255,1)");
 
@@ -2423,18 +2381,7 @@ function init_ui() {
 	init_combat_tracker();
 
 	token_menu();
-	load_custom_monster_image_mapping();
-
-
-	window.WaypointManager=new WaypointManagerClass();
-
-	// TODO: I don't think this needs to be a timeout any more. Figure what window.STARTING does and make this better
-	setTimeout(function() {
-		window.STARTING = false;
-	}, 6000);
-
-
-
+	
 
 	// EXPERRIMENTAL DRAG TO MOVE
 	let  curDown = false,
@@ -2538,7 +2485,7 @@ function init_ui() {
 	init_mouse_zoom()
 
 	init_help_menu();
-  hide_or_unhide_scrollbar()
+  	hide_or_unhide_scrollbar()
   
 
 }
@@ -3226,7 +3173,7 @@ function init_help_menu() {
 					<div id="tab12" class='googledoc bookmark' data-src="https://docs.google.com/document/d/e/2PACX-1vRSJ6Izvldq5c9z_d-9-Maa8ng1SUK2mGSQWkPjtJip0cy9dxAwAug58AmT9zRtJmiUx5Vhkp7hATSt/pub?embedded=true#h.mob2z6z5azn2"></div>
 
 					<div id="tab20">
-						<iframe width="560" height="315" src="https://www.youtube.com/embed/videoseries?list=PLW0tvNe3gIM00xQCReTWi8CPrXBJyDQmG&rel=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+						<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/videoseries?list=PLW0tvNe3gIM00xQCReTWi8CPrXBJyDQmG&rel=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 					</div>
 					<div id="tab21">
 						AboveVTT is an open source project. The developers build it in their free time, and rely on users to report and troubleshoot bugs. If you're experiencing a bug, here are a few options: 
@@ -3276,7 +3223,7 @@ function init_help_menu() {
 			$('.tabs-content>div#tab2').show();
 			let src = $(currentTab).attr('data-src');
 			$('.tabs-content>div#tab2').find('iframe').remove();
-			$('.tabs-content>div#tab2').append(`<iframe src='${src}'></iframe>`)
+			$('.tabs-content>div#tab2').append(`<iframe src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(src)}'></iframe>`)
 		}
 
 		$(currentTab).show();

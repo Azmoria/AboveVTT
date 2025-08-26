@@ -2250,7 +2250,7 @@ padding-top:10px;
     cursor: default;
 }
 
-.token .condition-img {
+:is(.token, .folder-item-list) .condition-img {
     padding: 0;
     margin: 0;
     background: #01ffff;
@@ -2263,7 +2263,7 @@ padding-top:10px;
     background: #F58231;
 }
 
-.token .note-condition.condition-img {
+:is(.token, .folder-item-list) .note-condition.condition-img {
     background: #e4c700;
 }
 
@@ -4261,6 +4261,7 @@ audio::-webkit-media-controls-time-remaining-display{
 .note-text>p:first-of-type{
     margin-top: 0px !important;
 }
+
 .note .note-pin{
     background: url(https://drive.google.com/thumbnail?id=1excaNtaLfn_Hj5EHuH-h8iimpzC36i0M);
     position: absolute;
@@ -4270,6 +4271,9 @@ audio::-webkit-media-controls-time-remaining-display{
     background-size: contain;
     z-index: 1000000;
     filter: drop-shadow(1px 2px 1px black);
+}
+.body-rpgcharacter-sheet .note .note-pin{
+    transform: translateY(43px);
 }
 .note .note-pin:after{
     position: absolute;
@@ -4731,11 +4735,13 @@ div#importer_area>div>div:first-of-type {
     top: 0 !important;
     left: 0 !important;
     float: left !important;
-    width: 90px !important;
-    height: 90px !important;
-    margin: 5px !important;
+    margin: 2px !important;
     position: relative !important;
     opacity: 1 !important;
+}
+#token-change-image-modal .example-token{
+    width:90px;
+    height:90px;
 }
 .custom-token-image-item.ui-draggable-dragging {
     width: auto;
@@ -5197,6 +5203,34 @@ button.block-send-to-game-log span {
     padding-inline-start: 40px;
 }
 
+
+.note-text iframe.journal-site-embed{
+    display:block;
+    position:absolute;
+    width:100%;
+    height:100%;
+    top: 0px;
+}
+.note-text iframe.journal-site-embed {
+    top: 0px;
+    height: 100%;
+    border: none;
+}
+
+.note-text>p:has(.journal-site-embed) {
+    height: 100%;
+    display: block;
+    position: absolute;
+    width: 100%;
+}
+
+.body-rpgcharacter-sheet .note-text{
+    top: 0px;
+}
+
+.body-rpgcharacter-sheet .note-text>p:first-of-type{
+    margin:0px;
+}
 .sidebar-list-item-row.player-row {
     height: 120px;
     transition: height 250ms linear;
@@ -5372,8 +5406,13 @@ button.token-row-button.token-row-edit-encounter{
     flex: auto;
 }
 #token-configuration-modal .sidebar-panel-body{
-    min-height:300px;
-    max-height:500px;
+    min-height: 265px;
+    max-height: 265px;
+    padding: 0px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow-x: hidden;
 }
 #token-configuration-modal{
     height: unset;
@@ -6579,7 +6618,9 @@ div#selectedTokensBorderRotationGrabberConnector,
 .journal-button svg{
     padding: 2px 1px 2px 0px;
 }
-    
+.body-rpgcharacter-sheet .popout-button.journal-button {
+    top: 6px;
+}
 
 #combat_tracker_inside #endplayerturn{
     pointer-events: none;
@@ -8377,6 +8418,19 @@ button#changeTokenImage:before{
 .sp-palette-container {
     min-width: 176px;
 }
+.mfp-wrap{
+    z-index: 1000000 !important;
+}
+[role='dialog'] .note .note-text {
+    min-height: 450px;
+    position: relative;
+    height: 100%;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
 #combat_area tr.CTToken:before{
     content:  '???';
     font-size: 12px;
@@ -8755,10 +8809,13 @@ body.preventSelectDefinitelyNot .token.declutterToken[style*='opacity: 0.5']{
 div.note[id^="ui-id"] {
     width: 100% !important;
     padding: 0px !important;
-    max-height: calc(100% - 33px) !important;
-
+    max-height: calc(100% - 30px) !important;
+    position: relative;
+    overflow: scroll;
 }
-
+div.note[id^="ui-id"]:has(.note-text>p .journal-site-embed) {
+    height: 100% !important;
+}
 .tooltip-body-description-text.note-text img{
     max-width: 100%;
     height: auto;
@@ -8788,6 +8845,10 @@ div.note[id^="ui-id"] .mce-listbox button{
 
 div.note[id^="ui-id"] .mce-btn button {
     padding: 1px 4px;
+}
+body .mce-abs-layout-item,
+.mce-abs-end{
+    position: absolute !important;
 }
 .ui-dialog{
     padding: 0px !important;
@@ -9478,17 +9539,6 @@ button.journal-view-button.journal-button img {
     border-image-source: var(--theme-read-aloud-border,url(https://media.dndbeyond.com/ddb-compendium-client/146117d0758df55ed5ff299b916e9bd1.png))
 }
 
-.note-text iframe.journal-site-embed{
-    display:block;
-    position:absolute;
-    width:100%;
-    height:100%;
-    top: 0px;
-}
-
-.visibility-container ~ .note-text iframe.journal-site-embed{
-    top: 42px;
-}
 
 
 :root .custom-stat-block{
@@ -11035,6 +11085,9 @@ button#editAnimations {
     padding: 0px!important;
     width: 50px;
     margin: 1px !important;
+}
+.ui-selectmenu-menu.ui-front{
+    z-index: 100000000 !important;
 }
 .ui-selectmenu-menu .ui-menu-item-wrapper .ui-menu-item {
     height: 24px;

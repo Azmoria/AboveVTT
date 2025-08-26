@@ -4,8 +4,10 @@ function init_sidebar_tabs() {
 
   let sidebarContent = is_characters_page() ? $(".ct-sidebar__inner [class*='styles_content']>div:first-of-type") : $(".sidebar__pane-content");
 
-  // gamelog doesn't use it yet, maybe never
-
+  // Journal needs to load before scenes for scene  notes
+  if (window.JOURNAL === undefined) {
+    init_journal(find_game_id());
+  }
   if (window.DM) {
     $("#tokens-panel").remove();
     tokensPanel = new SidebarPanel("tokens-panel", false);
@@ -777,6 +779,7 @@ class SidebarListItem {
     let item = new SidebarListItem(sceneData.id, name, sceneData.player_map, ItemType.Scene, folderPath, parentId);
     console.debug(`SidebarListItem.Scene ${item.fullPath()}`);
     item.isVideo = sceneData.player_map_is_video == "1"; // explicity using `==` instead of `===` in case it's ever `1` or `"1"`
+    item.noteData = sceneData.noteData || undefined;
     return item;
   }
 
@@ -2228,7 +2231,7 @@ function edit_encounter(clickEvent) {
 
 
 
-      for(let i=0; i<customization.encounterData.tokenItems.length; i++){
+      for (let i in customization.encounterData.tokenItems){
         const item = customization.encounterData.tokenItems[i];
         const itemCustomization = find_token_customization(customization.encounterData.tokenItems[i].type, customization.encounterData.tokenItems[i].id);
         const hasCustomStatBlock = itemCustomization?.tokenOptions?.statBlock != undefined;

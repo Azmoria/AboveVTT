@@ -98,6 +98,7 @@ class JournalManager{
 		    if(window.DM && !is_gamelog_popout()){
 			  	// also sync the journal
 			    window.JOURNAL?.sync();
+				did_update_scenes();
 			}
 		});
 	}
@@ -555,9 +556,6 @@ class JournalManager{
 					section_chapter.toggleClass('collapsed');
 					self.chapters[i].collapsed = !self.chapters[i].collapsed;
 					self.persist();
-					window.MB.sendMessage('custom/myVTT/JournalChapters',{
-						chapters: self.chapters
-					});
 				});
 				
 		
@@ -2004,8 +2002,12 @@ class JournalManager{
 			}
 			else if(url.match(/drive\.google\.com.*\/view\?usp=/gi)){
 				url = url.replace(/view\?usp=/gi, 'preview?usp=')
+			}else if(url.match(/youtube.com/gi)){
+				url = url.replace("youtube.com", "youtube-nocookie.com")
 			}
-			$(iframes[i]).replaceWith(`<iframe class='journal-site-embed' src='${url}'></iframe>`);
+			encodeURI(url);
+			const newFrame = $(`<iframe class='journal-site-embed' src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(url)}'></iframe>`)			
+			$(iframes[i]).replaceWith(newFrame);
 		}
 
 

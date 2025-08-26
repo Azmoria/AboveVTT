@@ -947,6 +947,7 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
 
   console.groupEnd()
 }
+
 function general_statblock_formating(input){
   input = input.replace(/&nbsp;/g,' ')
 
@@ -1651,7 +1652,9 @@ function find_pc_by_player_id(idOrSheet, useDefault = true) {
       console.error("window.pcs is undefined");
     return useDefault ? generic_pc_object(false) : undefined;
   }
-  const pc = window.pcs.find(pc => pc.sheet.includes(idOrSheet));
+  const regexStr = `characters/${idOrSheet}$`;
+  const regex = new RegExp(regexStr, 'gi');
+  const pc = window.pcs.find(pc => pc.sheet.match(regex) || pc.sheet == idOrSheet);
   if (pc) {
     return pc;
   }
@@ -1712,41 +1715,42 @@ function update_pc_with_data(playerId, data) {
 
 
 const debounce_pc_token_update = mydebounce(() => {  
-  const unusedPlayerData = ['attacks', 'attunedItems', 'campaign', 'campaignSetting', 'castingInfo', 'classes', 'deathSaveInfo', 'decorations', 'extras', 'immunities', 'level', 'passiveInsight', 'passiveInvestigation', 'passivePerception', 'proficiencyBonus', 'proficiencyGroups', 'race', 'readOnlyUrl', 'resistances', 'senses', 'skills', 'speeds', 'vulnerabilities'];
+  const unusedPlayerData = ['image', 'attacks', 'attunedItems', 'campaign', 'campaignSetting', 'castingInfo', 'classes', 'deathSaveInfo', 'decorations', 'extras', 'immunities', 'level', 'passiveInsight', 'passiveInvestigation', 'passivePerception', 'proficiencyBonus', 'proficiencyGroups', 'race', 'readOnlyUrl', 'resistances', 'senses', 'skills', 'speeds', 'vulnerabilities'];
       
   window.PC_TOKENS_NEEDING_UPDATES.forEach((playerId) => {
     const pc = find_pc_by_player_id(playerId, false);
     let token = window.TOKEN_OBJECTS[pc?.sheet];     
     if (token && pc) {
       let currentImage = token.options.imgsrc;
-      token.hp = pc.hitPointInfo.current;
-      token.options = {
-        ...token.options,
-        ...pc,
-        imgsrc: (token.options.alternativeImages?.length == 0) ? pc.image : currentImage,
-        id: pc.sheet // pc.id is DDB characterId, but we use the sheet as an id for tokens
-      };  
-      for(let i =0; i<unusedPlayerData.length; i++){
-        delete token.options[unusedPlayerData[i]];
-      }    
-      if (window.DM) {
-        token.place_sync_persist(); // update it on the server
+      if (currentImage != undefined){
+        token.options.hitPointInfo = pc.hitPointInfo;
+
+        const newImage = (token.options.alternativeImages?.length == 0) ? pc.image : currentImage;
+        token.options = $.extend(true, {}, token.options, pc);
+        token.options.imgsrc = newImage;
+
+        for (let i = 0; i < unusedPlayerData.length; i++) {
+          delete token.options[unusedPlayerData[i]];
+        }
+        if (window.DM) {
+          token.place_sync_persist(); // update it on the server
+        }
+        else {
+          token.place(); // update token for players even if dm isn't connected to websocket
+        }
       }
-      else{
-        token.place(); // update token for players even if dm isn't connected to websocket
-      }
+
     }
     token = window.all_token_objects[pc?.sheet] //for the combat tracker and cross scene syncing/tokens - we want to update this even if the token isn't on the current map
     if(token && pc){
-      let currentImage = token.options.imgsrc;
-      token.options = {
-        ...token.options,
-        ...pc,
-        imgsrc: (token.options.alternativeImages?.length == 0) ? pc.image : currentImage,
-        id: pc.sheet // pc.id is DDB characterId, but we use the sheet as an id for tokens
-      };
-      for(let i =0; i<unusedPlayerData.length; i++){
-        delete token.options[unusedPlayerData[i]];
+      const currentImage = token.options.imgsrc;
+      if(currentImage != undefined){
+        const newImage = (token.options.alternativeImages?.length == 0) ? pc.image : currentImage;
+        token.options = $.extend(true, {}, token.options, pc);
+        token.options.imgsrc = newImage;
+        for (let i = 0; i < unusedPlayerData.length; i++) {
+          delete token.options[unusedPlayerData[i]];
+        }
       }
     }     
   });
@@ -2287,30 +2291,6 @@ function open_github_issue(title, body) {
   window.open(url, '_blank');
 }
 
-function areArraysEqualSets(a1, a2) {
-  // canbax, https://stackoverflow.com/a/55614659
-  const superSet = {};
-  for (const i of a1) {
-    const e = i + typeof i;
-    superSet[e] = 1;
-  }
-
-  for (const i of a2) {
-    const e = i + typeof i;
-    if (!superSet[e]) {
-      return false;
-    }
-    superSet[e] = 2;
-  }
-
-  for (let e in superSet) {
-    if (superSet[e] === 1) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 
 function find_or_create_generic_draggable_window(id, titleBarText, addLoadingIndicator = true, addPopoutButton = false, popoutSelector=``, width='80%', height='80%', top='10%', left='10%', showSlow = true, cancelClasses='') {

@@ -1168,11 +1168,11 @@ function redraw_settings_panel_token_examples(settings) {
 	for (let i = 0; i < items.length; i++) {
 		let item = $(items[i]);
 		mergedSettings.imgsrc = item.find(".token-image").attr("src");
-		item.replaceWith(build_example_token(mergedSettings));
+		item.replaceWith(build_example_token(mergedSettings, 90));
 	}
 }
 
-function build_example_token(options) {
+function build_example_token(options, size=90) {
 	let mergedOptions = {...default_options(), ...window.TOKEN_SETTINGS, ...options};
 	let hpnum;
 	switch (mergedOptions['defaultmaxhptype']) {
@@ -1193,7 +1193,7 @@ function build_example_token(options) {
 		temp: 0
 	}
 	mergedOptions.id = `exampleToken-${uuid()}`;
-	mergedOptions.size = 90;
+	mergedOptions.size = size;
 	// mergedOptions.gridHeight = 1;
 	// mergedOptions.gridWidth = 1;
 	mergedOptions.armorClass = 10;
@@ -1603,6 +1603,9 @@ function export_current_scene(){
 			DataFile.notes[tokenID] = window.JOURNAL.notes[tokenID];
 		}
 	}
+	if (window.JOURNAL.notes[currentSceneData.id]){
+		DataFile.notes[currentSceneData.id] = window.JOURNAL.notes[currentSceneData.id];
+	}
 	let currentdate = new Date(); 
 	let datetime = `${currentdate.getFullYear()}-${(currentdate.getMonth()+1)}-${currentdate.getDate()}`
 	download(b64EncodeUnicode(JSON.stringify(DataFile,null,"\t")),`${window.CURRENT_SCENE_DATA.title}-${datetime}.abovevtt`,"text/plain");
@@ -1639,12 +1642,19 @@ async function export_scene_context(sceneId){
 		}
 		tokensObject[tokenId] = scene.data.tokens[token];		
 	}
+	if (window.JOURNAL.notes[currentSceneData.id]) {
+		DataFile.notes[currentSceneData.id] = window.JOURNAL.notes[currentSceneData.id];
+	}
 	DataFile.scenes[0].tokens = tokensObject;
 
 	let currentdate = new Date(); 
 	let datetime = `${currentdate.getFullYear()}-${(currentdate.getMonth()+1)}-${currentdate.getDate()}`
 	download(b64EncodeUnicode(JSON.stringify(DataFile,null,"\t")),`${scene.data.title}-${datetime}.abovevtt`,"text/plain");
 	$(".import-loading-indicator").remove();
+}
+
+async function open_scene_note(sceneId){
+	window.JOURNAL.display_note(sceneId, false);
 }
 
 
@@ -1771,6 +1781,9 @@ async function export_scenes_folder_context(folderId){
 				DataFile.notes[tokenId] = window.JOURNAL.notes[tokenId];
 			}
 			tokensObject[tokenId] = scene.data.tokens[token];		
+		} 
+		if (window.JOURNAL.notes[ids[id]]) {
+			DataFile.notes[ids[id]] = window.JOURNAL.notes[ids[id]];
 		}
 		currentSceneData.tokens = tokensObject;
 		DataFile.scenes.push(currentSceneData)

@@ -8,7 +8,6 @@ import { init_audio_mixer } from './audio/index.js'
 $(function() {
   if (is_abovevtt_page()) { // Only execute if the app is starting up
     console.log("startup calling init_splash");
-    window.STARTING = true; // TODO: clean up how this gets set to false
     init_loading_overlay_beholder();
     addBeyond20EventListener("rendered-roll", (request) => {$('.avtt-sidebar-controls #switch_gamelog').click();});
     $('meta[name="viewport"]').attr('content', 'width=device-width, initial-scale=1.0, user-scalable=no')
@@ -339,6 +338,7 @@ async function start_above_vtt_common() {
   window.REVEALED = [];
   window.TOKEN_CUSTOMIZATIONS = [];
   window.TOKEN_OBJECTS = {};
+  window.ON_SCREEN_TOKENS = {};
   window.TOKEN_OBJECTS_RECENTLY_DELETED = {};
   window.TOKEN_PASTE_BUFFER = [];
   window.TOKEN_SETTINGS = $.parseJSON(localStorage.getItem(`TokenSettings${window.gameId}`)) || {};

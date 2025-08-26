@@ -219,15 +219,7 @@ function setupMBIntervals(){
 	}, 480000);
 }
 
-function resizeCanvasChromeBug(){
-	let diceRollCanvas = $(".dice-rolling-panel__container");
-	if(parseInt(diceRollCanvas.attr("width")) % 2 != 0){
-		diceRollCanvas.attr("width", parseInt(diceRollCanvas.attr("width"))+1);
-	}
-	if(parseInt(diceRollCanvas.attr("height")) % 2 != 0){
-		diceRollCanvas.attr("height", parseInt(diceRollCanvas.attr("height"))+1);
-	}
-}
+
 
 function addFloatingCombatText(id, damageValue, heal = false){
 	if(get_avtt_setting_value('disableCombatText'))
@@ -241,7 +233,9 @@ function addFloatingCombatText(id, damageValue, heal = false){
 		combatText.remove();
 	}, 2000)
 }
-
+const debounceSyncMeUp = mydebounce(()=>{
+	window.MB.sendMessage("custom/myVTT/syncmeup");
+}, 2000)
 class MessageBroker {
 
 	loadAboveWS(callback=null){
@@ -299,7 +293,7 @@ class MessageBroker {
 			};
 			if (recovered && (!window.DM)) {
 				console.log('asking the DM for recovery!');
-				self.sendMessage("custom/myVTT/syncmeup");
+				debounceSyncMeUp();
 	 		}
 			setupMBIntervals();
 		};
@@ -1569,12 +1563,12 @@ class MessageBroker {
 
 
 		};
-		
+
 		get_cobalt_token(function(token) {
-			self.loadWS(token);
+			self.loadWS(token, report_connection);
 		});
 
-		self.loadAboveWS();
+		self.loadAboveWS(notify_player_join);
 	}
 
 	async handleScene (msg, forceRefresh=false) {
@@ -1655,6 +1649,7 @@ class MessageBroker {
 				window.sceneRequestTime = Date.now();
 		    	let lastSceneRequestTime = window.sceneRequestTime;   
 				window.TOKEN_OBJECTS = {};
+				window.ON_SCREEN_TOKENS = {};
 				window.videoTokenOld = {};
 				let data = msg.data;
 				let self=this;
@@ -1875,6 +1870,7 @@ class MessageBroker {
 								const left = parseInt(targetPortal.options.left)+25;
 								const isTeleporter = true;
 								await paste_selected_tokens(left, top, isTeleporter);
+								window.TOKEN_OBJECTS[teleporterTokenId].highlight();
 							}
 							catch{
 								window.TELEPORTER_PASTE_BUFFER = undefined;
@@ -1915,46 +1911,45 @@ class MessageBroker {
 						delete window.LOADING;
 						
 
-						if(!window.DM) {
-						 	window.MB.sendMessage('custom/myVTT/syncmeup');
-						}
+
 
 						do_check_token_visibility();
 						
 						$('#loadingStyles').remove();
 
-						if(window.handleSceneQueue?.length>0){	
-							const msg = window.handleSceneQueue.pop(); // get most recent item and load it
-							window.handleSceneQueue = [];
-							AboveApi.getScene(msg.data.sceneid).then((response) => {
-								self.handleScene(response);
-							}).catch((error) => {
-								console.error("Failed to download scene", error);
-							});
-							return;
-						}
-							
-						
 						console.groupEnd()
+
+						
+						window.MB.loadNextScene();	
+						
+						
 					});
 					
 					remove_loading_overlay();
 				}
-
-			
 			}
-
-
-	
-
 		}
 		catch (e) {
+			window.MB.loadNextScene();
 			showError(e);
 		}
 		
 		// console.groupEnd()
 	}
-
+	loadNextScene(){
+		if (window.handleSceneQueue == undefined || window.handleSceneQueue?.length == 0)
+			return;
+		const msg = window.handleSceneQueue.pop(); // get most recent item and load it
+		window.handleSceneQueue = [];
+		AboveApi.getScene(msg.data.sceneid).then((response) => {
+			window.MB.handleScene(response);
+		}).catch((error) => {
+			if (window.handleSceneQueue?.length > 0) {
+				setTimeout(loadNextScene, 100);
+			}
+			console.error("Failed to download scene", error);
+		});
+	}
   	handleCT(data){
 		ct_load(data);
 	}
