@@ -2014,8 +2014,8 @@ function updateImgSrc(url, container, video){
     container.attr('src', url);
   }
 }
-function updateTokenSrc(url, container, video=false){
-  url = parse_img(url)
+async function updateTokenSrc(url, container, video=false){
+  url = await parse_img(url)
   if(video == true && url?.includes('onedrive')){
     container.attr('src', url.replace('embed?', 'download?'));
     container.css('background', `url(${url.replace('embed?', 'download?')})`)
@@ -2028,6 +2028,11 @@ function updateTokenSrc(url, container, video=false){
     else{
       url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
     }
+    container.attr('src', url);
+    container.css('background', `url(${url})`)
+  }
+  else if(url.startsWith('above-bucket-not-a-url')){
+    url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
     container.attr('src', url);
     container.css('background', `url(${url})`)
   }

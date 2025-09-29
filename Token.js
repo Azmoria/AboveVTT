@@ -2266,8 +2266,10 @@ class Token {
 				let oldImage =  old.find(".token-image,[data-img]")
 				// token uses an image for it's image
 				if (!this.options.imgsrc.startsWith("class")){
+					if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
 
-					if(oldImage.attr("src")!=parse_img(this.options.imgsrc) || window.videoTokenOld[this.options.id] != this.options.videoToken){
+					}
+					else if(oldImage.attr("src")!=parse_img(this.options.imgsrc) || window.videoTokenOld[this.options.id] != this.options.videoToken){
 						let oldFileExtension = oldImage.attr("src").split('.')[oldImage.attr("src").length-1]
 						let newFileExtention = parse_img(this.options.imgsrc.split('.')[this.options.imgsrc.split('.').length-1]);
 						let imgClass = oldImage.attr('class');
