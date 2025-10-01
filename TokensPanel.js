@@ -702,7 +702,11 @@ function get_helper_size(draggedItem){
  * @param html {*|jQuery|HTMLElement} the html that corresponds to an item (like a row in the list of tokens)
  * @param specificImage {string} the url of the image to use. If nothing is provided, an image will be selected at random from the token's specified alternative-images.
  */
-function enable_draggable_token_creation(html, specificImage = undefined) {
+async function enable_draggable_token_creation(html, specificImage = undefined) {
+    if(specificImage && specificImage.startsWith('above-bucket-not-a-url')){
+        specificImage = await getAvttStorageUrl(specificImage)
+    }
+
     html.draggable({
         appendTo: "body",
         zIndex: 100000,
@@ -913,7 +917,19 @@ function update_pc_token_rows() {
                 abilityValue.find(".ability_score").text(a.score);
             });    
             let customizations = find_token_customization(listItem.type, listItem.id);
-            row.find(".token-image").attr('src', (customizations?.tokenOptions?.alternativeImages?.length>0) ? customizations?.tokenOptions?.alternativeImages[0] : pc.image);
+            
+            let rowImage = (customizations?.tokenOptions?.alternativeImages?.length > 0) ? customizations?.tokenOptions?.alternativeImages[0] : pc.image;
+            if (rowImage.startsWith('above-bucket-not-a-url')){
+                getAvttStorageUrl(rowImage).then((url) => {
+                    row.find(".token-image").attr('src', url)
+                })
+            }
+            else{
+                row.find(".token-image").attr('src', rowImage)
+            }
+            
+            
+            
             row.find(".pinv-value").text(pc.passiveInvestigation);
             row.find(".pins-value").text(pc.passiveInsight);
             row.find(".walking-value").text(speed_from_pc_object(pc));
@@ -3293,7 +3309,7 @@ function build_alternative_image_for_modal(image, options, placedToken, listItem
  * @param listItem {SidebarListItem|undefined} the item the modal represents
  * @param placedToken {Token|undefined} the token on the scene
  */
-function decorate_modal_images(sidebarPanel, listItem, placedToken) {
+async function decorate_modal_images(sidebarPanel, listItem, placedToken) {
     if (listItem === undefined && placedToken === undefined) {
         console.warn("decorate_modal_images was called without a listItem or a placedToken");
         return;
@@ -3303,7 +3319,7 @@ function decorate_modal_images(sidebarPanel, listItem, placedToken) {
     for (let i = 0; i < items.length; i++) {
         let combinedOptions = options;
         let item = $(items[i]);
-        let imgsrc = item.find(".div-token-image").attr("src");
+        let imgsrc = item.find(".div-token-image, .token-image").attr("src");
         if(options.alternativeImagesCustomizations != undefined && options.alternativeImagesCustomizations[imgsrc] != undefined){
             combinedOptions = {
                 ...options,
@@ -3835,7 +3851,7 @@ function register_custom_token_image_context_menu() {
                     name: "Remove",
                     callback: async function (itemKey, opt, originalEvent) {
                         let selectedItem = $(opt.$trigger[0]);
-                        let imgSrc = selectedItem.find(".token-image").attr("src");
+                        let imgSrc = selectedItem.find(".token-image").attr("data-src");
                         if(tokenChangeImage){
                             imgSrc = selectedItem.attr("src");
                         }
@@ -3867,7 +3883,16 @@ function register_custom_token_image_context_menu() {
                             await customization.removeAlternativeImage(imgSrc);
                             persist_token_customization(customization, function(){
                                 let listingImage = (customization.tokenOptions?.alternativeImages && customization.tokenOptions?.alternativeImages[0] != undefined) ? customization.tokenOptions?.alternativeImages[0] : listItem.image;     
-                                $(`.sidebar-list-item-row[id='${listItem.id}'] .token-image`).attr('src', listingImage);
+                                if (listingImage.startsWith('above-bucket-not-a-url')) {
+                                    getAvttStorageUrl(listingImage).then((url) => {
+                                        $(`.sidebar-list-item-row[id='${listItem.id}'] .token-image`).attr('src', url);
+                                    })
+                                }
+                                else {
+                                    $(`.sidebar-list-item-row[id='${listItem.id}'] .token-image`).attr('src', listingImage);
+                                }
+                                
+                               
                                 redraw_token_images_in_modal(window.current_sidebar_modal, listItem, placedToken);
                             });
      

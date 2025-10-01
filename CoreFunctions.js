@@ -1989,8 +1989,11 @@ async function normalize_scene_urls(scenes) {
 
   return scenesArray;
 }
-
-function updateImgSrc(url, container, video){
+async function getAvttStorageUrl(url){
+  url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
+  return url;
+}
+async function updateImgSrc(url, container, video){
   url = parse_img(url)
   if(video == true && url?.includes('onedrive')){
     container.attr('src', url.replace('embed?', 'download?'));
@@ -2010,7 +2013,13 @@ function updateImgSrc(url, container, video){
     throttleImgSrc(() => {
       container.attr('src', url);
     })
-  }else{
+  }
+  else if(url.startsWith('above-bucket-not-a-url'))
+  {
+    url = await getAvttStorageUrl(url)
+    container.attr('src', url);
+  }
+  else{
     container.attr('src', url);
   }
 }
@@ -2032,7 +2041,7 @@ async function updateTokenSrc(url, container, video=false){
     container.css('background', `url(${url})`)
   }
   else if(url.startsWith('above-bucket-not-a-url')){
-    url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
+    url = await getAvttStorageUrl(url);
     container.attr('src', url);
     container.css('background', `url(${url})`)
   }

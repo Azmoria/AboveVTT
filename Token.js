@@ -828,7 +828,15 @@ class Token {
 				let copyImage = $(`[data-notatoken='notatoken_${this.options.id}']`).find('.token-image')
 				let oldImage = old.find('.token-image');
 
-				if(copyImage.attr('src') != parse_img(this.options.imgsrc)){
+				if(this.options.src.startsWith('above-bucket-not-a-url')){
+					const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+					if (!copyImage.attr('src').includes(fileSrc)){
+						getAvttStorageUrl(this.options.imgsrc).then((url) => {
+							copyImage.attr("src", parse_img(url));
+						});
+					}
+				}
+				else if (copyImage.attr('src') != parse_img(this.options.imgsrc)){
 					copyImage.attr("src", parse_img(this.options.imgsrc));
 				}
 			}
@@ -2267,7 +2275,83 @@ class Token {
 				// token uses an image for it's image
 				if (!this.options.imgsrc.startsWith("class")){
 					if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
+						
+						const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+						if (!oldImage.attr('src').includes(fileSrc)) {
+							getAvttStorageUrl(this.options.imgsrc).then((url) => {
+								let oldFileExtension = oldImage.attr("src").split('.')[oldImage.attr("src").length - 1]
+								let newFileExtention = parse_img(this.options.imgsrc.split('.')[this.options.imgsrc.split('.').length - 1]);
+								let imgClass = oldImage.attr('class');
+								let video = false;
+								if (oldFileExtension !== newFileExtention || window.videoTokenOld[this.options.id] != this.options.videoToken) {
+									oldImage.remove();
+									$(`[data-notatoken='notatoken_${this.options.id}']`).remove();
+									let tokenImage;
+									if (this.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => this.options.imgsrc.includes(d))) {
+										tokenImage = $("<video disableRemotePlayback autoplay loop muted style='transform:scale(var(--token-scale)) rotate(var(--token-rotation))' class='" + imgClass + "'/>");
+										video = true;
+									}
+									else {
+										tokenImage = $("<div data-div-image='true' style='transform:scale(var(--token-scale)) rotate(var(--token-rotation))' class='" + imgClass + " div-token-image'/>");
+									}
+									oldImage = tokenImage;
+									old.append(tokenImage);
+								}
+								window.videoTokenOld[this.options.id] = this.options.videoToken;
 
+								updateTokenSrc(this.options.imgsrc, oldImage, video)
+								getAvttStorageUrl(this.options.imgsrc).then((url) => {
+									$(`#combat_area tr[data-target='${this.options.id}'] img[class*='Avatar']`).attr("src", parse_img(this.options.imgsrc));
+								})
+
+								oldImage.off('dblclick.highlightToken').on('dblclick.highlightToken', function (e) {
+									self.highlight(true); // dont scroll
+									let data = {
+										id: self.options.id
+									};
+									window.MB.sendMessage('custom/myVTT/highlight', data);
+								})
+
+								oldImage.off('click.selectToken').on('click.selectToken', function () {
+									let parentToken = $(this).parent(".VTTToken");
+									if (parentToken.hasClass("pause_click")) {
+										return;
+									}
+									let tokID = parentToken.attr('data-id');
+									let groupID = parentToken.attr('data-group-id');
+									let thisSelected = !(parentToken.hasClass('tokenselected'));
+									let count = 0;
+									if (shiftHeld == false) {
+										deselect_all_tokens(true);
+									}
+									if (thisSelected == true) {
+										parentToken.addClass('tokenselected');
+										toggle_player_selectable(window.TOKEN_OBJECTS[tokID], parentToken)
+										$(`:is(#combat_area, #combat_area_carousel) tr[data-target='${tokID}']`).toggleClass('selected-token', getCombatTrackersettings().ct_selected_token == '1');
+									} else {
+										parentToken.removeClass('tokenselected');
+										$(`:is(#combat_area, #combat_area_carousel) tr[data-target='${tokID}']`).toggleClass('selected-token', false);
+									}
+
+									window.TOKEN_OBJECTS[tokID].selected = thisSelected;
+
+									for (let id in window.TOKEN_OBJECTS) {
+										if (id.selected == true) {
+											count++;
+										}
+									}
+
+									window.MULTIPLE_TOKEN_SELECTED = (count > 1);
+
+									if (window.DM) {
+										$("[id^='light_']").css('visibility', "visible");
+									}
+									draw_selected_token_bounding_box(); // update rotation bounding box
+								});
+							
+							});
+						}
+						
 					}
 					else if(oldImage.attr("src")!=parse_img(this.options.imgsrc) || window.videoTokenOld[this.options.id] != this.options.videoToken){
 						let oldFileExtension = oldImage.attr("src").split('.')[oldImage.attr("src").length-1]
@@ -2563,8 +2647,16 @@ class Token {
 
 						let copyImage = $(`[data-notatoken='notatoken_${this.options.id}']`).find('.token-image')
 						let oldImage = old.find('.token-image');
-
-						if(copyImage.attr('src') != parse_img(this.options.imgsrc)){
+						
+						if (this.options.src.startsWith('above-bucket-not-a-url')) {
+							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+							if (!copyImage.attr('src').includes(fileSrc)) {
+								getAvttStorageUrl(this.options.imgsrc).then((url) => {
+									copyImage.attr("src", parse_img(url));
+								});
+							}
+						}
+						else if(copyImage.attr('src') != parse_img(this.options.imgsrc)){
 							copyImage.attr("src", parse_img(this.options.imgsrc));
 						}
 

@@ -9,7 +9,7 @@ function launchFilePicker(){
         <div id="select-section">
             <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
             <label style='color: var(--highlight-color, rgba(131, 185, 255, 1))' for="file-input">Upload File</label>
-            <input style='display:none;' type="file" id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt" />
+            <input style='display:none;' type="file" multiple id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt" />
        
             <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1))'>Create Folder</div>
             <input id='create-folder-input' type='text' placeholder='folder name'/>
@@ -175,11 +175,16 @@ function launchFilePicker(){
     copyPathButton.addEventListener('click', () => {
 
         const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
-        if (selectedCheckboxes.length !== 1) {
+       
+        if (selectedCheckboxes.length == 0) {
             return;
         }
-        const path = selectedCheckboxes[0].value
-        navigator.clipboard.writeText(`above-bucket-not-a-url/${path}`)
+        const paths = [];
+        for (const selected of selectedCheckboxes){
+            paths.push(`above-bucket-not-a-url/${selected.value}`);
+        }
+        const copyText = paths.join(', ')
+        navigator.clipboard.writeText(copyText);
     });
 
     deleteSelectedButton.addEventListener('click', async () => {

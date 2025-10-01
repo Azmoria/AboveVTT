@@ -1225,8 +1225,20 @@ function build_example_token(options, size=90) {
 	let token = new Token(mergedOptions);
 	token.place(0);
 	let html = $(`#tokens div[data-id='${mergedOptions.id}']`).clone();
-	html.find('.token-image').attr('src', mergedOptions.imgsrc);
-	html.find('div.token-image').attr('background-image', `url(${mergedOptions.imgsrc})`);
+
+	if (mergedOptions.imgsrc.startsWith('above-bucket-not-a-url')){
+		getAvttStorageUrl(mergedOptions.imgsrc).then((url) => {
+			html.find('.token-image').attr('src', url);
+			html.find('div.token-image').css('background-image', `url(${url})`);
+		})
+	}
+	else{
+		html.find('.token-image').attr('src', mergedOptions.imgsrc);
+		html.find('div.token-image').css('background-image', `url(${mergedOptions.imgsrc})`);
+	}
+
+	html.find('.token-image').attr('data-src', mergedOptions.imgsrc);
+
 	token.delete(false);
 
 	html.addClass("example-token");
