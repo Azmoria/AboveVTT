@@ -841,7 +841,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                 }
                 let draggedItem = find_sidebar_list_item(draggedRow);
                 let hidden = event.shiftKey ? true : undefined; // we only want to force hidden if the shift key is help. otherwise let the global and override settings handle it
-                let src = $(ui.helper).attr("src");
+                let src = $(ui.helper).attr("data-src");
                 if (ui.helper.attr("data-shape") && ui.helper.attr("data-style")) {
                     src = build_aoe_img_name(ui.helper.attr("data-style"), ui.helper.attr("data-shape"));
                 }
@@ -3168,7 +3168,7 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
         console.warn("redraw_token_images_in_modal was called without proper items");
         return;
     }
-    let currentlySelectedToken = $('.example-token.selected .div-token-image')?.attr('src');
+    let currentlySelectedToken = $('.example-token.selected .div-token-image')?.attr('data-src');
     let modalBody = sidebarPanel.body
     modalBody.empty();
     modalBody.off('click.select').on('click.select', function(e){
@@ -3176,7 +3176,7 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
         if($(e.target).closest('.example-token').length > 0){
             $(e.target).closest('.example-token')?.toggleClass('selected', true);
         } 
-        let src = $(e.target).closest('.example-token')?.find('.div-token-image')?.attr('src');
+        let src = $(e.target).closest('.example-token')?.find('.div-token-image')?.attr('data-src');
 
         display_token_configuration_modal(listItem, placedToken, src, sidebarPanel)
     })
@@ -3319,7 +3319,7 @@ async function decorate_modal_images(sidebarPanel, listItem, placedToken) {
     for (let i = 0; i < items.length; i++) {
         let combinedOptions = options;
         let item = $(items[i]);
-        let imgsrc = item.find(".div-token-image, .token-image").attr("src");
+        let imgsrc = item.find(".div-token-image, .token-image").attr("data-src");
         if(options.alternativeImagesCustomizations != undefined && options.alternativeImagesCustomizations[imgsrc] != undefined){
             combinedOptions = {
                 ...options,
