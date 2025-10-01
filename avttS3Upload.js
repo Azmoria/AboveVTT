@@ -15,7 +15,7 @@ function launchFilePicker(){
        
             <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1))'>Create Folder</div>
             <input id='create-folder-input' type='text' placeholder='folder name'/>
-            <div id='upFolder' style='position: absolute; left: 30px; top:30px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>Back</div>
+            <div id='upFolder' style='position: absolute; left: 30px; top:30px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>Back (breadcrumb placeholder)</div>
         </div>
 
         <div id="file-listing-section">
