@@ -1,12 +1,18 @@
 
 const AVTT_S3 = 'https://l0cqoq0b4d.execute-api.us-east-1.amazonaws.com/default/uploader';
+let S3_Current_Size = 0;
+const userLimit = 10 * 1024 * 1024 * 1024;
 
 function launchFilePicker(){
     const filePicker = $(` <div id="avtt-file-picker">
-
+      
         <div id="select-section">
+            <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
             <label style='color: var(--highlight-color, rgba(131, 185, 255, 1))' for="file-input">Upload File</label>
             <input style='display:none;' type="file" id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt" />
+       
+            <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1))'>Create Folder</div>
+            <input id='create-folder-input' type='text' placeholder='folder name'/>
         </div>
 
         <div id="file-listing-section">
@@ -63,7 +69,7 @@ function launchFilePicker(){
     
     
     `);
-    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", false, false, undefined, "500px", "600px");
+    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", false, false, undefined, "500px", "600px", "AVTT File Storage", '', false, 'input, li, a, label');
     draggableWindow.append(filePicker);
 
 
@@ -78,14 +84,18 @@ function launchFilePicker(){
     const allowedVideoTypes = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'];
     const allowedAudioTypes = ['mp3', 'wav', 'aac', 'flac', 'ogg'];
     const allowedJsonTypes = ['json', 'uvtt', 'dd2vtt', 'df2vtt'];
+    const allowedDocTypes = ['.pdf'];
 
     const fileInput = document.getElementById('file-input');
+    const createFolder = document.getElementById('create-folder');
     const successMessage = document.getElementById('success-message');
-    const selectButton = document.getElementById('select-file');
+    
     const deleteSelectedButton = document.getElementById('delete-selected-files');
     const copyPathButton = document.getElementById('copy-path-to-clipboard');
+    
+    
 
-
+    
     let selectedFile = null;
         
 
@@ -98,49 +108,69 @@ function launchFilePicker(){
         }
 
         successMessage.hidden = true;
-        const extension = getFileExtension(file.name);
-        if (!isAllowedExtension(extension)) {
-            alert('Unsupported file type. Please select an image, video, audio, or supported UVTT/JSON file.');
-            return;
-        }
+        let totalSize = 0;
+        
 
-        if (file.size > MAX_FILE_SIZE) {
-            alert('File is too large - 50MB maximum.');
-            return;
-        }
+        for (const selectedFile of event.target.files){
+            try {
+                const extension = getFileExtension(selectedFile.name);
+                if (!isAllowedExtension(extension)) {
+                    alert('Unsupported file type. Please select an image, video, audio, or supported UVTT/JSON file.');
+                    return;
+                }
+                if (selectedFile.size > MAX_FILE_SIZE) {
+                    alert('File is too large - 50MB maximum.');
+                    return;
+                }
+                totalSize+= selectedFile.size;
+                if (userLimit != undefined && totalSize + S3_Current_Size > userLimit ){
+                    alert('User limit reached. Delete some files before uploading more.');
+                    return;
+                }
+                const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(selectedFile.name)}&user=${window.CAMPAIGN_INFO.dmId}&upload=true`);
+                if (!presignResponse.ok) {
+                    throw new Error('Failed to retrieve upload URL.');
+                }
 
-        selectedFile = file;
-        try {
-            const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(selectedFile.name)}&user=${window.CAMPAIGN_INFO.dmId}&upload=true`);
-            if (!presignResponse.ok) {
-                throw new Error('Failed to retrieve upload URL.');
+                const data = await presignResponse.json();
+                const uploadHeaders = {};
+                const inferredType = resolveContentType(selectedFile);
+                if (inferredType) {
+                    uploadHeaders['Content-Type'] = inferredType;
+                }
+
+                const uploadResponse = await fetch(data.uploadURL, {
+                    method: 'PUT',
+                    body: selectedFile,
+                    headers: uploadHeaders,
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('Upload failed.');
+                }
+
+                uploadURL = data.uploadURL.split('?')[0];
+                successMessage.hidden = false;
+                refreshFiles();
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'An unexpected error occurred while uploading.');
             }
-
-            const data = await presignResponse.json();
-            const uploadHeaders = {};
-            const inferredType = resolveContentType(selectedFile);
-            if (inferredType) {
-                uploadHeaders['Content-Type'] = inferredType;
-            }
-
-            const uploadResponse = await fetch(data.uploadURL, {
-                method: 'PUT',
-                body: selectedFile,
-                headers: uploadHeaders,
-            });
-
-            if (!uploadResponse.ok) {
-                throw new Error('Upload failed.');
-            }
-
-            uploadURL = data.uploadURL.split('?')[0];
-            successMessage.hidden = false;
-            refreshFiles();
-        } catch (error) {
-            console.error(error);
-            alert(error.message || 'An unexpected error occurred while uploading.');
         }
+     
+        
     });
+
+    createFolder.addEventListener('click', async (event) => {
+        const folderName = $('#create-folder-input').val();
+        try {
+            await fetch(`${AVTT_S3}?folderName=${folderName}&user=${window.CAMPAIGN_INFO.dmId}`);
+            refreshFiles();
+        }
+        catch{  
+            alert('Failed to create folder');
+        }   
+    })
 
     copyPathButton.addEventListener('click', () => {
 
@@ -172,7 +202,8 @@ function launchFilePicker(){
         return allowedImageTypes.includes(extension)
             || allowedVideoTypes.includes(extension)
             || allowedAudioTypes.includes(extension)
-            || allowedJsonTypes.includes(extension);
+            || allowedJsonTypes.includes(extension)
+            || allowedDocTypes.includes(extension);
     }
 
     function resolveContentType(file) {
@@ -196,22 +227,22 @@ function launchFilePicker(){
         return '';
     }
 
-    function formatFileSize(bytes) {
-        if (bytes < 1024) {
-            return `${bytes} B`;
-        }
-        const units = ['KB', 'MB', 'GB'];
-        let size = bytes / 1024;
-        let unitIndex = 0;
-        while (size >= 1024 && unitIndex < units.length - 1) {
-            size /= 1024;
-            unitIndex += 1;
-        }
-        return `${size.toFixed(1)} ${units[unitIndex]}`;
-    }
+    
 
 }
-
+function formatFileSize(bytes) {
+    if (bytes < 1024) {
+        return `${bytes} B`;
+    }
+    const units = ['KB', 'MB', 'GB'];
+    let size = bytes / 1024;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+    }
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
 
 function refreshFiles() {
     const fileListing = document.getElementById('file-listing');
@@ -233,6 +264,12 @@ function refreshFiles() {
     }).catch(err => {
         alert("Error fetching folder listing. See console for details.");
         console.error("Error fetching folder listing: ", err);
+    });
+
+    getUserUploadedFileSize().then(size => {
+        S3_Current_Size = size;
+        document.getElementById('user-used').innerHTML = formatFileSize(S3_Current_Size);
+        document.getElementById('user-limit').innerHTML = formatFileSize(userLimit);
     });
 }
 
@@ -267,4 +304,15 @@ async function getFolderListingFromS3(folderPath) {
         filePaths.push(file.Key);
     }
     return filePaths;
+}
+
+async function getUserUploadedFileSize(){
+    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${encodeURIComponent('')}&list=true`);
+    const json = await url.json();
+    const folderContents = json.folderContents;
+    let userSize = 0;
+    for (const file of folderContents) {
+        userSize += file.Size;
+    }
+    return userSize;
 }
