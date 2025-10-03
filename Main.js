@@ -2439,8 +2439,7 @@ function init_ui() {
 		
 		curDown = false;
 		$("#VTT, #black_layer").css("cursor", "");
-		//remove iframe cover that prevents mouse interaction
-		$('.iframeResizeCover').remove();
+
 		if (event.target.tagName.toLowerCase() !== 'a') {
 			$("#splash").remove(); // don't remove the splash screen if clicking an anchor tag otherwise the browser won't follow the link
 		}
@@ -2452,6 +2451,8 @@ function init_ui() {
 				close_sidebar_modal();
 			}
 		}
+		//remove iframe cover that prevents mouse interaction
+		$('.iframeResizeCover').remove();
 		let sidebarMonsterStatBlock = $("#monster-details-page-iframe");
 		if (sidebarMonsterStatBlock.length > 0 && !event.target.closest("#monster-details-page-iframe")) {
 			sidebarMonsterStatBlock.remove();
@@ -2807,8 +2808,13 @@ function init_zoom_buttons() {
 				$(".dm-paused-indicator").remove();
 			}
 		});
-
-		zoom_section.append(select_locked, ping_center, pause_players);
+		let avttS3FileShare = $(`<div id='aboveFileHostButton' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='AVTT File Hosting'> 
+		<div class="ddbc-tab-options__header-heading">
+				<span class="material-icons button-icon">folder</span>
+		</div></div>
+		`);
+		avttS3FileShare.click(launchFilePicker);
+		zoom_section.append(avttS3FileShare, select_locked, ping_center, pause_players);
 	}
 
 

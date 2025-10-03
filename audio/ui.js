@@ -453,7 +453,12 @@ function init_trackLibrary() {
             trackLibrary.addTrack(links[i].name, links[i].link);  
         }   
     }, 'multiple', audioArray);
-
+   
+    const avttButton = createCustomAvttChooser(' ', function (links) {
+        for (let i = 0; i < links.length; i++) {
+            trackLibrary.addTrack(links[i].name, links[i].link);
+        }   
+    }, [avttFilePickerTypes.AUDIO]);
     // import csv button
     const importCSV = document.createElement('button');
     importCSV.textContent = "Import CSV";
@@ -708,7 +713,7 @@ function init_trackLibrary() {
     });
     trackLibrary.dispatchEvent(new Event('onchange'));
 
-    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br><b>Import</b>:  ", addTrack, dropBoxbutton, importCSV, importTrackFields, trackList);
+    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br><b>Import</b>:  ", addTrack, dropBoxbutton, avttButton, importCSV, importTrackFields, trackList);
 }
 
 function init() {

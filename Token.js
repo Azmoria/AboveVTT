@@ -828,9 +828,9 @@ class Token {
 				let copyImage = $(`[data-notatoken='notatoken_${this.options.id}']`).find('.token-image')
 				let oldImage = old.find('.token-image');
 
-				if(this.options.src.startsWith('above-bucket-not-a-url')){
+				if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
 					const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-					if (!copyImage.attr('src').includes(fileSrc)){
+					if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))){
 						getAvttStorageUrl(this.options.imgsrc).then((url) => {
 							copyImage.attr("src", parse_img(url));
 						});
@@ -2277,7 +2277,7 @@ class Token {
 					if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
 						
 						const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-						if (!oldImage.attr('src').includes(fileSrc)) {
+						if (!oldImage.attr('src')?.includes(encodeURI(fileSrc))) {
 							getAvttStorageUrl(this.options.imgsrc).then((url) => {
 								let oldFileExtension = oldImage.attr("src").split('.')[oldImage.attr("src").length - 1]
 								let newFileExtention = parse_img(this.options.imgsrc.split('.')[this.options.imgsrc.split('.').length - 1]);
@@ -2648,9 +2648,9 @@ class Token {
 						let copyImage = $(`[data-notatoken='notatoken_${this.options.id}']`).find('.token-image')
 						let oldImage = old.find('.token-image');
 						
-						if (this.options.src.startsWith('above-bucket-not-a-url')) {
+						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
 							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-							if (!copyImage.attr('src').includes(fileSrc)) {
+							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
 								getAvttStorageUrl(this.options.imgsrc).then((url) => {
 									copyImage.attr("src", parse_img(url));
 								});
@@ -3603,9 +3603,20 @@ class Token {
 						if (window.ON_SCREEN_TOKENS[this.options.id] == undefined)
 							window.ON_SCREEN_TOKENS[this.options.id] = {};
 						window.ON_SCREEN_TOKENS[this.options.id].onScreenDarknessToken = tokenClone;
+						
+						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
+							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+							const copyImage = tokenClone.find('token-image');
+							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
+								getAvttStorageUrl(this.options.imgsrc).then((url) => {
+									copyImage.attr("src", parse_img(url));
+								});
+							}
+						}
 					}	
 			    }
 
+				
 			    if(window.DM)
 					setTokenAudio(tok, this)
 				
