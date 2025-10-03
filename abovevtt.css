@@ -5126,6 +5126,7 @@ button.block-send-to-game-log span {
     display: block;
     flex-grow: 1;
     color: #10161a;
+    width:50%;
     margin-left: 8px;
     margin-right: 8px;
     line-height: 1.4;
@@ -7544,6 +7545,54 @@ button.launchPicker.token-row-button{
     display:inline-block;
 }
 
+button.avttPicker {
+    padding-left: 18px !important;
+    position: relative;
+}
+
+button.avttPicker.token-row-button {
+    position: relative;
+    padding-left: 0px !important;
+    display: inline-block;
+}
+button.avttPicker.token-row-button span.avtt-btn-status {
+    left: 1px;
+    width: 26px;
+    position: relative;
+    display: block;
+    height: 20px;
+}
+
+button span.avtt-btn-status {
+background-image: var(--avtt-mask);
+    -webkit-background-position: 0px 2px;
+    background-position: 0px -2px;
+    background-size: 100%;
+    width: 25px;
+    position: absolute;
+    height: 25px;
+    left: 2px;
+    top: 0;
+    background-repeat: no-repeat;
+}
+#edit_scene_form button span.avtt-btn-status{
+    background-position: 0px 0px;
+    width: 20px;
+    height: 20px;
+    left: 0px;
+}
+.sidebar-list-item-row-item button.avttPicker.token-row-button span.avtt-btn-status {
+    background-image: none;
+    -webkit-mask-image: var(--avtt-mask);
+    -webkit-mask-size: 25px 17px;
+    -webkit-mask-position: 0px 2px;
+    mask-image: var(--avtt-mask);
+    mask-size: 25px 25px;
+    mask-repeat: no-repeat;
+    mask-position: 0px 2px;
+    background: #d30000;
+}
+
 button.launchPicker.token-row-button span.onedrive-btn-status{
     left: 1px;
     width: 26px;
@@ -7572,12 +7621,16 @@ button span.onedrive-btn-status{
     mask-position: 0px 2px;
     background: #000;
 }
-#sounds-panel button.dropboxChooser, #sounds-panel button.launchPicker {
+#sounds-panel button.dropboxChooser, 
+#sounds-panel button.launchPicker, 
+#sounds-panel button.avttPicker{
     width: 23px;
     padding: 0px !important;
     height: 21px;
 }
-#sounds-panel button.dropboxChooser span, #sounds-panel button.launchPicker span{
+#sounds-panel button.dropboxChooser span,
+#sounds-panel button.launchPicker span,
+#sounds-panel button.avttPicker span{
     top: 2px;
 }
 
@@ -7595,8 +7648,13 @@ button span.onedrive-btn-status{
 }
 .addTokenMenu:hover,
 .hover-add-button:hover~.addTokenMenu {
-    width: 102px;
+    width: 440px;
 }
+#myTokensFolder>.sidebar-list-item-row-item>.addTokenMenu:hover,
+#myTokensFolder>.sidebar-list-item-row-item>.hover-add-button:hover~.addTokenMenu {
+    width: 900px
+}
+
 
 .addTokenMenu button {
     display: inline-block;

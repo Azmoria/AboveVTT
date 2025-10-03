@@ -2474,9 +2474,15 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
                addImageUrl(links[i].link, links[i].type)
             }    
         }, 'multiple')
+        const avttButton = createCustomAvttChooser('', function (links) {
+            for (let i = 0; i < links.length; i++) {
+                addImageUrl(links[i].link)
+            }  
+        }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
         dropboxButton.toggleClass('token-row-button', true);
         oneDriveButton.toggleClass('token-row-button', true);
-        inputWrapper.append(dropboxButton, oneDriveButton);
+        avttButton.toggleClass('token-row-button', true);
+        inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
     }
 
 
@@ -4168,8 +4174,29 @@ function display_change_image_modal(placedToken) {
         close_sidebar_modal();
         placedToken.place_sync_persist();      
     }, 'multiple')
+
+
     oneDriveButton.toggleClass('token-row-button', true);
-    sidebarPanel.inputWrapper.append(dropboxButton, oneDriveButton);
+
+    const avttButton = createCustomAvttChooser('', function (links) {
+        for (let i = 0; i < links.length; i++) {
+            if (!placedToken.options.alternativeImages) {
+                placedToken.options.alternativeImages = [];
+            }
+            if (!placedToken.options.alternativeImages.includes(placedToken.options.imgsrc)) {
+                placedToken.options.alternativeImages = placedToken.options.alternativeImages.concat([placedToken.options.imgsrc])
+            }
+            placedToken.options.imgsrc = parse_img(links[i].link);
+            if (!placedToken.options.alternativeImages.includes(placedToken.options.imgsrc)) {
+                placedToken.options.alternativeImages = placedToken.options.alternativeImages.concat([placedToken.options.imgsrc])
+            }
+        }
+        close_sidebar_modal();
+        placedToken.place_sync_persist();
+    }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
+
+    avttButton.toggleClass('token-row-button', true);
+    sidebarPanel.inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
 
     let inputWrapper = sidebarPanel.inputWrapper;
     sidebarPanel.footer.find(`.token-image-modal-add-button`).remove();

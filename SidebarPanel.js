@@ -1459,14 +1459,21 @@ function build_sidebar_list_row(listItem) {
         }, 'multiple')
         oneDriveButton.toggleClass('token-row-button one-drive-button', true);
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
-     
+        
+        const avttButton = createCustomAvttChooser('', function (links) { 
+          for (let i = 0; i < links.length; i++) {
+            create_token_inside(listItem, links[i].name, links[i].link);
+          }             
+        }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
+        avttButton.toggleClass('token-row-button avtt-file-button', true);
+        avttButton.attr('title', 'Create token from AVTT File Picker'); 
 
         let addTokenMenu = $(`<div class='addTokenMenu'></div>`)
 
         
        
         let addToken = $(`<button class="token-row-button hover-add-button" title="Create New Token"><span class="material-icons">person_add_alt_1</span></button>`);
-        addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
+        addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
         rowItem.append(addTokenMenu);
         addToken.on("click", function (clickEvent) {
           clickEvent.stopPropagation();

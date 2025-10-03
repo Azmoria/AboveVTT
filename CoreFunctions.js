@@ -1258,7 +1258,14 @@ function createCustomOnedriveChooser(text, callback = function(){}, selectionMod
   })
   return button;
 }
-
+function createCustomAvttChooser(text, callback = function () { }, selectionType = []) {
+  let button = $(`<button class="avttPicker"><span class='avtt-btn-status'></span>${text}</button>`);
+  button.off('click.avtt').on('click.avtt', function (e) {
+    e.stopPropagation();
+    launchFilePicker(callback, selectionType);
+  })
+  return button;
+}
 function createCustomDropboxChooser(text, options){
   let button = $(`<button class="dropboxChooser"><span class="dropin-btn-status"></span>${text}</button>`)
   button.off('click.dropbox').on('click.dropbox', function(e){
@@ -2323,7 +2330,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     "position": "fixed",
     "height": height,
     "width": width,
-    "z-index": "10000",
+    "z-index": "100000",
     "display": "none"
   });
 
@@ -2419,6 +2426,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     addClasses: false,
     scroll: false,
     containment: "#windowContainment",
+    distance: 5,
     start: function(event, ui) {
       $(event.currentTarget).append($('<div class="iframeResizeCover"></div>'));
     },

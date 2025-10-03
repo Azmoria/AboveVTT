@@ -1,108 +1,802 @@
 
 const AVTT_S3 = 'https://l0cqoq0b4d.execute-api.us-east-1.amazonaws.com/default/uploader';
+
 let S3_Current_Size = 0;
-const userLimit = 10 * 1024 * 1024 * 1024;
 let currentFolder = "";
+const userLimit = Object.freeze({
+    low: 10 * 1024 * 1024 * 1024,
+    mid: 25 * 1024 * 1024 * 1024,
+    high: 100 * 1024 * 1024 * 1024
+});
+const allowedImageTypes = ['jpeg', 'jpg', 'png', 'gif', 'bmp', 'webp'];
+const allowedVideoTypes = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'];
+const allowedAudioTypes = ['mp3', 'wav', 'aac', 'flac', 'ogg'];
+const allowedJsonTypes = ['json', 'uvtt', 'dd2vtt', 'df2vtt'];
+const allowedDocTypes = ['pdf'];
 
-function launchFilePicker(){
+const PATREON_AUTH_STORAGE_KEYS = Object.freeze({
+    state: 'avtt.patreon.state',
+    codeVerifier: 'avtt.patreon.codeVerifier',
+    tokens: 'avtt.patreon.tokens',
+    lastCode: 'avtt.patreon.lastCode'
+});
+
+const avttFilePickerTypes = Object.freeze({
+    FOLDER: "FOLDER",
+    VIDEO: "VIDEO",
+    AUDIO: "AUDIO",
+    UVTT: "UVTT",
+    PDF: "PDF",
+    IMAGE: "IMAGE",
+})
+
+let activeUserLimit = 0;
+let activeUserTier = { level: 'free', label: 'Free', amountCents: 0 };
+const campaignTierCache = new Map();
+
+const PatreonAuth = (() => {
+    const defaultConfig = {
+        clientId: '2Pn4arX8GDny2KAhA5HjETX4Ni4M04SzECfN_GTdUmLKcM3ReJso1YA8wyHG1FBi',
+        redirectUri: `https://patreon-html.s3.us-east-1.amazonaws.com/patreon-auth-callback.html`,
+        campaignSlug: 'azmoria',
+        creatorVanity: 'azmoria',
+        creatorName: 'Azmoria',
+        creatorIds: ["939792"],
+        scope: 'identity identity[email] identity.memberships campaigns campaigns.members',
+        popupWidth: 600,
+        popupHeight: 750,
+        timeoutMs: 180000
+    };
+    const membershipCacheTtlMs = 5 * 60 * 1000;
+    const apiBase = 'https://www.patreon.com/api/oauth2/v2';
+
+    let cachedMembership = null;
+    let cachedMembershipFetchedAt = 0;
+
+    function resolveConfig() {
+        const external = typeof window.AVTT_PATRON_CONFIG === 'object' ? window.AVTT_PATRON_CONFIG : {};
+        const merged = { ...defaultConfig, ...external };
+        merged.campaignSlug = (merged.campaignSlug || defaultConfig.campaignSlug).toLowerCase();
+        return merged;
+    }
+
+    function loadStoredTokens() {
+        try {
+            const raw = localStorage.getItem(PATREON_AUTH_STORAGE_KEYS.tokens);
+            if (!raw) {
+                return null;
+            }
+            return JSON.parse(raw);
+        } catch (err) {
+            console.warn('Failed to parse stored Patreon tokens', err);
+            return null;
+        }
+    }
+
+    function saveTokens(tokens) {
+        const payload = {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresAt
+        };
+        localStorage.setItem(PATREON_AUTH_STORAGE_KEYS.tokens, JSON.stringify(payload));
+    }
+
+    function clearTokens() {
+        localStorage.removeItem(PATREON_AUTH_STORAGE_KEYS.tokens);
+    }
+
+    function isCreatorIdentity(identity, config) {
+        if (!identity) {
+            return false;
+        }
+        try {
+            const creatorVanity = String(config.creatorVanity || config.campaignSlug || '').toLowerCase();
+            const creatorName = String(config.creatorName || '').toLowerCase();
+            const creatorIds = Array.isArray(config.creatorIds) ? config.creatorIds.map(id => String(id)) : [];
+            const identityId = identity.id ? String(identity.id) : '';
+            const identityAttributes = identity.attributes || {};
+            const identityVanity = String(identityAttributes.vanity || '').toLowerCase();
+            const identityUrl = String(identityAttributes.url || '').toLowerCase();
+            const identityFullName = String(identityAttributes.full_name || '').toLowerCase();
+            
+            if (creatorVanity && (identityVanity === creatorVanity || identityUrl.includes(creatorVanity))) {
+                return true;
+            }
+            if (creatorName && identityFullName === creatorName) {
+                return true;
+            }
+            if (identityId && creatorIds.includes(identityId)) {
+                return true;
+            }
+        } catch (error) {
+            console.warn('Failed to evaluate Patreon creator identity', error);
+        }
+        return false;
+    }
+
+    function tokensValid(tokens) {
+        return tokens && tokens.accessToken && typeof tokens.expiresAt === 'number' && tokens.expiresAt > Date.now();
+    }
+
+    function computeExpiry(expiresIn) {
+        const skewMs = 60 * 1000;
+        return Date.now() + (expiresIn * 1000) - skewMs;
+    }
+
+    async function requestPatreonToken(payload, config) {
+        const body = { ...payload };
+        if (config?.clientId && !body.clientId) {
+            body.clientId = config.clientId;
+        }
+        try {
+            const response = await fetch(`${AVTT_S3}?action=patreonToken`, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            let json;
+            try {
+                json = await response.json();
+            } catch (parseError) {
+                console.error('Failed to parse Patreon token response', parseError);
+                throw new Error('Failed to parse Patreon token response.');
+            }
+            if (!response.ok) {
+                const message = json?.error_description || json?.message || json?.error || 'Patreon token exchange failed.';
+                throw new Error(message);
+            }
+            if (json?.error) {
+                throw new Error(json.error_description || json.error);
+            }
+            return json;
+        } catch (error) {
+            console.error('Patreon token request failed', error);
+            throw error;
+        }
+    }
+
+    async function fetchPatreonIdentity(accessToken, query) {
+        try {
+            const response = await fetch(`${AVTT_S3}?action=patreonIdentity`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accessToken,
+                    query
+                })
+            });
+            let json;
+            try {
+                json = await response.json();
+            } catch (parseError) {
+                console.error('Failed to parse Patreon identity response', parseError);
+                throw new Error('Failed to parse Patreon identity response.');
+            }
+            if (!response.ok || json?.error) {
+                const message = json?.error_description || json?.message || json?.error || 'Failed to load Patreon profile information.';
+                throw new Error(message);
+            }
+            return json;
+        } catch (error) {
+            console.error('Patreon identity request failed', error);
+            throw error;
+        }
+    }
+
+    function storeState(state) {
+        sessionStorage.setItem(PATREON_AUTH_STORAGE_KEYS.state, state);
+    }
+
+    function readState() {
+        return sessionStorage.getItem(PATREON_AUTH_STORAGE_KEYS.state);
+    }
+
+    function clearState() {
+        sessionStorage.removeItem(PATREON_AUTH_STORAGE_KEYS.state);
+    }
+
+    function storeCodeVerifier(codeVerifier) {
+        sessionStorage.setItem(PATREON_AUTH_STORAGE_KEYS.codeVerifier, codeVerifier);
+    }
+
+    function readCodeVerifier() {
+        return sessionStorage.getItem(PATREON_AUTH_STORAGE_KEYS.codeVerifier);
+    }
+
+    function clearCodeVerifier() {
+        sessionStorage.removeItem(PATREON_AUTH_STORAGE_KEYS.codeVerifier);
+    }
+
+    function readLastAuthorizationCode() {
+        return sessionStorage.getItem(PATREON_AUTH_STORAGE_KEYS.lastCode);
+    }
+
+    function storeLastAuthorizationCode(code) {
+        if (code) {
+            sessionStorage.setItem(PATREON_AUTH_STORAGE_KEYS.lastCode, code);
+        }
+    }
+
+    function clearLastAuthorizationCode() {
+        sessionStorage.removeItem(PATREON_AUTH_STORAGE_KEYS.lastCode);
+    }
+
+    function generateRandomString(length) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+        if (window.crypto?.getRandomValues) {
+            const values = new Uint8Array(length);
+            window.crypto.getRandomValues(values);
+            return Array.from(values, v => chars[v % chars.length]).join('');
+        }
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return result;
+    }
+
+    function base64UrlEncode(bytes) {
+        let str = '';
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, i + chunkSize);
+            str += String.fromCharCode.apply(null, chunk);
+        }
+        return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    async function createCodeChallenge(codeVerifier) {
+        if (window.crypto?.subtle) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(codeVerifier);
+            const digest = await window.crypto.subtle.digest('SHA-256', data);
+            return base64UrlEncode(new Uint8Array(digest));
+        }
+        return codeVerifier;
+    }
+
+    function openLoginPopup(url, config) {
+        return new Promise((resolve, reject) => {
+            const { popupWidth, popupHeight, timeoutMs } = config;
+            const dualScreenLeft = window.screenLeft !== undefined ? window.screenLeft : window.screenX;
+            const dualScreenTop = window.screenTop !== undefined ? window.screenTop : window.screenY;
+            const width = window.innerWidth || document.documentElement.clientWidth || screen.width;
+            const height = window.innerHeight || document.documentElement.clientHeight || screen.height;
+            const systemZoom = width / window.screen.availWidth;
+            const left = (width - popupWidth) / 2 / systemZoom + dualScreenLeft;
+            const top = (height - popupHeight) / 2 / systemZoom + dualScreenTop;
+            const features = `scrollbars=yes, width=${popupWidth}, height=${popupHeight}, top=${top}, left=${left}`;
+            const popup = window.open(url, 'avttPatreonAuth', features);
+            if (!popup) {
+                reject(new Error('Unable to open Patreon login window. Please disable popup blockers and try again.'));
+                return;
+            }
+
+            let resolved = false;
+            const timeoutHandle = window.setTimeout(() => {
+                cleanup();
+                reject(new Error('Patreon login timed out. Please try again.'));
+            }, timeoutMs);
+
+            const closeInterval = window.setInterval(() => {
+                if (popup.closed) {
+                    window.clearInterval(closeInterval);
+                    if (!resolved) {
+                        window.clearTimeout(timeoutHandle);
+                        cleanup();
+                        reject(new Error('Patreon login was closed before completing.'));
+                    }
+                }
+            }, 500);
+
+            function cleanup() {
+                window.removeEventListener('message', messageHandler);
+                if (!popup.closed) {
+                    popup.close();
+                }
+            }
+
+            function messageHandler(event) {
+                try {
+                    if (!event.data || event.data.source !== 'avtt:patreon-auth') {
+                        return;
+                    }
+                    const expectedOrigin = new URL(config.redirectUri).origin;
+                    if (event.origin !== expectedOrigin) {
+                        console.warn('Ignoring Patreon auth message from unexpected origin', event.origin);
+                        return;
+                    }
+                    resolved = true;
+                    window.clearTimeout(timeoutHandle);
+                    window.clearInterval(closeInterval);
+                    cleanup();
+                    resolve(event.data);
+                } catch (error) {
+                    console.error('Failed to process Patreon auth message', error);
+                }
+            }
+
+            window.addEventListener('message', messageHandler);
+            popup.focus();
+        });
+    }
+
+    async function exchangeAuthorizationCode(code, codeVerifier, config) {
+        const json = await requestPatreonToken({
+            grantType: 'authorization_code',
+            code,
+            codeVerifier,
+            redirectUri: config.redirectUri
+        }, config);
+        return {
+            accessToken: json.access_token,
+            refreshToken: json.refresh_token,
+            expiresAt: computeExpiry(json.expires_in)
+        };
+    }
+
+    async function refreshAccessToken(refreshToken, config) {
+        const json = await requestPatreonToken({
+            grantType: 'refresh_token',
+            refreshToken,
+            redirectUri: config.redirectUri
+        }, config);
+        return {
+            accessToken: json.access_token,
+            refreshToken: json.refresh_token || refreshToken,
+            expiresAt: computeExpiry(json.expires_in)
+        };
+    }
+
+    async function ensureAccessToken(config) {
+        const stored = loadStoredTokens();
+        if (tokensValid(stored)) {
+            return stored;
+        }
+        if (stored?.refreshToken) {
+            try {
+                const refreshed = await refreshAccessToken(stored.refreshToken, config);
+                saveTokens(refreshed);
+                return refreshed;
+            } catch (error) {
+                console.warn('Patreon refresh failed, clearing session', error);
+                clearTokens();
+            }
+        }
+        const state = generateRandomString(32);
+        const codeVerifier = generateRandomString(64);
+        const codeChallenge = await createCodeChallenge(codeVerifier);
+        storeState(state);
+        storeCodeVerifier(codeVerifier);
+        const authParams = new URLSearchParams({
+            response_type: 'code',
+            client_id: config.clientId,
+            redirect_uri: config.redirectUri,
+            scope: config.scope,
+            state,
+            code_challenge: codeChallenge,
+            code_challenge_method: 'S256'
+        });
+        const authUrl = `https://www.patreon.com/oauth2/authorize?${authParams.toString()}`;
+        const message = await openLoginPopup(authUrl, config);
+        clearState();
+        const storedCodeVerifier = readCodeVerifier();
+        clearCodeVerifier();
+        if (message.error) {
+            throw new Error(message.error_description || 'Patreon authentication was cancelled.');
+        }
+        if (message.state !== state) {
+            throw new Error('State mismatch detected during Patreon authentication.');
+        }
+        if (!message.code) {
+            throw new Error('Patreon authentication did not return a valid authorization code.');
+        }
+        if (!storedCodeVerifier) {
+            throw new Error('Missing PKCE verifier for Patreon authentication.');
+        }
+        const lastCode = readLastAuthorizationCode();
+        if (lastCode && lastCode === message.code) {
+            throw new Error('Patreon returned an authorization code that was already used. Please try logging in again.');
+        }
+        storeLastAuthorizationCode(message.code);
+        const tokens = await exchangeAuthorizationCode(message.code, storedCodeVerifier, config);
+        saveTokens(tokens);
+        return tokens;
+    }
+
+    function indexIncludedByType(included = [], type) {
+        return included.filter(item => item.type === type).reduce((acc, item) => {
+            acc[item.id] = item;
+            return acc;
+        }, {});
+    }
+
+    function resolveCampaignTiers(campaignId, tiersIndex) {
+        const cached = campaignTierCache.get(campaignId);
+        if (cached && cached.length) {
+            return cached;
+        }
+        const tierList = Object.values(tiersIndex || {}).filter(tier => tier?.relationships?.campaign?.data?.id === campaignId);
+        tierList.sort((a, b) => (a?.attributes?.amount_cents || 0) - (b?.attributes?.amount_cents || 0));
+        if (tierList.length) {
+            campaignTierCache.set(campaignId, tierList);
+        }
+        return tierList;
+    }
+
+    async function fetchCampaignTiersFallback(campaignId, accessToken) {
+        try {
+            const response = await fetch(`${AVTT_S3}?action=patreonCampaignTiers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaignId, accessToken })
+            });
+            const json = await response.json();
+            if (!response.ok || json?.error) {
+                const message = json?.error_description || json?.message || json?.error || 'Failed to fetch Patreon campaign tiers.';
+                throw new Error(message);
+            }
+            const tiers = (json.included || []).filter(item => item.type === 'tier');
+            tiers.sort((a, b) => (a?.attributes?.amount_cents || 0) - (b?.attributes?.amount_cents || 0));
+            return tiers;
+        } catch (error) {
+            console.warn('Fallback campaign tier request failed', error);
+            throw error;
+        }
+    }
+
+    function buildMembershipResult(member, campaign, tiersIndex, campaignTiers) {
+        const memberRole = member?.attributes?.role;
+        if (memberRole && memberRole.toLowerCase() === 'creator') {
+            const label = member?.attributes?.full_name || 'Creator';
+            return { level: 'creator', label, amountCents: Number.MAX_SAFE_INTEGER, member, campaign, tiers: [] };
+        }
+
+        const tierIds = (member.relationships?.currently_entitled_tiers?.data || []).map(t => t.id);
+        if (!tierIds.length) {
+            return { level: 'free', label: 'Free', amountCents: 0, member, campaign, tiers: [] };
+        }
+
+        const userTiers = tierIds.map(id => tiersIndex[id]).filter(Boolean);
+        if (!userTiers.length) {
+            return { level: 'free', label: 'Free', amountCents: 0, member, campaign, tiers: [] };
+        }
+
+        let highest = null;
+        let highestIndex = -1;
+        campaignTiers.forEach((tier, index) => {
+            if (tierIds.includes(tier?.id)) {
+                if (!highest || (tier?.attributes?.amount_cents || 0) >= (highest?.attributes?.amount_cents || 0)) {
+                    highest = tier;
+                    highestIndex = index;
+                }
+            }
+        });
+
+        if (!highest) {
+            highest = userTiers[userTiers.length - 1];
+            highestIndex = campaignTiers.findIndex(t => t?.id === highest?.id);
+        }
+        
+        let level = 'low';
+        if (highestIndex >= campaignTiers.length - 1) {
+            level = 'high';
+        } else if (highestIndex >= 2) {
+            level = 'mid';
+        }
+
+        const label = highest?.attributes?.title || 'Supporter';
+        const amountCents = highest?.attributes?.amount_cents || 0;
+
+        return { level, label, amountCents, member, campaign, tiers: userTiers };
+    }
+
+    async function fetchMembership(accessToken, config) {
+        const query = {
+            include: 'memberships.campaign,memberships.currently_entitled_tiers',
+            'fields[member]': 'patron_status',
+            'fields[campaign]': 'vanity,url'
+        };
+        const json = await fetchPatreonIdentity(accessToken, query);
+        const identity = json.data;
+        const isCreatorAccount = isCreatorIdentity(identity, config);
+        const membershipRefs = json.data?.relationships?.memberships?.data || [];
+        const members = indexIncludedByType(json.included, 'member');
+        const campaigns = indexIncludedByType(json.included, 'campaign');
+        const tiersIndex = indexIncludedByType(json.included, 'tier');
+        const targetSlug = config.campaignSlug;
+
+        for (const ref of membershipRefs) {
+            const member = members[ref.id];
+            if (!member) {
+                continue;
+            }
+            const campaignRel = member.relationships?.campaign?.data;
+            if (!campaignRel) {
+                continue;
+            }
+            const campaign = campaigns[campaignRel.id];
+            const vanity = (campaign?.attributes?.vanity || campaign?.attributes?.url || '').toLowerCase();
+            if (!campaign || !vanity.includes(targetSlug)) {
+                continue;
+            }
+
+            let campaignTiers = resolveCampaignTiers(campaign.id, tiersIndex);
+            if (!campaignTiers.length) {
+                try {
+                    campaignTiers = await fetchCampaignTiersFallback(campaign.id, accessToken);
+                    if (campaignTiers.length) {
+                        campaignTierCache.set(campaign.id, campaignTiers);
+                    }
+                } catch (fallbackError) {
+                    console.warn('Failed to fetch campaign tiers via fallback', fallbackError);
+                }
+            }
+            const result = buildMembershipResult(member, campaign, tiersIndex, campaignTiers);
+            if (result.level === 'creator' || isCreatorAccount) {
+                result.level = 'creator';
+                result.label = identity?.attributes?.full_name || result.label || 'Creator';
+            }
+            return result;
+        }
+
+        if (isCreatorAccount) {
+            return {
+                level: 'creator',
+                label: identity?.attributes?.full_name || 'Creator',
+                amountCents: Number.MAX_SAFE_INTEGER,
+                member: null,
+                campaign: null,
+                tiers: []
+            };
+        }
+
+        return { level: 'free', label: 'Free', amountCents: 0, member: null, campaign: null, tiers: [] };
+    }
+
+    async function ensureMembership() {
+        const config = resolveConfig();
+        if (!config.clientId || !config.redirectUri) {
+            console.warn('Patreon configuration is incomplete. Falling back to free tier.');
+            return { level: 'free', label: 'Free', amountCents: 0, member: null, campaign: null, tiers: [] };
+        }
+        if (cachedMembership && Date.now() - cachedMembershipFetchedAt < membershipCacheTtlMs) {
+            return cachedMembership;
+        }
+        const tokens = await ensureAccessToken(config);
+        const membership = await fetchMembership(tokens.accessToken, config);
+        cachedMembership = membership;
+        cachedMembershipFetchedAt = Date.now();
+        return membership;
+    }
+
+    function logout() {
+        clearTokens();
+        clearLastAuthorizationCode();
+        cachedMembership = null;
+        cachedMembershipFetchedAt = 0;
+    }
+
+    return {
+        ensureMembership,
+        logout,
+        resolveConfig
+    };
+})();
+
+function applyActiveMembership(membership) {
+    if (!membership || typeof membership !== 'object') {
+        activeUserTier = { level: 'free', label: 'Free', amountCents: 0, membership: null };
+    } else {
+        const rawLevel = membership.level || (membership.tiers && membership.tiers.length ? 'low' : 'free');
+        const level = rawLevel.toLowerCase();
+        const fallbackLabel = membership.tiers && membership.tiers.length ? (membership.tiers[membership.tiers.length - 1]?.attributes?.title || 'Supporter') : 'Free';
+        const label = membership.label || fallbackLabel;
+        const amountCents = typeof membership.amountCents === 'number' ? membership.amountCents : 0;
+        activeUserTier = { level, label, amountCents, membership };
+    }
+
+    switch (activeUserTier.level) {
+        case 'creator':
+        case 'high':
+            activeUserLimit = userLimit.high;
+            break;
+        case 'mid':
+            activeUserLimit = userLimit.mid;
+            break;
+        case 'low':
+            activeUserLimit = userLimit.low;
+            break;
+        default:
+            activeUserLimit = 0;
+            break;
+    }
+}
+
+const debounceSearchFiles = mydebounce((searchTerm, fileTypes) => {
+    if (!searchTerm || searchTerm == ''){
+        refreshFiles(currentFolder, undefined, undefined, undefined, fileTypes);
+        return;
+    }
+    refreshFiles("", false, true, searchTerm, fileTypes)
+}, 200);
+
+async function launchFilePicker(selectFunction = false, fileTypes=[]){
+    $('#avtt-s3-uploader').find('.title_bar_close_button').click();
+    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", true, false, undefined, "800px", "600px", undefined, undefined, false, 'input, li, a, label');
+    draggableWindow.toggleClass('prevent-sidebar-modal-close', true);
+    let membership;
+    try {
+        membership = await PatreonAuth.ensureMembership();
+    } catch (error) {
+        console.error('Patreon verification failed', error);
+        alert('Patreon login is required to open the AVTT File Uploader.');
+        return;
+    }
+
+    applyActiveMembership(membership);
+
+    if (activeUserTier.level === 'free') {
+        const patreonConfig = PatreonAuth.resolveConfig();
+        if (!patreonConfig.clientId || !patreonConfig.redirectUri) {
+            alert('Patreon login is not configured.');
+            return;
+        }
+
+        const shouldAttemptLogin = window.confirm('Log in with Patreon to verify your Azmoria membership?');
+        if (!shouldAttemptLogin) {
+            return;
+        }
+
+        PatreonAuth.logout();
+        try {
+            membership = await PatreonAuth.ensureMembership();
+            applyActiveMembership(membership);
+        } catch (reauthError) {
+            console.error('Patreon verification failed after reauth prompt', reauthError);
+            alert('Patreon verification failed. Patreon login is required to open the AVTT File Uploader.');
+            return;
+        }
+
+        if (activeUserTier.level === 'free') {
+            alert('Unable to detect an active Azmoria Patreon membership. Please check your subscription tier and try again.');
+            return;
+        }
+    }
+
     currentFolder = "";
-    const filePicker = $(` <div id="avtt-file-picker">
-      
-        <div id="select-section">
-            <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
-            <label style='color: var(--highlight-color, rgba(131, 185, 255, 1))' for="file-input">Upload File</label>
-            <input style='display:none;' type="file" multiple id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt" />
-       
-            <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1))'>Create Folder</div>
-            <input id='create-folder-input' type='text' placeholder='folder name'/>
-            <div id='upFolder' style='position: absolute; left: 30px; top:30px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>Back (breadcrumb placeholder)</div>
-        </div>
-
-        <div id="file-listing-section">
-            <div id="file-listing"> 
-                <span>Loading...</span>
+    const filePicker = $(` 
+        <style>   
+            #avtt-file-picker {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border-radius: 5px;
+                top: -6px;
+                position: relative;
+                padding: 10px;
+                height: calc(100% - 25px);
+                overflow: scroll;
+                border: 1px solid #ddd;
+            }
+            #file-listing-section {
+                text-align: left;
+                margin: 7px 10px 20px 10px;
+                border: 1px solid gray;
+                padding: 10px;
+                list-style: none;
+                padding: 0px;
+                height: calc(100% - 170px);
+                overflow-y: auto;
+            }
+            #file-listing-section tr{
+                padding: 3px 5px;
+            }
+            #file-listing-section tr input {
+                height: 16px;
+                width: 16px;
+                margin: 3px 0px;
+                vertical-align: middle;
+            }
+            #file-listing-section tr td:first-of-type {
+                width: 20px;
+            }
+            #file-listing-section tr td {
+                vertical-align: middle;
+            }
+            
+            div#select-section>div {
+                margin: 5px 0px 0px 0px;
+            }
+            #file-listing-section tr label{
+                flex-grow: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;    
+                white-space: nowrap;
+                margin-bottom: 0px;
+            }
+            #select-section{
+                display: flex;
+                text-align: right;
+                flex-direction: column;
+                align-items: flex-end;
+            }
+            #file-listing-section tr:nth-of-type(odd) {
+                backdrop-filter: brightness(0.95);
+            }
+        
+        </style>
+        <div id="avtt-file-picker">
+            <div id="select-section">
+                <div>
+                    <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
+                    <div id='patreon-tier'></div>
+                </div>
+                <div style='display: flex; align-items: center; gap: 10px;'>
+                    <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;'>Create Folder</div>
+                    <input id='create-folder-input' type='text' placeholder='folder name' />
+                </div>
+                <div style='display: flex; align-items: center; gap: 10px;'>
+                    <div id='uploading-file-indicator' style='display:none'></div>
+                    <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;' for="file-input">Upload File</label>
+                    <input style='display:none;' type="file" multiple id="file-input"
+                        accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt,application/pdf" />
+                    <input id='search-files' type='text' placeholder='Search' />
+                </div>
+            </div>
+            <div id='upFolder' style='position: absolute; left: 30px; top:0px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
+                Back (breadcrumb placeholder)
+            </div>
+            <div id="file-listing-section">
+                <table id="file-listing">
+                    <tr>
+                        <td>Loading...
+                        <td>
+                    </tr>
+                </table>
+            </div>
+            <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
+                <button id="delete-selected-files"
+                    style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Delete</button>
+                <button id="copy-path-to-clipboard"
+                    style="${typeof selectFunction === 'function' ? 'display: none;' : ''} background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Copy
+                    Path</button>
+                <button id="select-file"
+                    style="${typeof selectFunction === 'function' ? '' : 'display: none;'} background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-left:10px;">Select</button>
             </div>
         </div>
 
-        <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
-            <button id="delete-selected-files" style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Delete</button>
-            <button id="copy-path-to-clipboard" style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Copy Path</button>
-            <button id="select-file" style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-left:10px;">Select</button>    
-        </div>
-        <h2 id="success-message" hidden>Success! File uploaded to bucket.</h2>
-    </div>
-    <style>   
-        #avtt-file-picker {
-            background: var(--background-color, #fff);
-            color: var(--font-color, #000);
-            border-radius: 5px;
-            top: -25px;
-            position: relative;
-            padding: 10px;
-        }
-        #file-listing-section {
-            text-align: left;
-            margin:20px;
-            border: 1px solid gray;
-            padding: 10px;
-            list-style: none;
-            padding-left: 15px;
-            height:600px;
-            overflow-y: auto;
-        }
-        #file-listing-section li{
-            display: flex;
-        }
-        #file-listing-section li input{
-            margin-right: 10px;
-        }
-        #file-listing-section li label{
-            flex-grow: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;    
-            white-space: nowrap;
-            margin-bottom: 0px;
-        }
-        #select-section{
-            margin: 20px;
-            text-align:right;
-        }
-    
-    </style>
     
     
     `);
-    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", false, false, undefined, "500px", "600px", "AVTT File Storage", '', false, 'input, li, a, label');
     draggableWindow.append(filePicker);
-
+    draggableWindow.find('.sidebar-panel-loading-indicator').remove();
 
     $('body').append(draggableWindow);
 
-
-
+    const tierLabel = document.getElementById('patreon-tier');
+    if (tierLabel) {
+        tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
+    }
 
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
    
-    const allowedImageTypes = ['jpeg', 'jpg', 'png', 'gif', 'bmp', 'webp'];
-    const allowedVideoTypes = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'];
-    const allowedAudioTypes = ['mp3', 'wav', 'aac', 'flac', 'ogg'];
-    const allowedJsonTypes = ['json', 'uvtt', 'dd2vtt', 'df2vtt'];
-    const allowedDocTypes = ['.pdf'];
+
 
     const fileInput = document.getElementById('file-input');
     const createFolder = document.getElementById('create-folder');
-    const successMessage = document.getElementById('success-message');
     
     const deleteSelectedButton = document.getElementById('delete-selected-files');
     const copyPathButton = document.getElementById('copy-path-to-clipboard');
-    
-    
+    const searchInput = document.getElementById('search-files');
+    const selectFile = document.getElementById('select-file');
 
     
     let selectedFile = null;
         
 
-    refreshFiles(currentFolder, true);
+    refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
 
     fileInput.addEventListener('change', async (event) => {
         const file = event.target.files && event.target.files[0];
@@ -110,12 +804,16 @@ function launchFilePicker(){
             return;
         }
 
-        successMessage.hidden = true;
+
         let totalSize = 0;
         
-
-        for (const selectedFile of event.target.files){
+        const uploadingIndicator = document.getElementById('uploading-file-indicator');
+        for (let i=0; i<event.target.files.length; i++){
             try {
+                const selectedFile = event.target.files[i];
+                const newHtml = `Uploading File<span id='file-number'>${i + 1}</span> of <span id='total-files'>${event.target.files.length}</span>`
+                uploadingIndicator.innerHTML = newHtml;
+                uploadingIndicator.style.display = 'block';
                 const extension = getFileExtension(selectedFile.name);
                 if (!isAllowedExtension(extension)) {
                     alert('Unsupported file type. Please select an image, video, audio, or supported UVTT/JSON file.');
@@ -126,8 +824,8 @@ function launchFilePicker(){
                     return;
                 }
                 totalSize+= selectedFile.size;
-                if (userLimit != undefined && totalSize + S3_Current_Size > userLimit ){
-                    alert('User limit reached. Delete some files before uploading more.');
+                if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit){
+                    alert('This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.');
                     return;
                 }
                 const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(`${currentFolder}${selectedFile.name}`)}&user=${window.CAMPAIGN_INFO.dmId}&upload=true`);
@@ -153,15 +851,38 @@ function launchFilePicker(){
                 }
 
                 uploadURL = data.uploadURL.split('?')[0];
-                successMessage.hidden = false;
+
             } catch (error) {
                 console.error(error);
                 alert(error.message || 'An unexpected error occurred while uploading.');
             }
             refreshFiles(currentFolder, true);
         }
-     
+        uploadingIndicator.innerHTML = 'Upload Complete';
+        setTimeout(function(){
+            uploadingIndicator.style.display = 'none'
+        }, 2000)
+    });
+    selectFile.addEventListener('click', (event) => {
+        const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
+
+        if (selectedCheckboxes.length == 0) {
+            return;
+        }
+        const paths = [];
+        for (const selected of selectedCheckboxes) {
+            const name = selected.value.replace(/^.*\//gi, '').replace(/\..*$/gi, '')
+            const link = `above-bucket-not-a-url/${selected.value}`;
+            paths.push({ link: link, name: name});
+        }
         
+        selectFunction(paths);
+        draggableWindow.find('.title_bar_close_button').click();
+    })
+
+    $(searchInput).off('change keypress input').on('change keypress input', async (event) => {
+        const searchTerm = event.target.value;
+        debounceSearchFiles(searchTerm, fileTypes);
     });
 
     createFolder.addEventListener('click', async (event) => {
@@ -200,11 +921,6 @@ function launchFilePicker(){
         deleteFilesFromS3Folder(commaDelimitedPaths);
     });
 
-    function getFileExtension(name) {
-        const parts = name.split('.');
-        return parts.length > 1 ? parts.pop().toLowerCase() : '';
-    }
-
     function isAllowedExtension(extension) {
         return allowedImageTypes.includes(extension)
             || allowedVideoTypes.includes(extension)
@@ -231,17 +947,23 @@ function launchFilePicker(){
         if (allowedAudioTypes.includes(extension)) {
             return `audio/${extension}`;
         }
+        if (allowedDocTypes.includes(extension)) {
+            return `application/pdf`
+        }
         return '';
     }
-
-    
-
 }
+
+function getFileExtension(name) {
+    const parts = name.split('.');
+    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+}
+
 function formatFileSize(bytes) {
     if (bytes < 1024) {
         return `${bytes} B`;
     }
-    const units = ['KB', 'MB', 'GB'];
+    const units = ['KB', 'MB', 'GB', 'TB'];
     let size = bytes / 1024;
     let unitIndex = 0;
     while (size >= 1024 && unitIndex < units.length - 1) {
@@ -251,7 +973,18 @@ function formatFileSize(bytes) {
     return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
-function refreshFiles(path, recheckSize = false) {
+function refreshFiles(path, recheckSize = false, allFiles = false, searchTerm, fileTypes) {
+    if (recheckSize) {
+        getUserUploadedFileSize().then(size => {
+            S3_Current_Size = size;
+            document.getElementById('user-used').innerHTML = formatFileSize(S3_Current_Size);
+            document.getElementById('user-limit').innerHTML = formatFileSize(activeUserLimit);
+            const tierLabel = document.getElementById('patreon-tier');
+            if (tierLabel) {
+                tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
+            }
+        });
+    }
     const fileListing = document.getElementById('file-listing');
     const upFolder = $('#upFolder');
     if(path != "")
@@ -263,63 +996,100 @@ function refreshFiles(path, recheckSize = false) {
         e.preventDefault();
         if (path.match(/(.*)\/.*\/$/gi)){
             const newPath = path.replace(/(.*\/).*\/$/gi, '$1');
-            refreshFiles(newPath);
+            refreshFiles(newPath, undefined, undefined, undefined, fileTypes);
             currentFolder = newPath;
         }
         else{
-            refreshFiles("");
+            refreshFiles("", undefined, undefined, undefined, fileTypes);
             currentFolder = "";
         }
 
     })
-
-    getFolderListingFromS3(path).then(files => {
+    const insertFiles = (files, searchTerm, fileTypes) => {
         console.log("Files in folder: ", files);
         if (files.length === 0) {
-            fileListing.innerHTML = '<li>No files found.</li>';
+            fileListing.innerHTML = '<tr><td>No files found.</td></tr>';
         }
         else {
             fileListing.innerHTML = '';
-            for (const filePath of files) {
-                const listItem = document.createElement('li');
+            for (let filePath of files) {
+                const listItem = document.createElement('tr');
                 const regEx = new RegExp(`^${window.CAMPAIGN_INFO.dmId}/`, "gi");
+                if(filePath.Key)
+                    filePath = filePath.Key
                 const path = filePath.replace(regEx, '');
+
                 const isFolder = path.match(/\/$/gi);
-                const input = $(`<input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? 'folder' : ''}" value="${path}">`);
-                const label = $(`<label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? 'folder' : '' }" title="${path}">${path}</label>`);
-                $(listItem).append(input, label);
-                if (isFolder){
-                    label.off('click.openFolder').on('click.openFolder', function(e){
+                const input = $(`<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? 'folder' : ''}" value="${path}"></td>`);
+                const label = $(`<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? 'folder' : ''}" title="${path}">${path}</label></td>`);
+
+                const extension = getFileExtension(filePath);
+                let type;
+                if (isFolder) {
+                    type = avttFilePickerTypes.FOLDER;
+                }
+                else if (allowedJsonTypes.includes(extension)) {
+                    type = avttFilePickerTypes.UVTT;
+                }
+                else if (allowedImageTypes.includes(extension)) {
+                    type = avttFilePickerTypes.IMAGE;
+                }
+                else if (allowedVideoTypes.includes(extension)) {
+                    type = avttFilePickerTypes.VIDEO
+                }
+                else if (allowedAudioTypes.includes(extension)) {
+                    type = avttFilePickerTypes.AUDIO
+                }
+                else if (allowedDocTypes.includes(extension)) {
+                    type = avttFilePickerTypes.PDF
+                }
+                if (searchTerm != undefined) {
+                    const lowerSearch = searchTerm.toLowerCase()
+                    
+                    if (!path.toLowerCase().includes(lowerSearch) && type.toLowerCase() != lowerSearch)
+                        continue;
+                }
+                if (fileTypes != undefined && fileTypes.length > 0){
+                    if (type != avttFilePickerTypes.FOLDER && !fileTypes.includes(type))
+                        continue;
+                }
+
+                const typeCell = $(`<td>${type}</td>`);
+
+                $(listItem).append(input, label, typeCell);
+                if (isFolder) {
+                    label.off('click.openFolder').on('click.openFolder', function (e) {
                         e.preventDefault();
-                        refreshFiles(path);
+                        refreshFiles(path, undefined, undefined, undefined, fileTypes);
                         currentFolder = path;
                     })
                 }
                 fileListing.appendChild(listItem);
             }
         }
-    }).catch(err => {
-        alert("Error fetching folder listing. See console for details.");
-        console.error("Error fetching folder listing: ", err);
-    });
-    if(recheckSize){
-        getUserUploadedFileSize().then(size => {
-            S3_Current_Size = size;
-            document.getElementById('user-used').innerHTML = formatFileSize(S3_Current_Size);
-            document.getElementById('user-limit').innerHTML = formatFileSize(userLimit);
+    }
+    if (allFiles){
+        getAllUserFiles().then(files => insertFiles(files, searchTerm, fileTypes)).catch(err => {
+            alert("Error fetching folder listing. See console for details.");
+            console.error("Error fetching folder listing: ", err);
         });
     }
-
+    else{
+        getFolderListingFromS3(path).then(files => insertFiles(files, searchTerm, fileTypes)).catch(err => {
+            alert("Error fetching folder listing. See console for details.");
+            console.error("Error fetching folder listing: ", err);
+        });
+    }
 }
 
-async function deleteFilesFromS3Folder(fileKeys) {
+async function deleteFilesFromS3Folder(fileKeys, fileTypes) {
     const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${fileKeys}&deleteFiles=true`);
     const json = await url.json();
     const deleted = json.deleted;
     if (!deleted) {
         throw new Error("Failed to delete file(s)");
     }
-    refreshFiles(currentFolder, true);
+    refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
 }
 
 async function getFileFromS3(fileName){
@@ -346,12 +1116,18 @@ async function getFolderListingFromS3(folderPath) {
 }
 
 async function getUserUploadedFileSize(){
-    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${encodeURIComponent('')}&list=true&includeSubDirFiles=true`);
-    const json = await url.json();
-    const folderContents = json.folderContents;
+    const folderContents = await getAllUserFiles();
     let userSize = 0;
     for (const file of folderContents) {
         userSize += file.Size;
     }
     return userSize;
+}
+
+async function getAllUserFiles(){
+    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${encodeURIComponent('')}&list=true&includeSubDirFiles=true`);
+    const json = await url.json();
+    const folderContents = json.folderContents;
+
+    return folderContents;
 }

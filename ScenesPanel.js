@@ -162,6 +162,9 @@ async function getUvttData(url){
 	        api_url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
 	      }
 		}
+		else if(url.startsWith('above-bucket-not-a-url')){
+			api_url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
+		}
 
 		await $.getJSON(api_url, function(data){
 			jsonData = data;
@@ -1266,21 +1269,25 @@ function edit_scene_dialog(scene_id) {
 	const dropBoxOptions1 = dropBoxOptions(function(links){playerMapRow.find('input').val(links[0].link)});
 	const dropBoxbutton1 = createCustomDropboxChooser('Choose Map from Dropbox', dropBoxOptions1);
 	const onedriveButton1 = createCustomOnedriveChooser('Choose Map from Onedrive', function(links){playerMapRow.find('input').val(links[0].link)})
+	const avttButton1 = createCustomAvttChooser('Choose Map from AVTT File Picker', function (links) { playerMapRow.find('input').val(links[0].link)});
+
 
 	const dmMapRow = form_row('dm_map', 'DM Only Map', null, true)
 
 	const dropBoxOptions2 = dropBoxOptions(function(links){dmMapRow.find('input').val(links[0].link)});
 	const dropBoxbutton2 = createCustomDropboxChooser('Choose DM Map from Dropbox', dropBoxOptions2);
 	const onedriveButton2 = createCustomOnedriveChooser('Choose DM Map from Onedrive', function(links){dmMapRow.find('input').val(links[0].link)})
+	const avttButton2 = createCustomAvttChooser('Choose Map from AVTT File Picker', function (links) { dmMapRow.find('input').val(links[0].link) });
+	
 	// add in toggles for these 2 rows
 	playerMapRow.append(form_toggle("player_map_is_video", "Video map?", false, handle_map_toggle_click))
 	playerMapRow.find('button').append($(`<div class='isvideotogglelabel'>link is video</div>`));
-	playerMapRow.append(dropBoxbutton1, onedriveButton1);
+	playerMapRow.append(dropBoxbutton1, avttButton1, onedriveButton1);
 	playerMapRow.attr('title', `This map will be shown to everyone if DM map is off or only players if the DM map is on. If you are using your own maps you will have to upload them to a public accessible place. Eg. discord, imgur, dropbox, gdrive etc.`)
 	
 	dmMapRow.append(form_toggle("dm_map_is_video", "Video map?", false, handle_map_toggle_click))
 	dmMapRow.find('button').append($(`<div class='isvideotogglelabel'>link is video</div>`));
-	dmMapRow.append(dropBoxbutton2, onedriveButton2);
+	dmMapRow.append(dropBoxbutton2, avttButton2, onedriveButton2);
 	dmMapRow.attr('title', `This map will be shown to the DM only. It is used for a nearly indentical map to the main map that had secrets embedded in it that you don't want your players to see. Both maps must have links.`)
 	form.append(playerMapRow)	
 	form.append(dmMapRow)
@@ -2729,7 +2736,7 @@ function adjust_create_import_edit_container(content='', empty=true, title='', w
 		existingContainer.append(content);
 	}
 	else{
-		const mainContainer = $(`<div id="sources-import-main-container"></div>`);
+		const mainContainer = $(`<div id="sources-import-main-container" class='resize_drag_window moveableWindow'></div>`);
 		mainContainer.append(`<link class="ddb-classes-page-stylesheet" rel="stylesheet" type="text/css" href="https://www.dndbeyond.com/content/1-0-2416-0/skins/blocks/css/compiled.css" >`);
 		mainContainer.append(`<link class="ddb-classes-page-stylesheet"  rel="stylesheet" type="text/css" href="https://www.dndbeyond.com/content/1-0-2416-0/skins/waterdeep/css/compiled.css" >`);
 		const titleBar = floating_window_title_bar("sources-import-iframe-title-bar", title);
@@ -2756,6 +2763,8 @@ function adjust_create_import_edit_container(content='', empty=true, title='', w
 				$('.iframeResizeCover').remove();
 			}
 		});
+		frame_z_index_when_click(mainContainer);
+		mainContainer.on('mousedown', function(){frame_z_index_when_click(mainContainer)})
 		$(document.body).append(mainContainer);
 	}
 	$(`#sources-import-main-container`).css({
@@ -2863,6 +2872,25 @@ async function create_scene_root_container(fullPath, parentId) {
 		e.preventDefault();
 		Dropbox.choose(dropboxOptionsImport)
 	});
+	const avttFileImport = await build_tutorial_import_list_item({
+		"title": "AVTT File Picker Image or Video",
+		"description": "Build a scene using a AVTT File Picker image or video file.",
+		"category": "Scenes",
+		"player_map": "",
+	}, `${window.EXTENSION_PATH}assets/avtt-logo.png`, false);
+	avttFileImport.css("width", "25%");
+	sectionHtml.find("ul").append(avttFileImport);
+	avttFileImport.find(".listing-card__callout").hide();
+	avttFileImport.find("a.listing-card__link").click(function (e) {
+		e.stopPropagation();
+		e.preventDefault();
+		launchFilePicker(function (files) {
+			for(let file of files){
+				create_scene_inside(parentId, fullPath, file.name, file.link);
+			}
+		});
+	});
+
 
 	const onedriveImport = await build_tutorial_import_list_item({
 		"title": "Onedrive Image or Video",
@@ -2959,7 +2987,9 @@ function build_UVTT_import_container(){
 	const dropBoxOptions1 = dropBoxOptions(function(links){$('#player_map_row input').val(links[0].link)}, false, ['.dd2vtt', '.uvtt', '.df2vtt']);
 	const dropBoxbutton1 = createCustomDropboxChooser('Choose UVTT file from Dropbox', dropBoxOptions1);
 	const onedriveButton1 = createCustomOnedriveChooser('Choose UVTT file from Onedrive', function(links){$('#player_map_row input').val(links[0].link)}, 'single', ['.dd2vtt', '.uvtt', '.df2vtt'])
-	form.append(dropBoxbutton1);
+	const avttButton1 = createCustomAvttChooser('Choose UVTT File from AVTT File Picker', function (links) { $('#player_map_row input').val(links[0].link) }, [avttFilePickerTypes.UVTT]);
+
+	form.append(dropBoxbutton1, avttButton1);
 	//form.append(onedriveButton1); if we ever get this working again, or one drive changes things to make them accessible we can reenable it
 
 	const hiddenDoorToggle = form_toggle('hidden_doors_toggle', null, false, function(event) {
