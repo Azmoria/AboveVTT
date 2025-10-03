@@ -1,27 +1,39 @@
 
 const AVTT_S3 = 'https://l0cqoq0b4d.execute-api.us-east-1.amazonaws.com/default/uploader';
 let S3_Current_Size = 0;
-const userLimit = 10 * 1024 * 1024 * 1024;
 let currentFolder = "";
+const userLimit = Object.freeze({
+    low: 10 * 1024 * 1024 * 1024,
+    mid: 25 * 1024 * 1024 * 1024,
+    high: 100 * 1024 * 1024 * 1024
+});
+const allowedImageTypes = ['jpeg', 'jpg', 'png', 'gif', 'bmp', 'webp'];
+const allowedVideoTypes = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'];
+const allowedAudioTypes = ['mp3', 'wav', 'aac', 'flac', 'ogg'];
+const allowedJsonTypes = ['json', 'uvtt', 'dd2vtt', 'df2vtt'];
+const allowedDocTypes = ['pdf'];
 
 function launchFilePicker(){
+   
     currentFolder = "";
     const filePicker = $(` <div id="avtt-file-picker">
       
         <div id="select-section">
             <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
             <label style='color: var(--highlight-color, rgba(131, 185, 255, 1))' for="file-input">Upload File</label>
-            <input style='display:none;' type="file" multiple id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt" />
+            <input style='display:none;' type="file" multiple id="file-input" accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt,application/pdf" />
        
             <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1))'>Create Folder</div>
             <input id='create-folder-input' type='text' placeholder='folder name'/>
-            <div id='upFolder' style='position: absolute; left: 30px; top:30px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>Back (breadcrumb placeholder)</div>
+            <div id='upFolder' style='position: absolute; left: 30px; top:0px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>Back (breadcrumb placeholder)</div>
+            <div id='uploading-file-indicator' style='display:none'></div>
+   
         </div>
 
         <div id="file-listing-section">
-            <div id="file-listing"> 
-                <span>Loading...</span>
-            </div>
+            <table id="file-listing"> 
+                <tr><td>Loading...<td></tr>
+            </table>
         </div>
 
         <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
@@ -29,34 +41,35 @@ function launchFilePicker(){
             <button id="copy-path-to-clipboard" style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Copy Path</button>
             <button id="select-file" style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-left:10px;">Select</button>    
         </div>
-        <h2 id="success-message" hidden>Success! File uploaded to bucket.</h2>
-    </div>
+         </div>
     <style>   
         #avtt-file-picker {
             background: var(--background-color, #fff);
             color: var(--font-color, #000);
             border-radius: 5px;
-            top: -25px;
+            top: -1px;
             position: relative;
             padding: 10px;
+            height: calc(100% - 25px);
+            overflow: scroll;
         }
         #file-listing-section {
             text-align: left;
-            margin:20px;
+            margin: 20px;
             border: 1px solid gray;
             padding: 10px;
             list-style: none;
-            padding-left: 15px;
-            height:600px;
+            padding: 0px;
+            height: calc(100% - 151px);
             overflow-y: auto;
         }
-        #file-listing-section li{
-            display: flex;
+        #file-listing-section tr{
+            padding: 3px 5px;
         }
-        #file-listing-section li input{
+        #file-listing-section tr input{
             margin-right: 10px;
         }
-        #file-listing-section li label{
+        #file-listing-section tr label{
             flex-grow: 1;
             overflow: hidden;
             text-overflow: ellipsis;    
@@ -64,34 +77,29 @@ function launchFilePicker(){
             margin-bottom: 0px;
         }
         #select-section{
-            margin: 20px;
             text-align:right;
+        }
+        #file-listing-section tr:nth-of-type(odd) {
+            backdrop-filter: brightness(0.7);
         }
     
     </style>
     
     
     `);
-    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", false, false, undefined, "500px", "600px", "AVTT File Storage", '', false, 'input, li, a, label');
+    const draggableWindow = find_or_create_generic_draggable_window("avtt-s3-uploader", "AVTT File Uploader", false, false, undefined, "800px", "600px", undefined, undefined, false, 'input, li, a, label');
     draggableWindow.append(filePicker);
 
 
     $('body').append(draggableWindow);
 
 
-
-
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
    
-    const allowedImageTypes = ['jpeg', 'jpg', 'png', 'gif', 'bmp', 'webp'];
-    const allowedVideoTypes = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'];
-    const allowedAudioTypes = ['mp3', 'wav', 'aac', 'flac', 'ogg'];
-    const allowedJsonTypes = ['json', 'uvtt', 'dd2vtt', 'df2vtt'];
-    const allowedDocTypes = ['.pdf'];
+
 
     const fileInput = document.getElementById('file-input');
     const createFolder = document.getElementById('create-folder');
-    const successMessage = document.getElementById('success-message');
     
     const deleteSelectedButton = document.getElementById('delete-selected-files');
     const copyPathButton = document.getElementById('copy-path-to-clipboard');
@@ -110,12 +118,18 @@ function launchFilePicker(){
             return;
         }
 
-        successMessage.hidden = true;
+
         let totalSize = 0;
         
-
-        for (const selectedFile of event.target.files){
+        const uploadingIndicator = document.getElementById('uploading-file-indicator');
+        for (let i=0; i<event.target.files.length; i++){
             try {
+                const selectedFile = event.target.files[i];
+
+               
+                const newHtml = `Uploading File<span id='file-number'>${i + 1}</span> of <span id='total-files'>${event.target.files.length}</span>`
+                uploadingIndicator.innerHTML = newHtml;
+                uploadingIndicator.style.display = 'block';
                 const extension = getFileExtension(selectedFile.name);
                 if (!isAllowedExtension(extension)) {
                     alert('Unsupported file type. Please select an image, video, audio, or supported UVTT/JSON file.');
@@ -126,7 +140,7 @@ function launchFilePicker(){
                     return;
                 }
                 totalSize+= selectedFile.size;
-                if (userLimit != undefined && totalSize + S3_Current_Size > userLimit ){
+                if (userLimit != undefined && totalSize + S3_Current_Size > userLimit.low ){
                     alert('User limit reached. Delete some files before uploading more.');
                     return;
                 }
@@ -153,13 +167,17 @@ function launchFilePicker(){
                 }
 
                 uploadURL = data.uploadURL.split('?')[0];
-                successMessage.hidden = false;
+
             } catch (error) {
                 console.error(error);
                 alert(error.message || 'An unexpected error occurred while uploading.');
             }
             refreshFiles(currentFolder, true);
         }
+        uploadingIndicator.innerHTML = 'Upload Complete';
+        setTimeout(function(){
+            uploadingIndicator.style.display = 'none'
+        }, 2000)
      
         
     });
@@ -200,10 +218,7 @@ function launchFilePicker(){
         deleteFilesFromS3Folder(commaDelimitedPaths);
     });
 
-    function getFileExtension(name) {
-        const parts = name.split('.');
-        return parts.length > 1 ? parts.pop().toLowerCase() : '';
-    }
+
 
     function isAllowedExtension(extension) {
         return allowedImageTypes.includes(extension)
@@ -231,17 +246,26 @@ function launchFilePicker(){
         if (allowedAudioTypes.includes(extension)) {
             return `audio/${extension}`;
         }
+        if (allowedDocTypes.includes(extension)) {
+            return `application/pdf`
+        }
         return '';
     }
 
     
 
 }
+
+function getFileExtension(name) {
+    const parts = name.split('.');
+    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+}
+
 function formatFileSize(bytes) {
     if (bytes < 1024) {
         return `${bytes} B`;
     }
-    const units = ['KB', 'MB', 'GB'];
+    const units = ['KB', 'MB', 'GB', 'TB'];
     let size = bytes / 1024;
     let unitIndex = 0;
     while (size >= 1024 && unitIndex < units.length - 1) {
@@ -252,6 +276,13 @@ function formatFileSize(bytes) {
 }
 
 function refreshFiles(path, recheckSize = false) {
+    if (recheckSize) {
+        getUserUploadedFileSize().then(size => {
+            S3_Current_Size = size;
+            document.getElementById('user-used').innerHTML = formatFileSize(S3_Current_Size);
+            document.getElementById('user-limit').innerHTML = formatFileSize(userLimit.low);
+        });
+    }
     const fileListing = document.getElementById('file-listing');
     const upFolder = $('#upFolder');
     if(path != "")
@@ -274,20 +305,44 @@ function refreshFiles(path, recheckSize = false) {
     })
 
     getFolderListingFromS3(path).then(files => {
+ 
         console.log("Files in folder: ", files);
         if (files.length === 0) {
-            fileListing.innerHTML = '<li>No files found.</li>';
+            fileListing.innerHTML = '<tr><td>No files found.</td></tr>';
         }
         else {
             fileListing.innerHTML = '';
             for (const filePath of files) {
-                const listItem = document.createElement('li');
+                const listItem = document.createElement('tr');
                 const regEx = new RegExp(`^${window.CAMPAIGN_INFO.dmId}/`, "gi");
                 const path = filePath.replace(regEx, '');
                 const isFolder = path.match(/\/$/gi);
-                const input = $(`<input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? 'folder' : ''}" value="${path}">`);
-                const label = $(`<label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? 'folder' : '' }" title="${path}">${path}</label>`);
-                $(listItem).append(input, label);
+                const input = $(`<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? 'folder' : ''}" value="${path}"></td>`);
+                const label = $(`<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? 'folder' : '' }" title="${path}">${path}</label></td>`);
+
+                const extension = getFileExtension(filePath);
+                let type = '';
+                if(isFolder){
+                    type = 'FOLDER';
+                }
+                else if (allowedJsonTypes.includes(extension)) {
+                    type = 'UVTT';
+                }
+                else if (allowedImageTypes.includes(extension)) {
+                    type = 'IMAGE';
+                }
+                else if (allowedVideoTypes.includes(extension)) {
+                    type = 'VIDEO'
+                }
+                else if (allowedAudioTypes.includes(extension)) {
+                    type = 'AUDIO'
+                }
+                if (allowedDocTypes.includes(extension)) {
+                    type = 'PDF'
+                }
+                const typeCell = $(`<td>${type}</td>`);
+                
+                $(listItem).append(input, label, typeCell);
                 if (isFolder){
                     label.off('click.openFolder').on('click.openFolder', function(e){
                         e.preventDefault();
@@ -302,13 +357,7 @@ function refreshFiles(path, recheckSize = false) {
         alert("Error fetching folder listing. See console for details.");
         console.error("Error fetching folder listing: ", err);
     });
-    if(recheckSize){
-        getUserUploadedFileSize().then(size => {
-            S3_Current_Size = size;
-            document.getElementById('user-used').innerHTML = formatFileSize(S3_Current_Size);
-            document.getElementById('user-limit').innerHTML = formatFileSize(userLimit);
-        });
-    }
+
 
 }
 

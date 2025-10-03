@@ -162,6 +162,9 @@ async function getUvttData(url){
 	        api_url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
 	      }
 		}
+		else if(url.startsWith('above-bucket-not-a-url')){
+			api_url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
+		}
 
 		await $.getJSON(api_url, function(data){
 			jsonData = data;

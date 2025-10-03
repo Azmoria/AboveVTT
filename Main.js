@@ -2807,8 +2807,13 @@ function init_zoom_buttons() {
 				$(".dm-paused-indicator").remove();
 			}
 		});
-
-		zoom_section.append(select_locked, ping_center, pause_players);
+		let avttS3FileShare = $(`<div id='aboveFileHostButton' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='AVTT File Hosting'> 
+		<div class="ddbc-tab-options__header-heading">
+				<span class="material-icons button-icon">folder</span>
+		</div></div>
+		`);
+		avttS3FileShare.click(launchFilePicker);
+		zoom_section.append(avttS3FileShare, select_locked, ping_center, pause_players);
 	}
 
 
