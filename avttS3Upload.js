@@ -99,7 +99,7 @@ const PatreonAuth = (() => {
             const identityVanity = String(identityAttributes.vanity || '').toLowerCase();
             const identityUrl = String(identityAttributes.url || '').toLowerCase();
             const identityFullName = String(identityAttributes.full_name || '').toLowerCase();
-            
+            window.PATREON_ID = identityId;
             if (creatorVanity && (identityVanity === creatorVanity || identityUrl.includes(creatorVanity))) {
                 return true;
             }
@@ -828,7 +828,7 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
                     alert('This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.');
                     return;
                 }
-                const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(`${currentFolder}${selectedFile.name}`)}&user=${window.CAMPAIGN_INFO.dmId}&upload=true`);
+                const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(`${currentFolder}${selectedFile.name}`)}&user=${window.PATREON_ID}&upload=true`);
                 if (!presignResponse.ok) {
                     throw new Error('Failed to retrieve upload URL.');
                 }
@@ -888,7 +888,7 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
     createFolder.addEventListener('click', async (event) => {
         const folderName = $('#create-folder-input').val();
         try {
-            await fetch(`${AVTT_S3}?folderName=${encodeURIComponent(`${currentFolder}${folderName}`)}&user=${window.CAMPAIGN_INFO.dmId}`);
+            await fetch(`${AVTT_S3}?folderName=${encodeURIComponent(`${currentFolder}${folderName}`)}&user=${window.PATREON_ID}`);
             refreshFiles(currentFolder);
         }
         catch{  
@@ -1014,7 +1014,7 @@ function refreshFiles(path, recheckSize = false, allFiles = false, searchTerm, f
             fileListing.innerHTML = '';
             for (let filePath of files) {
                 const listItem = document.createElement('tr');
-                const regEx = new RegExp(`^${window.CAMPAIGN_INFO.dmId}/`, "gi");
+                const regEx = new RegExp(`^${window.PATREON_ID}/`, "gi");
                 if(filePath.Key)
                     filePath = filePath.Key
                 const path = filePath.replace(regEx, '');
@@ -1083,7 +1083,7 @@ function refreshFiles(path, recheckSize = false, allFiles = false, searchTerm, f
 }
 
 async function deleteFilesFromS3Folder(fileKeys, fileTypes) {
-    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${fileKeys}&deleteFiles=true`);
+    const url = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&filename=${fileKeys}&deleteFiles=true`);
     const json = await url.json();
     const deleted = json.deleted;
     if (!deleted) {
@@ -1093,8 +1093,9 @@ async function deleteFilesFromS3Folder(fileKeys, fileTypes) {
 }
 
 async function getFileFromS3(fileName){
-
-    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${fileName}`);
+    const patreonId = fileName.split('/')[0]
+    fileName = fileName.replace(/^.*?\//gi, '');
+    const url = await fetch(`${AVTT_S3}?user=${patreonId}&filename=${fileName}`);
     const json = await url.json();
     const fileURL = json.downloadURL;
     if(!fileURL){
@@ -1105,7 +1106,7 @@ async function getFileFromS3(fileName){
 }
 
 async function getFolderListingFromS3(folderPath) {
-    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${encodeURIComponent(folderPath)}&list=true`);
+    const url = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(folderPath)}&list=true`);
     const json = await url.json();
     const folderContents = json.folderContents;
     let filePaths = [];
@@ -1125,7 +1126,7 @@ async function getUserUploadedFileSize(){
 }
 
 async function getAllUserFiles(){
-    const url = await fetch(`${AVTT_S3}?user=${window.CAMPAIGN_INFO.dmId}&filename=${encodeURIComponent('')}&list=true&includeSubDirFiles=true`);
+    const url = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent('')}&list=true&includeSubDirFiles=true`);
     const json = await url.json();
     const folderContents = json.folderContents;
 
