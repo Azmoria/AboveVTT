@@ -700,7 +700,7 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
                 vertical-align: middle;
             }
             #file-listing-section tr td:first-of-type {
-                width: 20px;
+                width: 30px;
             }
             #file-listing-section tr td {
                 vertical-align: middle;
@@ -872,7 +872,7 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
         const paths = [];
         for (const selected of selectedCheckboxes) {
             const name = selected.value.replace(/^.*\//gi, '').replace(/\..*$/gi, '')
-            const link = `above-bucket-not-a-url/${selected.value}`;
+            const link = `above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`;
             paths.push({ link: link, name: name});
         }
         
@@ -904,7 +904,7 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
         }
         const paths = [];
         for (const selected of selectedCheckboxes){
-            paths.push(`above-bucket-not-a-url/${selected.value}`);
+            paths.push(`above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`);
         }
         const copyText = paths.join(', ')
         navigator.clipboard.writeText(copyText);
