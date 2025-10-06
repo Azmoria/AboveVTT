@@ -1284,10 +1284,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         }
       } catch (error) {
         console.error("Failed to upload dropped files", error);
-        alert(
-          error.message ||  
-            "An unexpected error occurred while uploading dropped files.",
-        );
+        alert(error.message || "An unexpected error occurred while uploading dropped files.");
         hideUploadingIndicator();
       }
     });
