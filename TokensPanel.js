@@ -735,9 +735,16 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                 let helper = draggedRow.find(".token-image").clone();
                 if (specificImage !== undefined) {
                     helper.attr("src", specificImage);
-                } else {         
-                    helper.attr("src", random_image_for_item(draggedItem));
-                    
+                } else {      
+                    const src = random_image_for_item(draggedItem);
+                    if (src.startsWith('above-bucket-not-a-url')) {
+                        getAvttStorageUrl(src).then((url) => {
+                            helper.attr("src", url);
+                        })
+                    }
+                    else{
+                        helper.attr("src", src);
+                    }
                 }
                 helper.addClass("draggable-token-creation");
                 return helper;

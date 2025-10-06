@@ -1294,9 +1294,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   }
 
   selectFile.addEventListener("click", (event) => {
-    const selectedCheckboxes = $(
-      '#file-listing input[type="checkbox"]:checked',
-    );
+    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
 
     if (selectedCheckboxes.length == 0) {
       return;

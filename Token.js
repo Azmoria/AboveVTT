@@ -2301,7 +2301,7 @@ class Token {
 
 								updateTokenSrc(this.options.imgsrc, oldImage, video)
 								getAvttStorageUrl(this.options.imgsrc).then((url) => {
-									$(`#combat_area tr[data-target='${this.options.id}'] img[class*='Avatar']`).attr("src", parse_img(this.options.imgsrc));
+									$(`#combat_area tr[data-target='${this.options.id}'] img[class*='Avatar']`).attr("src", parse_img(url));
 								})
 
 								oldImage.off('dblclick.highlightToken').on('dblclick.highlightToken', function (e) {
@@ -2652,12 +2652,12 @@ class Token {
 							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
 							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
 								getAvttStorageUrl(this.options.imgsrc).then((url) => {
-									copyImage.attr("src", parse_img(url));
+									updateTokenSrc(url, copyImage, this.options.videoToken);
 								});
 							}
 						}
 						else if(copyImage.attr('src') != parse_img(this.options.imgsrc)){
-							copyImage.attr("src", parse_img(this.options.imgsrc));
+							updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
 						}
 
 				}  	
@@ -3603,16 +3603,11 @@ class Token {
 						if (window.ON_SCREEN_TOKENS[this.options.id] == undefined)
 							window.ON_SCREEN_TOKENS[this.options.id] = {};
 						window.ON_SCREEN_TOKENS[this.options.id].onScreenDarknessToken = tokenClone;
+						const copyImage = tokenClone.find('.token-image');
 						
-						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
-							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-							const copyImage = tokenClone.find('token-image');
-							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
-								getAvttStorageUrl(this.options.imgsrc).then((url) => {
-									copyImage.attr("src", parse_img(url));
-								});
-							}
-						}
+						updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
+						
+						
 					}	
 			    }
 
