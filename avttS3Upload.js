@@ -1345,9 +1345,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   });
 
   deleteSelectedButton.addEventListener("click", async () => {
-    const selectedCheckboxes = $(
-      '#file-listing input[type="checkbox"]:checked',
-    ).get();
+    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked').get();
     if (selectedCheckboxes.length === 0) {
       return;
     }
@@ -1552,8 +1550,7 @@ function refreshFiles(
 
 async function sendUsageUpdate(payload) {
   try {
-    const response = await fetch(
-      `${AVTT_S3}?action=usage&user=${window.PATREON_ID}`,
+    const response = await fetch(`${AVTT_S3}?action=usage&user=${window.PATREON_ID}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1567,8 +1564,7 @@ async function sendUsageUpdate(payload) {
       json = null;
     }
     if (!response.ok) {
-      const message =
-        json && json.message ? json.message : "Usage update failed.";
+      const message = json && json.message ? json.message : "Usage update failed.";
       throw new Error(message);
     }
     return json;
@@ -1588,9 +1584,7 @@ async function applyUsageDelta(deltaBytes, deltaObjects) {
 }
 
 async function deleteFilesFromS3Folder(selections, fileTypes) {
-  const entries = Array.isArray(selections)
-    ? selections.filter((entry) => entry && entry.key)
-    : [];
+  const entries = Array.isArray(selections) ? selections.filter((entry) => entry && entry.key) : [];
   if (entries.length === 0) {
     return;
   }
@@ -1602,15 +1596,11 @@ async function deleteFilesFromS3Folder(selections, fileTypes) {
       isFolder: Boolean(entry.isFolder),
     })),
   };
-  payload.totalSize = payload.keys.reduce(
-    (sum, entry) => sum + (Number(entry.size) || 0),
-    0,
-  );
+  payload.totalSize = payload.keys.reduce((sum, entry) => sum + (Number(entry.size) || 0), 0);
   payload.objectCount = entries.length;
 
   try {
-    const response = await fetch(
-      `${AVTT_S3}?user=${window.PATREON_ID}&deleteFiles=true`,
+    const response = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&deleteFiles=true`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1628,23 +1618,123 @@ async function deleteFilesFromS3Folder(selections, fileTypes) {
   }
 }
 
-async function getFileFromS3(fileName) {
-  const patreonId = fileName.split("/")[0];
-  fileName = fileName.replace(/^.*?\//gi, "");
-  const url = await fetch(`${AVTT_S3}?user=${patreonId}&filename=${fileName}`);
-  const json = await url.json();
-  const fileURL = json.downloadURL;
-  if (!fileURL) {
-    throw new Error("File not found on S3");
+// Enforce sequential fetches with retry backoff to protect the S3 endpoint.
+const GET_FILE_FROM_S3_MAX_RETRIES = 5;
+const GET_FILE_FROM_S3_BASE_DELAY_MS = 250;
+const GET_FILE_FROM_S3_MAX_DELAY_MS = 4000;
+const getFileFromS3Queue = [];
+const getFileFromS3Pending = new Map();
+let isProcessingGetFileFromS3Queue = false;
+
+function getFileFromS3Delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function processGetFileFromS3Queue() {
+  if (isProcessingGetFileFromS3Queue) 
+    return;
+  
+  isProcessingGetFileFromS3Queue = true;
+  while (getFileFromS3Queue.length > 0) {
+    const { originalName, cacheKey, sanitizedKey, resolve, reject } = getFileFromS3Queue.shift();
+    try {
+      const result = await fetchFileFromS3WithRetry(originalName, cacheKey, sanitizedKey);
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    }
   }
-  console.log("File found on S3: ", fileURL);
-  return fileURL;
+  isProcessingGetFileFromS3Queue = false;
+}
+
+async function fetchFileFromS3WithRetry(originalName, cacheKey, sanitizedKey) {
+  const patreonId = originalName.split("/")[0];
+  const fileNameOnly = sanitizedKey || originalName;
+  if (!patreonId) {
+    throw new Error("Missing Patreon ID for S3 file lookup");
+  }
+
+  let attempt = 0;
+  let lastError = null;
+  while (attempt < GET_FILE_FROM_S3_MAX_RETRIES) {
+    attempt += 1;
+    try {
+      const response = await fetch(`${AVTT_S3}?user=${patreonId}&filename=${fileNameOnly}`);
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || `Failed to fetch file from S3 (${response.status})`);
+      }
+      const fileURL = json.downloadURL;
+      if (!fileURL) {
+        throw new Error("File not found on S3");
+      }
+      window.avtt_file_urls[cacheKey] = {
+        url: fileURL,
+        expire: Date.now() + 3500000
+      };
+      if (sanitizedKey && sanitizedKey !== cacheKey) {
+        window.avtt_file_urls[sanitizedKey] = {
+          url: fileURL,
+          expire: Date.now() + 3500000
+        };
+      }
+      console.log("File found on S3: ", fileURL);
+      return fileURL;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= GET_FILE_FROM_S3_MAX_RETRIES) {
+        break;
+      }
+      const backoffDelay = Math.min(GET_FILE_FROM_S3_BASE_DELAY_MS * 2 ** (attempt - 1), GET_FILE_FROM_S3_MAX_DELAY_MS);
+      await getFileFromS3Delay(backoffDelay);
+    }
+  }
+  throw lastError || new Error("Failed to fetch file from S3");
+}
+
+async function getFileFromS3(fileName) {
+  const originalName = typeof fileName === "string" ? fileName : "";
+  if (!originalName) {
+    throw new Error("Missing filename for S3 request");
+  }
+  const cacheKey = originalName;
+  const sanitizedKey = originalName.replace(/^.*?\//gi, "");
+
+  if (!window.avtt_file_urls) {
+    window.avtt_file_urls = {};
+  } 
+  const cachedValue = window.avtt_file_urls[cacheKey] || (sanitizedKey ? window.avtt_file_urls[sanitizedKey] : undefined);
+  if (cachedValue?.expire > Date.now()){
+    return cachedValue.url;
+  }
+
+  if (getFileFromS3Pending.has(cacheKey)) {
+    return getFileFromS3Pending.get(cacheKey);
+  }
+
+  const queuedPromise = new Promise((resolve, reject) => {
+    getFileFromS3Queue.push({
+      originalName,
+      cacheKey,
+      sanitizedKey,
+      resolve,
+      reject,
+    });
+  });
+  getFileFromS3Pending.set(cacheKey, queuedPromise);
+  processGetFileFromS3Queue();
+
+  try {
+    return await queuedPromise;
+  } finally {
+    getFileFromS3Pending.delete(cacheKey);
+  }
 }
 
 async function getFolderListingFromS3(folderPath) {
-  const url = await fetch(
-    `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(folderPath)}&list=true`,
-  );
+  const url = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(folderPath)}&list=true`);
   const json = await url.json();
   const folderContents = json.folderContents || [];
   return folderContents;

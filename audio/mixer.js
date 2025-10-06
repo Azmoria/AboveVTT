@@ -204,7 +204,7 @@ class Mixer extends EventTarget {
                   }
                 }
                 else if(url.startsWith('above-bucket-not-a-url')){
-                    url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''))
+                    url = await getAvttStorageUrl(url);
                 }
                 player = new Audio(url);
                 player.preload = "metadata";

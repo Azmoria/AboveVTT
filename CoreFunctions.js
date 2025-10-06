@@ -1997,8 +1997,7 @@ async function normalize_scene_urls(scenes) {
   return scenesArray;
 }
 async function getAvttStorageUrl(url){
-  url = await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
-  return url;
+  return await getFileFromS3(url.replace('above-bucket-not-a-url/', ''));
 }
 async function updateImgSrc(url, container, video){
   url = parse_img(url)

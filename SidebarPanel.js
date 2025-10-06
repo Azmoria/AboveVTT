@@ -1444,8 +1444,9 @@ function build_sidebar_list_row(listItem) {
         //import dropbox
         const dropboxOptions = dropBoxOptions(function(links){
             for(let i = 0; i<links.length; i++){
-              create_token_inside(listItem, links[i].name, links[i].link);
-            }       
+              create_token_inside(listItem, links[i].name, links[i].link, undefined, undefined, undefined, true);
+            }   
+            did_change_mytokens_items();       
         }, true);
         const dropboxButton = createCustomDropboxChooser('', dropboxOptions);
 
@@ -1454,16 +1455,18 @@ function build_sidebar_list_row(listItem) {
 
         const oneDriveButton = createCustomOnedriveChooser('', function(links){
             for(let i = 0; i<links.length; i++){
-              create_token_inside(listItem, links[i].name, links[i].link, links[i].type);
-            }       
+              create_token_inside(listItem, links[i].name, links[i].link, links[i].type, undefined, undefined, undefined, true);
+            }   
+            did_change_mytokens_items();       
         }, 'multiple')
         oneDriveButton.toggleClass('token-row-button one-drive-button', true);
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
         
         const avttButton = createCustomAvttChooser('', function (links) { 
           for (let i = 0; i < links.length; i++) {
-            create_token_inside(listItem, links[i].name, links[i].link);
-          }             
+            create_token_inside(listItem, links[i].name, links[i].link, undefined, undefined, undefined, true);
+          }      
+          did_change_mytokens_items();   
         }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
         avttButton.toggleClass('token-row-button avtt-file-button', true);
         avttButton.attr('title', 'Create token from AVTT File Picker'); 
