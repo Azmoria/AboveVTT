@@ -705,7 +705,16 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
             #file-listing-section tr td {
                 vertical-align: middle;
             }
-            
+
+            #avtt-file-picker.avtt-drop-over {
+                border-color: var(--highlight-color, rgba(131, 185, 255, 1));
+                box-shadow: 0 0 8px rgba(131, 185, 255, 0.6);
+            }
+
+            #avtt-file-picker.avtt-drop-over #file-listing-section {
+                backdrop-filter: brightness(1.05);
+            }
+
             div#select-section>div {
                 margin: 5px 0px 0px 0px;
             }
@@ -786,49 +795,90 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
 
     const fileInput = document.getElementById('file-input');
     const createFolder = document.getElementById('create-folder');
-    
     const deleteSelectedButton = document.getElementById('delete-selected-files');
     const copyPathButton = document.getElementById('copy-path-to-clipboard');
     const searchInput = document.getElementById('search-files');
     const selectFile = document.getElementById('select-file');
-
-    
-    let selectedFile = null;
-        
+    const filePickerElement = document.getElementById('avtt-file-picker');
+    const uploadingIndicator = document.getElementById('uploading-file-indicator');
 
     refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
 
-    fileInput.addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
-        if (!file) {
+    const showUploadingProgress = (index, total) => {
+        if (!uploadingIndicator) {
+            return;
+        }
+        uploadingIndicator.innerHTML = `Uploading File <span id='file-number'>${index + 1}</span> of <span id='total-files'>${total}</span>`;
+        uploadingIndicator.style.display = 'block';
+    };
+
+    const hideUploadingIndicator = () => {
+        if (!uploadingIndicator) {
+            return;
+        }
+        uploadingIndicator.innerHTML = '';
+        uploadingIndicator.style.display = 'none';
+    };
+
+    const showUploadComplete = () => {
+        if (!uploadingIndicator) {
+            return;
+        }
+        uploadingIndicator.innerHTML = 'Upload Complete';
+        setTimeout(() => {
+            uploadingIndicator.style.display = 'none';
+        }, 2000);
+    };
+
+    const toNormalizedUploadPath = (file) => {
+        const rawPath = (file.webkitRelativePath || file.relativePath || file.name || '')
+            .replace(/^[\/]+/, '')
+            .replace(/\\/g, '/');
+        return rawPath || file.name;
+    };
+
+    const resolveUploadKey = (file) => `${currentFolder}${toNormalizedUploadPath(file)}`;
+
+    const uploadSelectedFiles = async (files) => {
+        const fileArray = Array.from(files || []).filter(Boolean);
+        if (!fileArray.length) {
             return;
         }
 
-
         let totalSize = 0;
-        
-        const uploadingIndicator = document.getElementById('uploading-file-indicator');
-        for (let i=0; i<event.target.files.length; i++){
+
+        for (let i = 0; i < fileArray.length; i += 1) {
+            const selectedFile = fileArray[i];
+            showUploadingProgress(i, fileArray.length);
+
+            const extension = getFileExtension(selectedFile.name);
+            if (!isAllowedExtension(extension)) {
+                alert('Skipping unsupported file type');
+                if (i < fileArray.length)
+                    continue;
+                hideUploadingIndicator();
+                return;
+            }
+            if (selectedFile.size > MAX_FILE_SIZE) {
+                alert('Skipping file. File is too large - 50MB maximum.');
+                if (i < fileArray.length)
+                    continue;
+                hideUploadingIndicator();
+                return;
+            }
+
+            totalSize += selectedFile.size;
+            if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit) {
+                alert('Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.');
+                if (i < fileArray.length)
+                    continue;
+                hideUploadingIndicator();
+                return;
+            }
+
             try {
-                const selectedFile = event.target.files[i];
-                const newHtml = `Uploading File<span id='file-number'>${i + 1}</span> of <span id='total-files'>${event.target.files.length}</span>`
-                uploadingIndicator.innerHTML = newHtml;
-                uploadingIndicator.style.display = 'block';
-                const extension = getFileExtension(selectedFile.name);
-                if (!isAllowedExtension(extension)) {
-                    alert('Unsupported file type. Please select an image, video, audio, or supported UVTT/JSON file.');
-                    return;
-                }
-                if (selectedFile.size > MAX_FILE_SIZE) {
-                    alert('File is too large - 50MB maximum.');
-                    return;
-                }
-                totalSize+= selectedFile.size;
-                if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit){
-                    alert('This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.');
-                    return;
-                }
-                const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(`${currentFolder}${selectedFile.name}`)}&user=${window.PATREON_ID}&upload=true`);
+                const uploadKey = resolveUploadKey(selectedFile);
+                const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(uploadKey)}&user=${window.PATREON_ID}&upload=true`);
                 if (!presignResponse.ok) {
                     throw new Error('Failed to retrieve upload URL.');
                 }
@@ -849,20 +899,182 @@ async function launchFilePicker(selectFunction = false, fileTypes=[]){
                 if (!uploadResponse.ok) {
                     throw new Error('Upload failed.');
                 }
-
-                uploadURL = data.uploadURL.split('?')[0];
-
             } catch (error) {
                 console.error(error);
                 alert(error.message || 'An unexpected error occurred while uploading.');
+                hideUploadingIndicator();
+                return;
             }
-            refreshFiles(currentFolder, true);
         }
-        uploadingIndicator.innerHTML = 'Upload Complete';
-        setTimeout(function(){
-            uploadingIndicator.style.display = 'none'
-        }, 2000)
+
+        refreshFiles(currentFolder, true);
+        showUploadComplete();
+    };
+
+    const assignRelativePath = (file, relativePath) => {
+        if (!file || !relativePath || file.webkitRelativePath) {
+            return file;
+        }
+        const normalized = relativePath.replace(/^[\/]+/, '').replace(/\\/g, '/');
+        try {
+            Object.defineProperty(file, 'relativePath', {
+                value: normalized,
+                configurable: true,
+            });
+        } catch (defineError) {
+            file.relativePath = normalized;
+        }
+        return file;
+    };
+
+    const readDirectoryEntries = async (directoryEntry, prefix = '') => {
+        const reader = directoryEntry.createReader();
+        const entries = [];
+
+        await new Promise((resolve, reject) => {
+            const read = () => {
+                reader.readEntries((batch) => {
+                    if (!batch.length) {
+                        resolve();
+                        return;
+                    }
+                    entries.push(...batch);
+                    read();
+                }, reject);
+            };
+            read();
+        });
+
+        const directoryPath = `${prefix}${directoryEntry.name ? `${directoryEntry.name}/` : ''}`;
+        const files = [];
+
+        for (const entry of entries) {
+            if (entry.isDirectory) {
+                const nestedFiles = await readDirectoryEntries(entry, directoryPath);
+                files.push(...nestedFiles);
+            } else if (entry.isFile) {
+                const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+                files.push({ file, relativePath: `${directoryPath}${file.name}` });
+            }
+        }
+
+        return files;
+    };
+
+    const collectDroppedFiles = async (dataTransfer) => {
+        if (!dataTransfer) {
+            return [];
+        }
+
+        const items = dataTransfer.items;
+        if (!items || !items.length) {
+            return Array.from(dataTransfer.files || []);
+        }
+
+        const collected = [];
+
+        for (const item of items) {
+            if (item.kind !== 'file') {
+                continue;
+            }
+
+            const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+
+            if (entry && entry.isDirectory) {
+                const directoryFiles = await readDirectoryEntries(entry);
+                for (const { file, relativePath } of directoryFiles) {
+                    collected.push(assignRelativePath(file, relativePath));
+                }
+            } else {
+                const file = item.getAsFile();
+                if (file) {
+                    collected.push(assignRelativePath(file, file.name));
+                }
+            }
+        }
+
+        if (!collected.length) {
+            return Array.from(dataTransfer.files || []);
+        }
+
+        return collected;
+    };
+
+    fileInput.addEventListener('change', async (event) => {
+        const files = Array.from(event.target.files || []);
+        if (!files.length) {
+            return;
+        }
+
+        try {
+            await uploadSelectedFiles(files);
+        } finally {
+            event.target.value = '';
+        }
     });
+
+    if (filePickerElement) {
+        let dragDepth = 0;
+
+        const preventDefaults = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        };
+
+        const activateDropState = () => {
+            filePickerElement.classList.add('avtt-drop-over');
+        };
+
+        const clearDropState = () => {
+            dragDepth = 0;
+            filePickerElement.classList.remove('avtt-drop-over');
+        };
+
+        filePickerElement.addEventListener('dragenter', (event) => {
+            preventDefaults(event);
+            dragDepth += 1;
+            activateDropState();
+        });
+
+        filePickerElement.addEventListener('dragover', (event) => {
+            preventDefaults(event);
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
+            }
+            activateDropState();
+        });
+
+        filePickerElement.addEventListener('dragleave', (event) => {
+            preventDefaults(event);
+            dragDepth = Math.max(dragDepth - 1, 0);
+            if (dragDepth === 0) {
+                clearDropState();
+            }
+        });
+
+        filePickerElement.addEventListener('drop', async (event) => {
+            preventDefaults(event);
+            clearDropState();
+
+            const transfer = event.dataTransfer;
+            if (!transfer) {
+                return;
+            }
+
+            try {
+                const droppedFiles = await collectDroppedFiles(transfer);
+                if (droppedFiles.length) {
+                    await uploadSelectedFiles(droppedFiles);
+                }
+            } catch (error) {
+                console.error('Failed to upload dropped files', error);
+                alert(error.message || 'An unexpected error occurred while uploading dropped files.');
+                hideUploadingIndicator();
+            }
+        });
+    }
+
+
     selectFile.addEventListener('click', (event) => {
         const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
 
