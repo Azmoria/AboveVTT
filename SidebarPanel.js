@@ -1806,11 +1806,14 @@ function did_click_row(clickEvent) {
       }
       else if(clickedItem.type == ItemType.Scene){
         // show the preview
-        build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
+        build_and_display_sidebar_flyout(clickEvent.clientY, async function (flyout) {
           if (clickedItem.isVideo) {
             flyout.append(`<div style="background:lightgray;padding:10px;">This map is a video. We don't currently support previewing videos.</div>`);
           } else {
-            flyout.append(`<img class='list-item-image-flyout' src="${clickedItem.image}" alt="scene map preview" />`);
+            const src = clickedItem.image.startsWith('above-bucket-not-a-url') 
+              ? await getAvttStorageUrl(clickedItem.image) 
+              : clickedItem.image;
+            flyout.append(`<img class='list-item-image-flyout' src="${src}" alt="scene map preview" />`);
           }
           flyout.css("right", "340px");
         });
@@ -2887,12 +2890,13 @@ function remove_sidebar_flyout(removeHoverNote) {
     flyouts.remove();
 }
 
-function list_item_image_flyout(hoverEvent) {
+async function list_item_image_flyout(hoverEvent) {
   console.log("list_item_image_flyout", hoverEvent);
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
-    let imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
-    let flyout = $(`<img id='list-item-image-flyout' src="${imgsrc}" alt="image preview" />`);
+    const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
+    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(imgsrc) : imgsrc;
+    const flyout = $(`<img id='list-item-image-flyout' src="${src}" alt="image preview" />`);
     flyout.css({
       "top": hoverEvent.clientY - 75,
     });
