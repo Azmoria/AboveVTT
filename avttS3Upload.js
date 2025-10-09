@@ -918,7 +918,39 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #avtt-file-picker.avtt-drop-over #file-listing-section {
                 backdrop-filter: brightness(1.05);
             }
-
+            #upFolder{
+              display:flex;
+              max-width:400px;
+              flex-wrap: nowrap;
+            }
+            a.avtt-breadcrumb {
+                flex-grow:1;
+                white-space: nowrap;
+            }
+            a.avtt-breadcrumb:not(:first-of-type):not(:last-of-type) {
+                flex-shrink:1;
+                overflow: hidden;
+            }
+            .crumbSeparator{
+                margin: 0 5px;
+            }
+            div#avtt-select-controls button {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 5px;
+                margin-right: 10px;
+            }
+            a.avtt-breadcrumb:not(:first-of-type):not(:last-of-type)
+            {
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            div#avtt-select-controls button:active{
+                transform: translate(1px, 1px);
+                background-color: color-mix(in srgb, var(--background-color, #fff) 100%, #808080 50%);
+            }
             div#select-section>div {
                 margin: 5px 0px 0px 0px;
             }
@@ -958,8 +990,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                     <input id='search-files' type='text' placeholder='Search' />
                 </div>
             </div>
-            <div id='upFolder' style='position: absolute; left: 30px; top:0px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
-                Back (breadcrumb placeholder)
+            <div id='upFolder' style='position: absolute; left: 30px; top:10px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
             </div>
             <div id="file-listing-section">
                 <table id="file-listing">
@@ -970,13 +1001,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 </table>
             </div>
             <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
-                <button id="delete-selected-files"
-                    style="background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Delete</button>
-                <button id="copy-path-to-clipboard"
-                    style="${typeof selectFunction === "function" ? "display: none;" : ""} background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-right:10px;">Copy
-                    Path</button>
-                <button id="select-file"
-                    style="${typeof selectFunction === "function" ? "" : "display: none;"} background: var(--background-color, #fff); color: var(--font-color, #000); border: 1px solid gray; border-radius:5px; padding:5px; margin-left:10px;">Select</button>
+                <button id="delete-selected-files">Delete</button>
+                <button id="copy-path-to-clipboard" style="${typeof selectFunction === "function" ? "display: none;" : ""}">Copy Path</button>
+                <button id="select-file" style="${typeof selectFunction === "function" ? "" : "display: none;"}">Select</button>
             </div>
         </div>
 
@@ -1468,20 +1495,28 @@ function refreshFiles(
 
     const fileListing = document.getElementById("file-listing");
     const upFolder = $("#upFolder");
-    if (path != "") upFolder.show();
-    else upFolder.hide();
-
-    upFolder.off("click.upFolder").on("click.upFolder", function (e) {
+    if (path != ""){
+      const splitPath = path.replace(/\/$/gi, "").split("/");
+      const breadCrumbs = splitPath.map((part, index) => {
+        const crumbPath = splitPath.slice(0, index + 1).join("/") + "/";
+        return `<a href="#" class="avtt-breadcrumb" data-path="${crumbPath}">${part}</a>`;
+      });
+      breadCrumbs.unshift(`<a href="#" class="avtt-breadcrumb" data-path="">Home</a>`);
+      upFolder.html(`${breadCrumbs.join("<span class='crumbSeparator'>></span>")}`);
+      upFolder.find('.avtt-breadcrumb').on("click", function (e) {
         e.preventDefault();
-        if (path.match(/(.*)\/.*\/$/gi)) {
-        const newPath = path.replace(/(.*\/).*\/$/gi, "$1");
+        const newPath = e.currentTarget.getAttribute("data-path");
         refreshFiles(newPath, undefined, undefined, undefined, fileTypes);
         currentFolder = newPath;
-        } else {
-        refreshFiles("", undefined, undefined, undefined, fileTypes);
-        currentFolder = "";
-        }
-    });
+      });
+      upFolder.show();
+    } 
+    else{
+      upFolder.hide();
+    }
+
+
+
     const insertFiles = (files, searchTerm, fileTypes) => {
         console.log("Files in folder: ", files);
         if (files.length === 0) {
@@ -1532,7 +1567,7 @@ function refreshFiles(
             const fileTypeIcon = {
               [avttFilePickerTypes.FOLDER]: "folder",
               [avttFilePickerTypes.UVTT]: "description",
-              [avttFilePickerTypes.IMAGE]: "image_mode",
+              [avttFilePickerTypes.IMAGE]: "imagesmode",
               [avttFilePickerTypes.VIDEO]: "video_file",
               [avttFilePickerTypes.AUDIO]: "audio_file",
               [avttFilePickerTypes.PDF]: "picture_as_pdf",
@@ -1545,7 +1580,7 @@ function refreshFiles(
             `<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? "folder" : ""}" value="${path}" data-size="${isFolder ? 0 : size}"></td>`,
             );
             const label = $(
-              `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}"><span class="material-symbols-outlined">${fileTypeIcon[type]}</span>${isFolder ? path.replace(/\/(.*?\/)$/gi, "$1") : path.replace(/\/(.*?)$/gi, "$1")}</label></td>`,
+              `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}"><span class="material-symbols-outlined">${fileTypeIcon[type]}</span>${path.split('/').filter(d=>d).pop()}</label></td>`,
             );
 
             
