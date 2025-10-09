@@ -13,6 +13,7 @@ const allowedVideoTypes = ["mp4", "mov", "avi", "mkv", "wmv", "flv", "webm"];
 const allowedAudioTypes = ["mp3", "wav", "aac", "flac", "ogg"];
 const allowedJsonTypes = ["json", "uvtt", "dd2vtt", "df2vtt"];
 const allowedDocTypes = ["pdf"];
+const allowedTextTypes = ["abovevtt", "csv"];
 
 const PATREON_AUTH_STORAGE_KEYS = Object.freeze({
   state: "avtt.patreon.state",
@@ -28,6 +29,8 @@ const avttFilePickerTypes = Object.freeze({
   UVTT: "UVTT",
   PDF: "PDF",
   IMAGE: "IMAGE",
+  ABOVEVTT: "ABOVEVTT",
+  CSV: "CSV",
 });
 
 let activeUserLimit = 0;
@@ -874,6 +877,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             }
             #file-listing-section tr{
                 padding: 3px 5px;
+                margin: 5px 0px;
             }
             #file-listing-section tr input {
                 height: 16px;
@@ -886,6 +890,24 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             }
             #file-listing-section tr td {
                 vertical-align: middle;
+            }
+            label.avtt-file-name .material-symbols-outlined {
+                font-size: 26px;
+                vertical-align: middle;
+                margin-right: 10px;
+                color: #e11414;
+            }
+
+            label.avtt-file-name .material-symbols-outlined {
+              font-variation-settings:
+              'FILL' 1,
+              'wght' 700,
+              'GRAD' 0,
+              'opsz' 48
+            }
+
+            label.avtt-file-name {
+              vertical-align: middle;
             }
 
             #avtt-file-picker.avtt-drop-over {
@@ -1366,7 +1388,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       allowedVideoTypes.includes(extension) ||
       allowedAudioTypes.includes(extension) ||
       allowedJsonTypes.includes(extension) ||
-      allowedDocTypes.includes(extension)
+      allowedDocTypes.includes(extension) ||
+      allowedTextTypes.includes(extension)
     );
   }
 
@@ -1390,6 +1413,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
     if (allowedDocTypes.includes(extension)) {
       return `application/pdf`;
+    }
+    if (allowedTextTypes.includes(extension)) {
+      return "text/plain";
     }
     return "";
   }
@@ -1481,28 +1507,48 @@ function refreshFiles(
                 : 0;
 
             const isFolder = path.match(/\/$/gi);
+            const extension = getFileExtension(rawKey);
+            let type;
+            if (isFolder) {
+              type = avttFilePickerTypes.FOLDER;
+            } else if (allowedJsonTypes.includes(extension)) {
+              type = avttFilePickerTypes.UVTT;
+            } else if (allowedImageTypes.includes(extension)) {
+              type = avttFilePickerTypes.IMAGE;
+            } else if (allowedVideoTypes.includes(extension)) {
+              type = avttFilePickerTypes.VIDEO;
+            } else if (allowedAudioTypes.includes(extension)) {
+              type = avttFilePickerTypes.AUDIO;
+            } else if (allowedDocTypes.includes(extension)) {
+              type = avttFilePickerTypes.PDF;
+            } else if (allowedTextTypes.includes(extension)) {
+              if (extension.toLowerCase() === avttFilePickerTypes.ABOVEVTT.toLowerCase()) {
+                type = avttFilePickerTypes.ABOVEVTT;
+              } else if (extension.toLowerCase() === avttFilePickerTypes.CSV.toLowerCase()) {
+                type = avttFilePickerTypes.CSV;
+              }
+            }
+
+            const fileTypeIcon = {
+              [avttFilePickerTypes.FOLDER]: "folder",
+              [avttFilePickerTypes.UVTT]: "description",
+              [avttFilePickerTypes.IMAGE]: "image_mode",
+              [avttFilePickerTypes.VIDEO]: "video_file",
+              [avttFilePickerTypes.AUDIO]: "audio_file",
+              [avttFilePickerTypes.PDF]: "picture_as_pdf",
+              [avttFilePickerTypes.ABOVEVTT]: "description",
+              [avttFilePickerTypes.CSV]: "csv",
+            }
+
+           
             const input = $(
             `<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? "folder" : ""}" value="${path}" data-size="${isFolder ? 0 : size}"></td>`,
             );
             const label = $(
-            `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}">${path}</label></td>`,
+              `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}"><span class="material-symbols-outlined">${fileTypeIcon[type]}</span>${isFolder ? path.replace(/\/(.*?\/)$/gi, "$1") : path.replace(/\/(.*?)$/gi, "$1")}</label></td>`,
             );
 
-            const extension = getFileExtension(rawKey);
-            let type;
-            if (isFolder) {
-            type = avttFilePickerTypes.FOLDER;
-            } else if (allowedJsonTypes.includes(extension)) {
-            type = avttFilePickerTypes.UVTT;
-            } else if (allowedImageTypes.includes(extension)) {
-            type = avttFilePickerTypes.IMAGE;
-            } else if (allowedVideoTypes.includes(extension)) {
-            type = avttFilePickerTypes.VIDEO;
-            } else if (allowedAudioTypes.includes(extension)) {
-            type = avttFilePickerTypes.AUDIO;
-            } else if (allowedDocTypes.includes(extension)) {
-            type = avttFilePickerTypes.PDF;
-            }
+            
             if (searchTerm != undefined) {
             const lowerSearch = searchTerm.toLowerCase();
 
