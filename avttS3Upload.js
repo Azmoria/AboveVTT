@@ -1278,66 +1278,66 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
   });
 
-  if (filePickerElement) {
-    let dragDepth = 0;
 
-    const preventDefaults = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
+  let dragDepth = 0;
 
-    const activateDropState = () => {
-      filePickerElement.classList.add("avtt-drop-over");
-    };
+  const preventDefaults = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
-    const clearDropState = () => {
-      dragDepth = 0;
-      filePickerElement.classList.remove("avtt-drop-over");
-    };
+  const activateDropState = () => {
+    filePickerElement.classList.add("avtt-drop-over");
+  };
 
-    filePickerElement.addEventListener("dragenter", (event) => {
-      preventDefaults(event);
-      dragDepth += 1;
-      activateDropState();
-    });
+  const clearDropState = () => {
+    dragDepth = 0;
+    filePickerElement.classList.remove("avtt-drop-over");
+  };
 
-    filePickerElement.addEventListener("dragover", (event) => {
-      preventDefaults(event);
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "copy";
-      }
-      activateDropState();
-    });
+  filePickerElement.addEventListener("dragenter", (event) => {
+    preventDefaults(event);
+    dragDepth += 1;
+    activateDropState();
+  });
 
-    filePickerElement.addEventListener("dragleave", (event) => {
-      preventDefaults(event);
-      dragDepth = Math.max(dragDepth - 1, 0);
-      if (dragDepth === 0) {
-        clearDropState();
-      }
-    });
+  filePickerElement.addEventListener("dragover", (event) => {
+    preventDefaults(event);
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    activateDropState();
+  });
 
-    filePickerElement.addEventListener("drop", async (event) => {
-      preventDefaults(event);
+  filePickerElement.addEventListener("dragleave", (event) => {
+    preventDefaults(event);
+    dragDepth = Math.max(dragDepth - 1, 0);
+    if (dragDepth === 0) {
       clearDropState();
+    }
+  });
 
-      const transfer = event.dataTransfer;
-      if (!transfer) {
-        return;
-      }
+  filePickerElement.addEventListener("drop", async (event) => {
+    preventDefaults(event);
+    clearDropState();
 
-      try {
-        const droppedFiles = await collectDroppedFiles(transfer);
-        if (droppedFiles.length) {
-          await uploadSelectedFiles(droppedFiles);
-        }
-      } catch (error) {
-        console.error("Failed to upload dropped files", error);
-        alert(error.message || "An unexpected error occurred while uploading dropped files.");
-        hideUploadingIndicator();
+    const transfer = event.dataTransfer;
+    if (!transfer) {
+      return;
+    }
+
+    try {
+      const droppedFiles = await collectDroppedFiles(transfer);
+      if (droppedFiles.length) {
+        await uploadSelectedFiles(droppedFiles);
       }
-    });
-  }
+    } catch (error) {
+      console.error("Failed to upload dropped files", error);
+      alert(error.message || "An unexpected error occurred while uploading dropped files.");
+      hideUploadingIndicator();
+    }
+  });
+  
 
   selectFile.addEventListener("click", (event) => {
     const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
