@@ -142,6 +142,7 @@ function avttEnsureContextMenu() {
   menu.innerHTML = `
     <button type="button" data-action="cut">Cut</button>
     <button type="button" data-action="paste">Paste</button>
+    <button type="button" data-action="copyPath">Copy Path</button>
     <button type="button" data-action="rename">Rename</button>
     <button type="button" data-action="delete">Delete</button>
   `;
@@ -286,6 +287,24 @@ async function avttHandleContextAction(action) {
         await avttHandlePasteFromClipboard(avttContextMenuState.targetPath);
       } else {
         await avttHandlePasteFromClipboard(currentFolder);
+      }
+      break;
+    }
+    case "copyPath": {
+      try {   
+        const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
+
+        if (selectedCheckboxes.length == 0) {
+          return;
+        }
+        const paths = [];
+        for (const selected of selectedCheckboxes) {
+          paths.push(`above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`);
+        }
+        const copyText = paths.join(", ");
+        navigator.clipboard.writeText(copyText);
+      } catch (err) {
+        console.error('Failed to copy text: ', err);
       }
       break;
     }
@@ -2023,18 +2042,14 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   });
 
   copyPathButton.addEventListener("click", () => {
-    const selectedCheckboxes = $(
-      '#file-listing input[type="checkbox"]:checked',
-    );
+    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
 
     if (selectedCheckboxes.length == 0) {
       return;
     }
     const paths = [];
     for (const selected of selectedCheckboxes) {
-      paths.push(
-        `above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`,
-      );
+      paths.push(`above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`);
     }
     const copyText = paths.join(", ");
     navigator.clipboard.writeText(copyText);
@@ -2366,10 +2381,11 @@ function refreshFiles(
         const checkboxCell = $(`<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`);
         const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`);
         const typeCell = $(`<td>${entry.type || ""}</td>`);
+        const sizeCell = $(`<td>${entry.isFolder ? "" : formatFileSize(entry.size) || ""}</td>`);
 
         setLineImgSrc(labelCell.find("span.material-symbols-outlined")[0], entry);
 
-        $(listItem).append(checkboxCell, labelCell, typeCell);
+        $(listItem).append(checkboxCell, labelCell, typeCell, sizeCell);
         if (entry.isFolder) {
           labelCell
             .off("click.openFolder")
