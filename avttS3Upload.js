@@ -1510,7 +1510,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 vertical-align: middle;
             }
             label.avtt-file-name .material-symbols-outlined {
-                font-size: 26px;
+                font-size: 35px;
                 vertical-align: middle;
                 margin-right: 10px;
                 color: #e11414;
@@ -1578,6 +1578,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 text-overflow: ellipsis;    
                 white-space: nowrap;
                 margin-bottom: 0px;
+                display:flex;
+                align-items: center;
             }
             #select-section{
                 display: flex;
@@ -2295,7 +2297,64 @@ function refreshFiles(
         }
         return a.relativePath.localeCompare(b.relativePath);
       });
+      const setLineImgSrc = async (container, entry) => {
+        try{
+          if (entry.type !== avttFilePickerTypes.IMAGE && entry.type !== avttFilePickerTypes.VIDEO) 
+            return;
+          
+          const path = entry.rawKey;
+          if (!path) 
+            return;
+          const url = await getAvttStorageUrl(path);
 
+          if (!url) 
+            return;
+          
+          if(entry.type === avttFilePickerTypes.IMAGE){
+            const img = document.createElement("img");
+            img.src = url;
+            img.style.width = "35px";
+            img.style.height = "35px";
+            img.style.objectFit = "cover";
+            img.style.marginRight = "10px";
+            img.style.verticalAlign = "middle";
+            img.loading = "lazy";
+
+            container.replaceWith(img);
+          }else if(entry.type === avttFilePickerTypes.VIDEO){
+            const video = document.createElement("video");
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+ 
+            const $video = $(video);
+            $video.one('loadedmetadata', function () {
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+            });
+
+            $video.one('canplay', function () {
+              canvas.style.display = 'inline';
+              ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+              $video.off('loadedmetadata');
+              $video.off('canplay');
+              video.src = "";
+              $video.remove();              
+            });
+            canvas.style.width = "35px";
+            canvas.style.height = "35px";
+            canvas.style.marginRight = "10px";
+            canvas.style.verticalAlign = "middle";
+            canvas.style.objectFit = "cover";
+            video.currentTime = 0.001;
+            video.src = url;
+            video.load();
+
+            container.replaceWith(canvas);
+          }
+        } catch(error){
+          console.warn("Failed to load preview for ", path, error);
+        }
+      }
       fileListing.innerHTML = "";
       for (const entry of prepared) {
         const listItem = document.createElement("tr");
@@ -2304,13 +2363,11 @@ function refreshFiles(
         listItem.dataset.isFolder = entry.isFolder ? "true" : "false";
         listItem.dataset.type = entry.type || "";
         listItem.setAttribute("draggable", "true");
-        const checkboxCell = $(
-          `<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`,
-        );
-        const labelCell = $(
-          `<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`,
-        );
+        const checkboxCell = $(`<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`);
+        const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`);
         const typeCell = $(`<td>${entry.type || ""}</td>`);
+
+        setLineImgSrc(labelCell.find("span.material-symbols-outlined")[0], entry);
 
         $(listItem).append(checkboxCell, labelCell, typeCell);
         if (entry.isFolder) {
