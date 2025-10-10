@@ -14,6 +14,8 @@ const allowedAudioTypes = ["mp3", "wav", "aac", "flac", "ogg"];
 const allowedJsonTypes = ["json", "uvtt", "dd2vtt", "df2vtt"];
 const allowedDocTypes = ["pdf"];
 const allowedTextTypes = ["abovevtt", "csv"];
+let avttUploadController;
+let avttUploadSignal;
 
 const PATREON_AUTH_STORAGE_KEYS = Object.freeze({
   state: "avtt.patreon.state",
@@ -803,6 +805,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     "input, li, a, label",
   );
   draggableWindow.toggleClass("prevent-sidebar-modal-close", true);
+  draggableWindow.find(".title_bar_close_button").off("click.cancelUpload").on("click.cancelUpload", () => {
+    if (avttUploadController) {
+      avttUploadController.abort('User cancelled upload by closing window.');
+    }
+  });
+  
   let membership;
   try {
     membership = await PatreonAuth.ensureMembership();
@@ -1029,9 +1037,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   const searchInput = document.getElementById("search-files");
   const selectFile = document.getElementById("select-file");
   const filePickerElement = document.getElementById("avtt-file-picker");
-  const uploadingIndicator = document.getElementById(
-    "uploading-file-indicator",
-  );
+  const uploadingIndicator = document.getElementById("uploading-file-indicator");
 
   refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
 
@@ -1104,13 +1110,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
 
 
       totalSize += selectedFile.size;
-      if (
-        activeUserLimit !== undefined &&
-        totalSize + S3_Current_Size > activeUserLimit
-      ) {
-        alert(
-          "Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.",
-        );
+      if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit) {
+        alert("Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.");
         if (i < fileArray.length) {
           continue;
         }
@@ -1119,9 +1120,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       }
       try {
         const uploadKey = resolveUploadKey(selectedFile);
-        const presignResponse = await fetch(
-          `${AVTT_S3}?filename=${encodeURIComponent(uploadKey)}&user=${window.PATREON_ID}&upload=true`,
-        );
+        const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(uploadKey)}&user=${window.PATREON_ID}&upload=true`);
         if (!presignResponse.ok) {
           throw new Error("Failed to retrieve upload URL.");
         }
@@ -1132,11 +1131,13 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         if (inferredType) {
           uploadHeaders["Content-Type"] = inferredType;
         }
-
+        avttUploadController = new AbortController();
+        avttUploadSignal = avttUploadController.signal;
         const uploadResponse = await fetch(data.uploadURL, {
           method: "PUT",
           body: selectedFile,
           headers: uploadHeaders,
+          signal: avttUploadSignal, 
         });
 
         if (!uploadResponse.ok) {
@@ -1147,7 +1148,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         uploadedCount += 1;
       } catch (error) {
         console.error(error);
-        alert(error.message || "An unexpected error occurred while uploading.");
+        if (error === 'User cancelled upload by closing window.') {
+          alert(error || "Aborted manually.");
+        }
+        else{
+          alert(error.message || "An unexpected error occurred while uploading.");
+        }
         if (uploadedCount > 0) {
           await applyUsageDelta(uploadedBytes, uploadedCount);
         }

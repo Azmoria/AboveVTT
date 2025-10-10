@@ -2368,7 +2368,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
   /*Set draggable and resizeable on monster sheets for players. Allow dragging and resizing through iFrames by covering them to avoid mouse interaction*/
   const close_title_button = $(`<div class="title_bar_close_button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>`);
   titleBar.append(close_title_button);
-  close_title_button.on("click", function (event) {
+  close_title_button.on("click.close", function (event) {
     close_and_cleanup_generic_draggable_window($(event.currentTarget).closest('.resize_drag_window').attr('id'));
   });
 
