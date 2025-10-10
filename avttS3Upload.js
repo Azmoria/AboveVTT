@@ -4,12 +4,29 @@ const AVTT_S3 =
 let S3_Current_Size = 0;
 let currentFolder = "";
 let activeFilePickerFilter;
+const AVTT_SORT_COLUMNS = Object.freeze({
+  NAME: "name",
+  TYPE: "type",
+  SIZE: "size",
+});
+const avttSortState = {
+  column: "default",
+  direction: null,
+};
 const AVTT_CLIPBOARD_MODE = Object.freeze({
   CUT: "cut",
   COPY: "copy",
 });
 let avttClipboard = { mode: null, items: [] };
 let avttDragItems = null;
+let avttLastSelectedIndex = null;
+const avttFolderListingCache = new Map();
+
+function avttEscapeHtml(value) {
+  const span = document.createElement("span");
+  span.textContent = String(value);
+  return span.innerHTML;
+}
 const avttContextMenuState = {
   element: null,
   targetPath: "",
@@ -29,17 +46,38 @@ function avttGetSelectedEntries() {
 
 function avttSelectPaths(paths) {
   const pathSet = new Set(Array.isArray(paths) ? paths : []);
+  let lastIndex = null;
   $('#file-listing input[type="checkbox"]').each(function () {
-    this.checked = pathSet.has(this.value);
+    const shouldCheck = pathSet.has(this.value);
+    this.checked = shouldCheck;
+    if (shouldCheck) {
+      const indexAttr = this.getAttribute("data-index");
+      if (indexAttr !== null) {
+        lastIndex = Number(indexAttr);
+      }
+    }
   });
+  avttLastSelectedIndex = lastIndex;
   avttUpdateSelectNonFoldersCheckbox();
   avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
 }
 
 function avttEnsureSelectionIncludes(path, isFolder) {
   const selected = avttGetSelectedEntries();
   const hasPath = selected.some((entry) => entry.key === path);
   if (hasPath) {
+    const checkbox = $('#file-listing input[type="checkbox"]').filter(function () {
+      return this.value === path;
+    });
+    checkbox.each(function () {
+      const indexAttr = this.getAttribute("data-index");
+      if (indexAttr !== null) {
+        avttLastSelectedIndex = Number(indexAttr);
+      }
+    });
+    avttUpdateSelectNonFoldersCheckbox();
+    avttUpdateActionsMenuState();
     return selected;
   }
   avttSelectPaths([path]);
@@ -48,7 +86,13 @@ function avttEnsureSelectionIncludes(path, isFolder) {
   });
   checkbox.each(function () {
     this.classList.toggle("folder", isFolder);
+    const indexAttr = this.getAttribute("data-index");
+    if (indexAttr !== null) {
+      avttLastSelectedIndex = Number(indexAttr);
+    }
   });
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
   return avttGetSelectedEntries();
 }
 
@@ -231,6 +275,285 @@ function avttToggleActionsMenu() {
   }
 }
 
+function avttGetAllCheckboxElements() {
+  return Array.from(
+    document.querySelectorAll('#file-listing input[type="checkbox"]'),
+  );
+}
+
+function avttHandleCheckboxClick(event, index) {
+  const checkbox = event.currentTarget;
+  if (!checkbox) {
+    return;
+  }
+  const allCheckboxes = avttGetAllCheckboxElements();
+  if (
+    event.shiftKey &&
+    avttLastSelectedIndex !== null &&
+    avttLastSelectedIndex >= 0 &&
+    avttLastSelectedIndex < allCheckboxes.length
+  ) {
+    const start = Math.min(index, avttLastSelectedIndex);
+    const end = Math.max(index, avttLastSelectedIndex);
+    const shouldCheck = checkbox.checked;
+    for (let i = start; i <= end; i += 1) {
+      const candidate = allCheckboxes[i];
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.checked !== shouldCheck) {
+        candidate.checked = shouldCheck;
+      }
+    }
+  }
+  avttLastSelectedIndex = index;
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
+}
+
+function avttDefaultSortComparator(a, b) {
+  if (a.isFolder && !b.isFolder) {
+    return -1;
+  }
+  if (!a.isFolder && b.isFolder) {
+    return 1;
+  }
+  const nameCompare = (a.displayName || "").localeCompare(
+    b.displayName || "",
+    undefined,
+    { sensitivity: "base" },
+  );
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+  return (a.relativePath || "").localeCompare(b.relativePath || "");
+}
+
+function avttSortEntries(entries) {
+  if (!Array.isArray(entries)) {
+    return;
+  }
+  const { column, direction } = avttSortState;
+  if (column === "default" || !column || !direction) {
+    entries.sort(avttDefaultSortComparator);
+    return;
+  }
+  const multiplier = direction === "desc" ? -1 : 1;
+  entries.sort((a, b) => {
+    if (a.isFolder && !b.isFolder) {
+      return -1;
+    }
+    if (!a.isFolder && b.isFolder) {
+      return 1;
+    }
+    let compare = 0;
+    if (column === AVTT_SORT_COLUMNS.NAME) {
+      compare = (a.displayName || "").localeCompare(
+        b.displayName || "",
+        undefined,
+        { sensitivity: "base" },
+      );
+    } else if (column === AVTT_SORT_COLUMNS.TYPE) {
+      compare = (a.type || "").localeCompare(
+        b.type || "",
+        undefined,
+        { sensitivity: "base" },
+      );
+    } else if (column === AVTT_SORT_COLUMNS.SIZE) {
+      const sizeA = Number(a.size) || 0;
+      const sizeB = Number(b.size) || 0;
+      compare = sizeA - sizeB;
+    }
+    if (compare === 0) {
+      compare = avttDefaultSortComparator(a, b);
+    }
+    return compare * multiplier;
+  });
+}
+
+function avttUpdateSortIndicators() {
+  const headers = document.querySelectorAll(
+    "#avtt-column-headers [data-sort]",
+  );
+  headers.forEach((header) => {
+    const label = header.getAttribute("data-label") || header.textContent.trim();
+    header.innerHTML = "";
+    header.classList.remove("active");
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    header.appendChild(labelNode);
+    if (
+      avttSortState.column === header.getAttribute("data-sort") &&
+      avttSortState.direction
+    ) {
+      header.classList.add("active");
+      const indicator = document.createElement("span");
+      indicator.className = "avtt-sort-indicator";
+      indicator.textContent = avttSortState.direction === "asc" ? "▲" : "▼";
+      header.appendChild(indicator);
+    }
+  });
+}
+
+function avttRefreshWithCurrentSort() {
+  const searchInput = document.getElementById("search-files");
+  const searchTerm = searchInput ? searchInput.value.trim() : "";
+  if (searchTerm) {
+    refreshFiles("", false, true, searchTerm, activeFilePickerFilter);
+  } else {
+    refreshFiles(currentFolder, false, false, undefined, activeFilePickerFilter);
+  }
+}
+
+function avttToggleSort(column) {
+  if (!column) {
+    avttSortState.column = "default";
+    avttSortState.direction = null;
+  } else if (avttSortState.column !== column) {
+    avttSortState.column = column;
+    avttSortState.direction = "asc";
+  } else if (avttSortState.direction === "asc") {
+    avttSortState.direction = "desc";
+  } else {
+    avttSortState.column = "default";
+    avttSortState.direction = null;
+  }
+  avttUpdateSortIndicators();
+  avttRefreshWithCurrentSort();
+}
+
+function avttGetParentFolder(relativeKey) {
+  if (typeof relativeKey !== "string") {
+    return "";
+  }
+  const normalized = relativeKey.replace(/\\/g, "/");
+  if (!normalized.includes("/")) {
+    return "";
+  }
+  return normalized.replace(/[^/]+$/, "");
+}
+
+async function avttGetFolderListingCached(folderPath = "") {
+  const normalized = typeof folderPath === "string" ? folderPath : "";
+  if (avttFolderListingCache.has(normalized)) {
+    return avttFolderListingCache.get(normalized);
+  }
+  try {
+    const listing = await getFolderListingFromS3(normalized);
+    const normalizedListing = Array.isArray(listing) ? listing.slice() : [];
+    avttFolderListingCache.set(normalized, normalizedListing);
+    return normalizedListing;
+  } catch (error) {
+    console.warn("Failed to load folder listing for cache", folderPath, error);
+    avttFolderListingCache.set(normalized, []);
+    return [];
+  }
+}
+
+function avttRegisterPendingUploadKey(relativeKey, size = 0) {
+  const parentFolder = avttGetParentFolder(relativeKey);
+  if (!avttFolderListingCache.has(parentFolder)) {
+    return;
+  }
+  const listing = avttFolderListingCache.get(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
+  const existing = listing.find((entry) => (entry?.Key || entry?.key) === normalizedKey);
+  if (existing) {
+    existing.Size = size;
+  } else {
+    listing.push({
+      Key: normalizedKey,
+      Size: size,
+    });
+  }
+}
+
+async function avttDoesObjectExist(relativeKey) {
+  const parentFolder = avttGetParentFolder(relativeKey);
+  const listing = await avttGetFolderListingCached(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
+  return listing.some((entry) => (entry?.Key || entry?.key) === normalizedKey);
+}
+
+async function avttDeriveUniqueKey(originalKey) {
+  const parentFolder = avttGetParentFolder(originalKey);
+  const baseNameWithExt = originalKey.slice(parentFolder.length);
+  const dotIndex = baseNameWithExt.lastIndexOf(".");
+  const baseName =
+    dotIndex >= 0 ? baseNameWithExt.slice(0, dotIndex) : baseNameWithExt;
+  const extension = dotIndex >= 0 ? baseNameWithExt.slice(dotIndex) : "";
+  let counter = 1;
+  while (counter < 1000) {
+    const candidateName = `${baseName} (${counter})${extension}`;
+    const candidateKey = `${parentFolder}${candidateName}`;
+    const exists = await avttDoesObjectExist(candidateKey);
+    if (!exists) {
+      avttRegisterPendingUploadKey(candidateKey);
+      return candidateKey;
+    }
+    counter += 1;
+  }
+  throw new Error("Unable to generate a unique filename for the uploaded file.");
+}
+
+async function avttPromptUploadConflict({ fileName }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "avtt-conflict-overlay";
+    const modal = document.createElement("div");
+    modal.className = "avtt-conflict-modal";
+    const safeName = avttEscapeHtml(fileName);
+    modal.innerHTML = `
+      <h3>File Already Exists</h3>
+      <p>The file <strong>${safeName}</strong> already exists. What would you like to do?</p>
+      <div class="avtt-conflict-apply-all">
+        <input type="checkbox" id="avtt-conflict-apply-all" />
+        <label for="avtt-conflict-apply-all">Apply this choice to all remaining conflicts</label>
+      </div>
+      <div class="avtt-conflict-modal-buttons">
+        <button type="button" data-action="skip">Skip</button>
+        <button type="button" data-action="keepBoth">Keep Both</button>
+        <button type="button" data-action="overwrite">Overwrite</button>
+      </div>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const applyAllCheckbox = modal.querySelector("#avtt-conflict-apply-all");
+
+    const cleanup = (result) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.remove();
+      resolve(result);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        cleanup({ action: "skip", applyAll: applyAllCheckbox?.checked || false });
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+
+    modal
+      .querySelectorAll("button[data-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.getAttribute("data-action");
+          const applyAll = applyAllCheckbox?.checked || false;
+          cleanup({ action, applyAll });
+        });
+      });
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        cleanup({ action: "skip", applyAll: applyAllCheckbox?.checked || false });
+      }
+    });
+  });
+}
+
 async function avttHandleToolbarAction(action) {
   let handled = false;
   switch (action) {
@@ -263,6 +586,7 @@ async function avttHandleToolbarAction(action) {
       if (selection.length > 0) {
         await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
         handled = true;
+        avttUpdateSelectNonFoldersCheckbox();
       }
       break;
     }
@@ -273,6 +597,7 @@ async function avttHandleToolbarAction(action) {
     avttHideActionsMenu();
   }
   avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
 }
 
 function avttCutSelectedFiles() {
@@ -483,6 +808,9 @@ async function avttHandleContextAction(action) {
         return;
       }
       await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+      avttApplyClipboardHighlights();
       break;
     }
     default:
@@ -1577,7 +1905,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     false,
     undefined,
     "800px",
-    "600px",
+    "800px",
     undefined,
     undefined,
     false,
@@ -1659,14 +1987,14 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 padding: 10px;
                 list-style: none;
                 padding: 0px;
-                height: calc(100% - 170px);
+                height: calc(100% - 220px);
                 overflow-y: auto;
             }
             #avtt-listing-toolbar {
                 display: flex;
                 flex-direction: column;
                 gap: 6px;
-                margin: 45px 10px 0 10px;
+                margin: 5px 10px 0 10px;
             }
             #avtt-listing-toolbar .avtt-toolbar-row {
                 display: flex;
@@ -1905,6 +2233,56 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 cursor: not-allowed;
             }
         
+            .avtt-conflict-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 100000;
+            }
+            .avtt-conflict-modal {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border-radius: 6px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+                padding: 18px 20px;
+                width: min(420px, 90vw);
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .avtt-conflict-modal h3 {
+                margin: 0;
+                font-size: 1.1em;
+            }
+            .avtt-conflict-modal-buttons {
+                display: flex;
+                gap: 8px;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+            }
+            .avtt-conflict-modal button {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid gray;
+                border-radius: 4px;
+                padding: 6px 12px;
+                cursor: pointer;
+            }
+            .avtt-conflict-modal button:hover {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            .avtt-conflict-modal button:focus-visible {
+                outline: 2px solid var(--highlight-color, rgba(131, 185, 255, 1));
+                outline-offset: 2px;
+            }
+            .avtt-conflict-apply-all {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
         </style>
         <div id="avtt-file-picker">
             <div id="select-section">
@@ -1942,9 +2320,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 </div>
                 <div id="avtt-column-headers">
                     <span></span>
-                    <span>Name</span>
-                    <span>Type</span>
-                    <span>Size</span>
+                    <span class="avtt-sortable-header" data-sort="name" data-label="Name">Name</span>
+                    <span class="avtt-sortable-header" data-sort="type" data-label="Type">Type</span>
+                    <span class="avtt-sortable-header" data-sort="size" data-label="Size">Size</span>
                 </div>
             </div>
             <div id="file-listing-section">
@@ -2001,8 +2379,20 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       nonFolderCheckboxes.forEach((checkbox) => {
         checkbox.checked = shouldSelect;
       });
+      if (nonFolderCheckboxes.length) {
+        const lastCheckbox = nonFolderCheckboxes[nonFolderCheckboxes.length - 1];
+        let indexAttr = null;
+        if (lastCheckbox && typeof lastCheckbox.getAttribute === "function") {
+          indexAttr = lastCheckbox.getAttribute("data-index");
+        }
+        avttLastSelectedIndex =
+          shouldSelect && indexAttr !== null ? Number(indexAttr) : null;
+      } else {
+        avttLastSelectedIndex = null;
+      }
       avttUpdateSelectNonFoldersCheckbox();
       avttUpdateActionsMenuState();
+      avttApplyClipboardHighlights();
     });
   }
 
@@ -2051,6 +2441,19 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         cleanupActionsMenuHandlers();
         avttHideActionsMenu();
       });
+  }
+
+  const columnHeadersContainer = document.getElementById("avtt-column-headers");
+  if (columnHeadersContainer) {
+    columnHeadersContainer
+      .querySelectorAll(".avtt-sortable-header")
+      .forEach((header) => {
+        header.addEventListener("click", () => {
+          const column = header.getAttribute("data-sort");
+          avttToggleSort(column);
+        });
+      });
+    avttUpdateSortIndicators();
   }
 
   refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
@@ -2107,36 +2510,75 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     let totalSize = 0;
     let uploadedBytes = 0;
     let uploadedCount = 0;
+    let conflictPolicy = null;
+    const userUsedElement = document.getElementById("user-used");
 
     for (let i = 0; i < fileArray.length; i += 1) {
       const selectedFile = fileArray[i];
       showUploadingProgress(i, fileArray.length);
-      document.getElementById("user-used").innerHTML = formatFileSize(
-        totalSize + S3_Current_Size,
-      );
+
       const extension = getFileExtension(selectedFile.name);
       if (!isAllowedExtension(extension)) {
         alert("Skipping unsupported file type");
-        if (i < fileArray.length) {
-          continue;
+        if (i === fileArray.length - 1) {
+          hideUploadingIndicator();
         }
-        hideUploadingIndicator();
-        return;
+        continue;
       }
 
+      let targetKey = resolveUploadKey(selectedFile);
+      let action = "overwrite";
 
-      totalSize += selectedFile.size;
-      if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit) {
-        alert("Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.");
-        if (i < fileArray.length) {
-          continue;
-        }
-        hideUploadingIndicator();
-        return;
-      }
       try {
-        const uploadKey = resolveUploadKey(selectedFile);
-        const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(uploadKey)}&user=${window.PATREON_ID}&upload=true`);
+        const exists = await avttDoesObjectExist(targetKey);
+        if (exists) {
+          if (conflictPolicy?.applyAll) {
+            action = conflictPolicy.action;
+          } else {
+            const conflictResult = await avttPromptUploadConflict({ fileName: targetKey });
+            if (!conflictResult || !conflictResult.action) {
+              action = "skip";
+            } else {
+              action = conflictResult.action;
+              if (conflictResult.applyAll) {
+                conflictPolicy = {
+                  action,
+                  applyAll: true,
+                };
+              }
+            }
+          }
+        }
+      } catch (existError) {
+        console.warn("Failed to verify if file exists before upload", existError);
+      }
+
+      if (action === "skip") {
+        continue;
+      }
+
+      if (action === "keepBoth") {
+        try {
+          targetKey = await avttDeriveUniqueKey(targetKey);
+        } catch (deriveError) {
+          console.error("Failed to generate unique key for duplicate upload", deriveError);
+          alert("Failed to generate a unique name for a duplicate file. Skipping.");
+          continue;
+        }
+      }
+
+      const prospectiveTotal = totalSize + selectedFile.size;
+      if (
+        activeUserLimit !== undefined &&
+        prospectiveTotal + S3_Current_Size > activeUserLimit
+      ) {
+        alert("Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.");
+        hideUploadingIndicator();
+        return;
+      }
+
+      try {
+        const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(targetKey)}&user=${window.PATREON_ID}&upload=true`);
         if (!presignResponse.ok) {
           throw new Error("Failed to retrieve upload URL.");
         }
@@ -2153,21 +2595,25 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
           method: "PUT",
           body: selectedFile,
           headers: uploadHeaders,
-          signal: avttUploadSignal, 
+          signal: avttUploadSignal,
         });
 
         if (!uploadResponse.ok) {
           throw new Error("Upload failed.");
         }
 
+        totalSize = prospectiveTotal;
+        if (userUsedElement) {
+          userUsedElement.innerHTML = formatFileSize(totalSize + S3_Current_Size);
+        }
+        avttRegisterPendingUploadKey(targetKey, Number(selectedFile.size) || 0);
         uploadedBytes += Number(selectedFile.size) || 0;
         uploadedCount += 1;
       } catch (error) {
         console.error(error);
-        if (error === 'User cancelled upload by closing window.') {
+        if (error === "User cancelled upload by closing window.") {
           alert(error || "Aborted manually.");
-        }
-        else{
+        } else {
           alert(error.message || "An unexpected error occurred while uploading.");
         }
         if (uploadedCount > 0) {
@@ -2182,6 +2628,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       await applyUsageDelta(uploadedBytes, uploadedCount);
     }
 
+    avttFolderListingCache.clear();
     refreshFiles(currentFolder, true);
     showUploadComplete();
   };
@@ -2404,6 +2851,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
     await deleteFilesFromS3Folder(selections, activeFilePickerFilter);
     avttUpdateActionsMenuState();
+    avttUpdateSelectNonFoldersCheckbox();
+    avttApplyClipboardHighlights();
   });
 
   function isAllowedExtension(extension) {
@@ -2473,7 +2922,10 @@ function refreshFiles(
 ) {
     currentFolder = typeof path === "string" ? path : "";
     activeFilePickerFilter = fileTypes;
+    avttFolderListingCache.clear();
+    avttLastSelectedIndex = null;
     avttHideActionsMenu();
+    avttUpdateSortIndicators();
     if (recheckSize) {
         getUserUploadedFileSize().then((size) => {
         S3_Current_Size = size;
@@ -2648,23 +3100,7 @@ function refreshFiles(
         return;
       }
 
-      prepared.sort((a, b) => {
-        if (a.isFolder && !b.isFolder) {
-          return -1;
-        }
-        if (!a.isFolder && b.isFolder) {
-          return 1;
-        }
-        const nameCompare = a.displayName.localeCompare(
-          b.displayName,
-          undefined,
-          { sensitivity: "base" },
-        );
-        if (nameCompare !== 0) {
-          return nameCompare;
-        }
-        return a.relativePath.localeCompare(b.relativePath);
-      });
+      avttSortEntries(prepared);
       const setLineImgSrc = async (container, entry) => {
         const path = entry?.rawKey || entry?.relativePath || "";
         try{
@@ -2724,7 +3160,7 @@ function refreshFiles(
         }
       }
       fileListing.innerHTML = "";
-      for (const entry of prepared) {
+      prepared.forEach((entry, index) => {
         const listItem = document.createElement("tr");
         listItem.classList.add("avtt-file-row");
         listItem.dataset.path = entry.relativePath;
@@ -2758,33 +3194,40 @@ function refreshFiles(
               currentFolder = entry.relativePath;
             });
         }
-        listItem.addEventListener("click", (event) => {
-          $('input').blur();
+        listItem.addEventListener("click", () => {
+          $("input").blur();
         });
-        listItem.addEventListener("dragstart", (event) => {
-          avttHandleDragStart(event, entry);
+        const checkboxElement = checkboxCell.find("input")[0];
+        if (checkboxElement) {
+          checkboxElement.setAttribute("data-index", String(index));
+          checkboxElement.addEventListener("click", (clickEvent) => {
+            avttHandleCheckboxClick(clickEvent, index);
+          });
+        }
+        listItem.addEventListener("dragstart", (dragEvent) => {
+          avttHandleDragStart(dragEvent, entry);
         });
         listItem.addEventListener("dragend", avttHandleDragEnd);
         if (entry.isFolder) {
-          listItem.addEventListener("dragenter", (event) => {
-            avttHandleFolderDragEnter(event, listItem, entry.relativePath);
+          listItem.addEventListener("dragenter", (dragEvent) => {
+            avttHandleFolderDragEnter(dragEvent, listItem, entry.relativePath);
           });
-          listItem.addEventListener("dragover", (event) => {
-            avttHandleFolderDragOver(event, listItem, entry.relativePath);
+          listItem.addEventListener("dragover", (dragEvent) => {
+            avttHandleFolderDragOver(dragEvent, listItem, entry.relativePath);
           });
-          listItem.addEventListener("dragleave", (event) => {
-            avttHandleFolderDragLeave(event, listItem);
+          listItem.addEventListener("dragleave", (dragEvent) => {
+            avttHandleFolderDragLeave(dragEvent, listItem);
           });
-          listItem.addEventListener("drop", async (event) => {
-            await avttHandleFolderDrop(event, entry.relativePath);
+          listItem.addEventListener("drop", async (dragEvent) => {
+            await avttHandleFolderDrop(dragEvent, entry.relativePath);
           });
         }
-        listItem.addEventListener("contextmenu", (event) => {
-          avttOpenContextMenu(event, entry);
+        listItem.addEventListener("contextmenu", (contextEvent) => {
+          avttOpenContextMenu(contextEvent, entry);
         });
 
         fileListing.appendChild(listItem);
-      }
+      });
       avttApplyClipboardHighlights();
       avttUpdateSelectNonFoldersCheckbox();
       avttUpdateActionsMenuState();
