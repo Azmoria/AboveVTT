@@ -3,6 +3,1443 @@ const AVTT_S3 =
 
 let S3_Current_Size = 0;
 let currentFolder = "";
+let activeFilePickerFilter;
+const AVTT_SORT_COLUMNS = Object.freeze({
+  NAME: "name",
+  TYPE: "type",
+  SIZE: "size",
+});
+const avttSortState = {
+  column: "default",
+  direction: null,
+};
+const AVTT_CLIPBOARD_MODE = Object.freeze({
+  CUT: "cut",
+  COPY: "copy",
+});
+let avttClipboard = { mode: null, items: [] };
+let avttDragItems = null;
+let avttLastSelectedIndex = null;
+const avttFolderListingCache = new Map();
+
+function avttEscapeHtml(value) {
+  const span = document.createElement("span");
+  span.textContent = String(value);
+  return span.innerHTML;
+}
+const avttContextMenuState = {
+  element: null,
+  targetPath: "",
+  isFolder: false,
+  displayName: "",
+  isImplicit: false,
+};
+
+function avttGetSelectedEntries() {
+  const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked').get();
+  return selectedCheckboxes.map((element) => ({
+    key: element.value,
+    size: Number(element.getAttribute("data-size")) || 0,
+    isFolder: element.classList.contains("folder"),
+  }));
+}
+
+function avttSelectPaths(paths) {
+  const pathSet = new Set(Array.isArray(paths) ? paths : []);
+  let lastIndex = null;
+  $('#file-listing input[type="checkbox"]').each(function () {
+    const shouldCheck = pathSet.has(this.value);
+    this.checked = shouldCheck;
+    if (shouldCheck) {
+      const indexAttr = this.getAttribute("data-index");
+      if (indexAttr !== null) {
+        lastIndex = Number(indexAttr);
+      }
+    }
+  });
+  avttLastSelectedIndex = lastIndex;
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
+}
+
+function avttEnsureSelectionIncludes(path, isFolder) {
+  const selected = avttGetSelectedEntries();
+  const hasPath = selected.some((entry) => entry.key === path);
+  if (hasPath) {
+    const checkbox = $('#file-listing input[type="checkbox"]').filter(function () {
+      return this.value === path;
+    });
+    checkbox.each(function () {
+      const indexAttr = this.getAttribute("data-index");
+      if (indexAttr !== null) {
+        avttLastSelectedIndex = Number(indexAttr);
+      }
+    });
+    avttUpdateSelectNonFoldersCheckbox();
+    avttUpdateActionsMenuState();
+    return selected;
+  }
+  avttSelectPaths([path]);
+  const checkbox = $('#file-listing input[type="checkbox"]').filter(function () {
+    return this.value === path;
+  });
+  checkbox.each(function () {
+    this.classList.toggle("folder", isFolder);
+    const indexAttr = this.getAttribute("data-index");
+    if (indexAttr !== null) {
+      avttLastSelectedIndex = Number(indexAttr);
+    }
+  });
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
+  return avttGetSelectedEntries();
+}
+
+function avttFindRowByPath(path) {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  for (const row of rows) {
+    if (row.dataset && row.dataset.path === path) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function avttClearClipboard() {
+  avttClipboard = { mode: null, items: [] };
+  avttApplyClipboardHighlights();
+  avttUpdateContextMenuState();
+  avttUpdateActionsMenuState();
+}
+
+function avttApplyClipboardHighlights() {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  rows.forEach((row) => row.classList.remove("avtt-cut-row"));
+  if (
+    avttClipboard.mode !== AVTT_CLIPBOARD_MODE.CUT ||
+    !Array.isArray(avttClipboard.items) ||
+    avttClipboard.items.length === 0
+  ) {
+    return;
+  }
+  for (const entry of avttClipboard.items) {
+    const row = avttFindRowByPath(entry.key);
+    if (row) {
+      row.classList.add("avtt-cut-row");
+    }
+  }
+}
+
+function avttSetClipboard(items, mode) {
+  const entries = Array.isArray(items)
+    ? items
+        .map((item) => ({
+          key: item.key,
+          size: Number(item.size) || 0,
+          isFolder: Boolean(item.isFolder),
+        }))
+        .filter((item) => item.key)
+    : [];
+  if (!entries.length || !mode) {
+    avttClearClipboard();
+    return false;
+  }
+  avttClipboard = {
+    mode,
+    items: entries,
+  };
+  avttApplyClipboardHighlights();
+  avttUpdateContextMenuState();
+  avttUpdateActionsMenuState();
+  return true;
+}
+
+function avttClipboardHasEntries() {
+  return Array.isArray(avttClipboard.items) && avttClipboard.items.length > 0;
+}
+
+function avttCopySelectedPathsToClipboard() {
+  const selections = avttGetSelectedEntries();
+  if (!selections.length) {
+    return false;
+  }
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    console.warn("Clipboard API is not available.");
+    return false;
+  }
+  const paths = selections.map(
+    (entry) => `above-bucket-not-a-url/${window.PATREON_ID}/${entry.key}`,
+  );
+  const copyText = paths.join(", ");
+  const copyPromise = navigator.clipboard.writeText(copyText);
+  if (copyPromise && typeof copyPromise.then === "function") {
+    copyPromise.catch((error) => {
+      console.error("Failed to copy AVTT paths", error);
+    });
+  }
+  return true;
+}
+
+function avttGetNonFolderCheckboxes() {
+  return Array.from(
+    document.querySelectorAll(
+      '#file-listing input[type="checkbox"]:not(.folder)',
+    ),
+  );
+}
+
+function avttUpdateSelectNonFoldersCheckbox() {
+  const toggle = document.getElementById("avtt-select-files");
+  if (!toggle) {
+    return;
+  }
+  const nonFolderCheckboxes = avttGetNonFolderCheckboxes();
+  if (!nonFolderCheckboxes.length) {
+    toggle.checked = false;
+    toggle.indeterminate = false;
+    toggle.disabled = true;
+    return;
+  }
+  toggle.disabled = false;
+  const selectedCount = nonFolderCheckboxes.filter((checkbox) => checkbox.checked).length;
+  if (selectedCount === 0) {
+    toggle.checked = false;
+    toggle.indeterminate = false;
+  } else if (selectedCount === nonFolderCheckboxes.length) {
+    toggle.checked = true;
+    toggle.indeterminate = false;
+  } else {
+    toggle.checked = false;
+    toggle.indeterminate = true;
+  }
+}
+
+function avttUpdateActionsMenuState() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  const selection = avttGetSelectedEntries();
+  const hasSelection = selection.length > 0;
+  const singleSelection = selection.length === 1;
+
+  const cutButton = dropdown.querySelector('[data-action="cut"]');
+  if (cutButton) {
+    cutButton.disabled = !hasSelection;
+  }
+  const deleteButton = dropdown.querySelector('[data-action="delete"]');
+  if (deleteButton) {
+    deleteButton.disabled = !hasSelection;
+  }
+  const copyPathButton = dropdown.querySelector('[data-action="copy-path"]');
+  if (copyPathButton) {
+    copyPathButton.disabled = !hasSelection;
+  }
+  const renameButton = dropdown.querySelector('[data-action="rename"]');
+  if (renameButton) {
+    renameButton.disabled = !singleSelection;
+  }
+  const pasteButton = dropdown.querySelector('[data-action="paste"]');
+  if (pasteButton) {
+    pasteButton.disabled = !avttClipboardHasEntries();
+  }
+  const importButton = dropdown.querySelector('[data-action="import"]');
+  if (importButton) {
+    const hasAbovevtt = selection.some((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+    importButton.disabled = !hasAbovevtt;
+  }
+}
+
+function avttHideActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.remove("visible");
+}
+
+function avttShowActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  avttUpdateActionsMenuState();
+  dropdown.classList.add("visible");
+}
+
+function avttToggleActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  if (dropdown.classList.contains("visible")) {
+    avttHideActionsMenu();
+  } else {
+    avttHideExportMenu();
+    avttHideContextMenu();
+    avttShowActionsMenu();
+  }
+}
+
+function avttHideExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.remove("visible");
+}
+
+function avttShowExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.add("visible");
+}
+
+function avttToggleExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  if (dropdown.classList.contains("visible")) {
+    avttHideExportMenu();
+  } else {
+    avttShowExportMenu();
+  }
+}
+
+function avttGetAllCheckboxElements() {
+  return Array.from(
+    document.querySelectorAll('#file-listing input[type="checkbox"]'),
+  );
+}
+
+function avttHandleCheckboxClick(event, index) {
+  const checkbox = event.currentTarget;
+  if (!checkbox) {
+    return;
+  }
+  const allCheckboxes = avttGetAllCheckboxElements();
+  if (
+    event.shiftKey &&
+    avttLastSelectedIndex !== null &&
+    avttLastSelectedIndex >= 0 &&
+    avttLastSelectedIndex < allCheckboxes.length
+  ) {
+    const start = Math.min(index, avttLastSelectedIndex);
+    const end = Math.max(index, avttLastSelectedIndex);
+    const shouldCheck = checkbox.checked;
+    for (let i = start; i <= end; i += 1) {
+      const candidate = allCheckboxes[i];
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.checked !== shouldCheck) {
+        candidate.checked = shouldCheck;
+      }
+    }
+  }
+  avttLastSelectedIndex = index;
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
+}
+
+function avttDefaultSortComparator(a, b) {
+  if (a.isFolder && !b.isFolder) {
+    return -1;
+  }
+  if (!a.isFolder && b.isFolder) {
+    return 1;
+  }
+  const nameCompare = (a.displayName || "").localeCompare(
+    b.displayName || "",
+    undefined,
+    { sensitivity: "base" },
+  );
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+  return (a.relativePath || "").localeCompare(b.relativePath || "");
+}
+
+function avttSortEntries(entries) {
+  if (!Array.isArray(entries)) {
+    return;
+  }
+  const { column, direction } = avttSortState;
+  if (column === "default" || !column || !direction) {
+    entries.sort(avttDefaultSortComparator);
+    return;
+  }
+  const multiplier = direction === "desc" ? -1 : 1;
+  entries.sort((a, b) => {
+    if (a.isFolder && !b.isFolder) {
+      return -1;
+    }
+    if (!a.isFolder && b.isFolder) {
+      return 1;
+    }
+    let compare = 0;
+    if (column === AVTT_SORT_COLUMNS.NAME) {
+      compare = (a.displayName || "").localeCompare(
+        b.displayName || "",
+        undefined,
+        { sensitivity: "base" },
+      );
+    } else if (column === AVTT_SORT_COLUMNS.TYPE) {
+      compare = (a.type || "").localeCompare(
+        b.type || "",
+        undefined,
+        { sensitivity: "base" },
+      );
+    } else if (column === AVTT_SORT_COLUMNS.SIZE) {
+      const sizeA = Number(a.size) || 0;
+      const sizeB = Number(b.size) || 0;
+      compare = sizeA - sizeB;
+    }
+    if (compare === 0) {
+      compare = avttDefaultSortComparator(a, b);
+    }
+    return compare * multiplier;
+  });
+}
+
+function avttUpdateSortIndicators() {
+  const headers = document.querySelectorAll(
+    "#avtt-column-headers [data-sort]",
+  );
+  headers.forEach((header) => {
+    const label = header.getAttribute("data-label") || header.textContent.trim();
+    header.innerHTML = "";
+    header.classList.remove("active");
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    header.appendChild(labelNode);
+    if (
+      avttSortState.column === header.getAttribute("data-sort") &&
+      avttSortState.direction
+    ) {
+      header.classList.add("active");
+      const indicator = document.createElement("span");
+      indicator.className = "avtt-sort-indicator";
+      indicator.textContent = avttSortState.direction === "asc" ? "\u25B2" : "\u25BC";
+      header.appendChild(indicator);
+    }
+  });
+}
+
+function avttRefreshWithCurrentSort() {
+  const searchInput = document.getElementById("search-files");
+  const searchTerm = searchInput ? searchInput.value.trim() : "";
+  if (searchTerm) {
+    refreshFiles("", false, true, searchTerm, activeFilePickerFilter);
+  } else {
+    refreshFiles(currentFolder, false, false, undefined, activeFilePickerFilter);
+  }
+}
+
+function avttToggleSort(column) {
+  if (!column) {
+    avttSortState.column = "default";
+    avttSortState.direction = null;
+  } else if (avttSortState.column !== column) {
+    avttSortState.column = column;
+    avttSortState.direction = "asc";
+  } else if (avttSortState.direction === "asc") {
+    avttSortState.direction = "desc";
+  } else {
+    avttSortState.column = "default";
+    avttSortState.direction = null;
+  }
+  avttUpdateSortIndicators();
+  avttRefreshWithCurrentSort();
+}
+
+function avttGetParentFolder(relativeKey) {
+  if (typeof relativeKey !== "string") {
+    return "";
+  }
+  const normalized = relativeKey.replace(/\\/g, "/");
+  const trimmed = normalized.replace(/\/+$/, "");
+  const lastSlash = trimmed.lastIndexOf("/");
+  if (lastSlash < 0) {
+    return "";
+  }
+  return `${trimmed.slice(0, lastSlash + 1)}`;
+}
+
+async function avttGetFolderListingCached(folderPath = "") {
+  const normalized = typeof folderPath === "string" ? folderPath : "";
+  if (avttFolderListingCache.has(normalized)) {
+    return avttFolderListingCache.get(normalized);
+  }
+  try {
+    const listing = await getFolderListingFromS3(normalized);
+    const normalizedListing = Array.isArray(listing) ? listing.slice() : [];
+    avttFolderListingCache.set(normalized, normalizedListing);
+    return normalizedListing;
+  } catch (error) {
+    console.warn("Failed to load folder listing for cache", folderPath, error);
+    avttFolderListingCache.set(normalized, []);
+    return [];
+  }
+}
+
+async function avttGetEntryForKey(relativeKey) {
+  const parentFolder = avttGetParentFolder(relativeKey);
+  const listing = await avttGetFolderListingCached(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
+  return (
+    listing.find((entry) => (entry?.Key || entry?.key) === normalizedKey) ||
+    null
+  );
+}
+
+function avttRegisterPendingUploadKey(relativeKey, size = 0) {
+  const parentFolder = avttGetParentFolder(relativeKey);
+  if (!avttFolderListingCache.has(parentFolder)) {
+    return;
+  }
+  const listing = avttFolderListingCache.get(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
+  const existing = listing.find((entry) => (entry?.Key || entry?.key) === normalizedKey);
+  if (existing) {
+    existing.Size = size;
+  } else {
+    listing.push({
+      Key: normalizedKey,
+      Size: size,
+    });
+  }
+}
+
+async function avttDoesObjectExist(relativeKey) {
+  const entry = await avttGetEntryForKey(relativeKey);
+  return Boolean(entry);
+}
+
+async function avttDeriveUniqueKey(originalKey) {
+  const parentFolder = avttGetParentFolder(originalKey);
+  const isFolder = /\/$/.test(originalKey);
+  const relativeName = originalKey
+    .slice(parentFolder.length)
+    .replace(/\/+$/, "");
+  const baseNameWithExt = relativeName || "item";
+  const dotIndex = isFolder ? -1 : baseNameWithExt.lastIndexOf(".");
+  const baseName =
+    dotIndex >= 0 ? baseNameWithExt.slice(0, dotIndex) : baseNameWithExt;
+  const extension =
+    !isFolder && dotIndex >= 0 ? baseNameWithExt.slice(dotIndex) : "";
+  let counter = 1;
+  while (counter < 1000) {
+    const candidateName = isFolder
+      ? `${baseName} (${counter})/`
+      : `${baseName} (${counter})${extension}`;
+    const candidateKey = `${parentFolder}${candidateName}`;
+    const exists = await avttDoesObjectExist(candidateKey);
+    if (!exists) {
+      avttRegisterPendingUploadKey(candidateKey);
+      return candidateKey;
+    }
+    counter += 1;
+  }
+  throw new Error("Unable to generate a unique filename for the uploaded file.");
+}
+
+async function avttResolveMoveConflicts(moves) {
+  const resolved = [];
+  let conflictPolicy = null;
+
+  for (const move of moves) {
+    let targetKey = move.toKey;
+    let action = "overwrite";
+    let existingEntry = null;
+
+    try {
+      existingEntry = await avttGetEntryForKey(targetKey);
+    } catch (error) {
+      console.warn("Failed to inspect destination before move", error);
+      existingEntry = null;
+    }
+
+    const exists = Boolean(existingEntry);
+    if (exists) {
+      if (conflictPolicy?.applyAll) {
+        action = conflictPolicy.action;
+      } else {
+        const conflictResult = await avttPromptUploadConflict({
+          fileName: targetKey,
+        });
+        if (!conflictResult || !conflictResult.action) {
+          action = "skip";
+        } else {
+          action = conflictResult.action;
+          if (conflictResult.applyAll) {
+            conflictPolicy = {
+              action,
+              applyAll: true,
+            };
+          }
+        }
+      }
+    }
+
+    if (action === "skip") {
+      continue;
+    }
+
+    if (action === "keepBoth") {
+      try {
+        targetKey = await avttDeriveUniqueKey(targetKey);
+      } catch (deriveError) {
+        console.error("Failed to generate unique destination during move", deriveError);
+        alert("Failed to generate a unique name. Skipping this item.");
+        continue;
+      }
+    }
+
+    avttRegisterPendingUploadKey(targetKey, Number(move.size) || 0);
+    resolved.push({
+      ...move,
+      toKey: targetKey,
+      overwrite: action === "overwrite" && exists,
+    });
+  }
+
+  return resolved;
+}
+
+async function avttPromptUploadConflict({ fileName }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "avtt-conflict-overlay";
+    const modal = document.createElement("div");
+    modal.className = "avtt-conflict-modal";
+    const safeName = avttEscapeHtml(fileName);
+    modal.innerHTML = `
+      <h3>File Already Exists</h3>
+      <p>The file <strong>${safeName}</strong> already exists. What would you like to do?</p>
+      <div class="avtt-conflict-apply-all">
+        <input type="checkbox" id="avtt-conflict-apply-all" />
+        <label for="avtt-conflict-apply-all">Apply this choice to all remaining conflicts</label>
+      </div>
+      <div class="avtt-conflict-modal-buttons">
+        <button type="button" data-action="skip">Skip</button>
+        <button type="button" data-action="keepBoth">Keep Both</button>
+        <button type="button" data-action="overwrite">Overwrite</button>
+      </div>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const applyAllCheckbox = modal.querySelector("#avtt-conflict-apply-all");
+
+    const cleanup = (result) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.remove();
+      resolve(result);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        cleanup({ action: "skip", applyAll: applyAllCheckbox?.checked || false });
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+
+    modal
+      .querySelectorAll("button[data-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.getAttribute("data-action");
+          const applyAll = applyAllCheckbox?.checked || false;
+          cleanup({ action, applyAll });
+        });
+      });
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        cleanup({ action: "skip", applyAll: applyAllCheckbox?.checked || false });
+      }
+    });
+  });
+}
+
+function avttPromptTextDialog({
+  title = "Input Required",
+  message = "",
+  defaultValue = "",
+  placeholder = "",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "avtt-conflict-overlay";
+    const modal = document.createElement("div");
+    modal.className = "avtt-conflict-modal";
+    const safeTitle = avttEscapeHtml(title);
+    const safeMessage = message ? `<p>${avttEscapeHtml(message)}</p>` : "";
+    modal.innerHTML = `
+      <h3>${safeTitle}</h3>
+      ${safeMessage}
+      <input type="text" id="avtt-text-prompt-input" value="${avttEscapeHtml(defaultValue || "")}" placeholder="${avttEscapeHtml(placeholder || "")}" />
+      <div class="avtt-conflict-modal-buttons avtt-modal-buttons">
+        <button type="button" data-action="cancel">${avttEscapeHtml(cancelLabel)}</button>
+        <button type="button" data-action="confirm">${avttEscapeHtml(confirmLabel)}</button>
+      </div>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const input = modal.querySelector("#avtt-text-prompt-input");
+    const cancelButton = modal.querySelector('button[data-action="cancel"]');
+    const confirmButton = modal.querySelector('button[data-action="confirm"]');
+
+    const cleanup = (value) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.remove();
+      resolve(value);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        cleanup(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        confirmButton.click();
+      }
+    };
+
+    cancelButton.addEventListener("click", () => cleanup(null));
+    confirmButton.addEventListener("click", () => cleanup(input.value));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        cleanup(null);
+      }
+    });
+    document.addEventListener("keydown", onKeyDown, true);
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  });
+}
+
+function avttCaptureDownload(invoker) {
+  return new Promise((resolve, reject) => {
+    const originalDownload = window.download;
+    let timeoutId = null;
+    let settled = false;
+
+    const cleanup = (error) => {
+      if (window.download === intercept) {
+        window.download = originalDownload;
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      if (error && !settled) {
+        reject(error);
+      }
+    };
+
+    const intercept = (data, filename, mimeType) => {
+      settled = true;
+      cleanup();
+      resolve({ data, filename, mimeType });
+    };
+
+    window.download = intercept;
+
+    const handleFailure = (error) => {
+      cleanup(error || new Error("Export failed to produce a file."));
+    };
+
+    try {
+      const result = invoker();
+      if (result && typeof result.then === "function") {
+        result.catch((error) => {
+          if (!settled) {
+            handleFailure(error);
+          }
+        });
+      }
+    } catch (error) {
+      handleFailure(error);
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      if (!settled) {
+        handleFailure(new Error("Export timed out."));
+      }
+    }, 300000);
+  });
+}
+
+async function avttHandleToolbarAction(action) {
+  let handled = false;
+  switch (action) {
+    case "cut": {
+      handled = avttCutSelectedFiles();
+      break;
+    }
+    case "paste": {
+      if (avttClipboardHasEntries()) {
+        handled = Boolean(await avttHandlePasteFromClipboard(currentFolder));
+      }
+      break;
+    }
+    case "copy-path":
+    case "copyPath": {
+      handled = avttCopySelectedPathsToClipboard();
+      break;
+    }
+    case "rename": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length === 1) {
+        handled = Boolean(
+          await avttPromptRename(selection[0].key, selection[0].isFolder),
+        );
+      }
+      break;
+    }
+    case "delete": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length > 0) {
+        await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
+        handled = true;
+        avttUpdateSelectNonFoldersCheckbox();
+      }
+      break;
+    }
+    case "import": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length > 0) {
+        await avttImportSelectedFiles(selection);
+        handled = true;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  if (handled) {
+    avttHideActionsMenu();
+    avttHideExportMenu();
+  }
+  avttUpdateActionsMenuState();
+  avttApplyClipboardHighlights();
+}
+
+function avttCutSelectedFiles() {
+  const selections = avttGetSelectedEntries();
+  if (!selections.length) {
+    return false;
+  }
+  return avttSetClipboard(selections, AVTT_CLIPBOARD_MODE.CUT);
+}
+
+async function avttPasteFiles(destinationFolder) {
+  if (!avttClipboardHasEntries()) {
+    return false;
+  }
+  return await avttHandlePasteFromClipboard(
+    typeof destinationFolder === "string" ? destinationFolder : currentFolder,
+  );
+}
+
+async function avttImportSelectedFiles(selection) {
+  const entries = Array.isArray(selection) ? selection : avttGetSelectedEntries();
+  const filesToImport = entries.filter((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+  if (!filesToImport.length) return;
+  try {
+    // show global import indicator if available
+    if (typeof build_import_loading_indicator === 'function') {
+      build_import_loading_indicator('Importing Files');
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  window.__IMPORT_SCENES_BUFFER = [];
+
+  for (const entry of filesToImport) {
+    try {
+      const url = await getAvttStorageUrl(`${PATREON_ID}/${entry.key}`);
+      if (!url) continue;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        console.warn('Failed to fetch file for import', entry.key);
+        continue;
+      }
+      const text = await resp.text();
+      // call Settings import processor
+      if (typeof import_process_datafile_text === 'function') {
+        await import_process_datafile_text(text);
+      }
+    } catch (err) {
+      console.error('Import failed for', entry.key, err);
+    }
+  }
+
+  const scenes = window.__IMPORT_SCENES_BUFFER || [];
+  try {
+    if (scenes.length) {
+      await AboveApi.migrateScenes(window.gameId, scenes);
+    }
+    if (typeof window.$ === 'function') {
+      $(".import-loading-indicator .loading-status-indicator__subtext").addClass('complete');
+    }
+    setTimeout(() => {
+      alert("Migration (hopefully) completed. You need to Re-Join AboveVTT");
+      location.reload();
+    }, 2000);
+  } catch (err) {
+    console.error('Migration failed after import', err);
+    showError(err, 'cloud_migration failed');
+  }
+}
+
+window.avttCutSelectedFiles = avttCutSelectedFiles;
+window.avttPasteFiles = avttPasteFiles;
+window.avttClipboardHasEntries = avttClipboardHasEntries;
+
+function avttEnsureContextMenu() {
+  if (avttContextMenuState.element) {
+    return avttContextMenuState.element;
+  }
+  const menu = document.createElement("div");
+  menu.id = "avtt-file-context-menu";
+  menu.className = "avtt-context-menu hidden";
+  menu.innerHTML = `
+    <button type="button" data-action="cut">Cut</button>
+    <button type="button" data-action="paste">Paste</button>
+    <button type="button" data-action="copyPath">Copy Path</button>
+    <button type="button" data-action="rename">Rename</button>
+    <button type="button" data-action="import">Import</button>
+    <hr/>
+    <button type="button" data-action="delete">Delete</button>
+  `;
+  document.body.appendChild(menu);
+
+  menu.addEventListener("click", async (event) => {
+    const button = event.target;
+    const action = button?.getAttribute("data-action");
+    if (!action || button.disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    await avttHandleContextAction(action);
+    avttHideContextMenu();
+  });
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target;
+      if (!menu.contains(target)) {
+        avttHideContextMenu();
+      }
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "contextmenu",
+    (event) => {
+      const target = event.target;
+      if (!menu.contains(target)) {
+        avttHideContextMenu();
+      }
+    },
+    true,
+  );
+
+  window.addEventListener("blur", () => {
+    avttHideContextMenu();
+  });
+
+  avttContextMenuState.element = menu;
+  return menu;
+}
+
+function avttHideContextMenu() {
+  const menu = avttContextMenuState.element;
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.style.top = "-9999px";
+    menu.style.left = "-9999px";
+  }
+  avttContextMenuState.targetPath = "";
+  avttContextMenuState.isFolder = false;
+  avttContextMenuState.displayName = "";
+  avttContextMenuState.isImplicit = false;
+}
+
+function avttUpdateContextMenuState() {
+  const menu = avttContextMenuState.element;
+  if (!menu) {
+    return;
+  }
+  const selection = avttGetSelectedEntries();
+  const hasSelection = selection.length > 0;
+  const pasteButton = menu.querySelector('button[data-action="paste"]');
+  if (pasteButton) {
+    pasteButton.disabled = !avttClipboardHasEntries();
+  }
+  const renameButton = menu.querySelector('button[data-action="rename"]');
+  const cutButton = menu.querySelector('button[data-action="cut"]');
+  const deleteButton = menu.querySelector('button[data-action="delete"]');
+  const copyPathButton = menu.querySelector('button[data-action="copyPath"]');
+  const hasExplicitTarget =
+    Boolean(avttContextMenuState.targetPath) && !avttContextMenuState.isImplicit;
+  if (renameButton) {
+    renameButton.disabled = !hasExplicitTarget;
+  }
+  if (cutButton) {
+    cutButton.disabled = !hasExplicitTarget;
+  }
+  if (deleteButton) {
+    deleteButton.disabled = !hasExplicitTarget;
+  }
+  if (copyPathButton) {
+    copyPathButton.disabled = !hasSelection;
+  }
+  const importButton = menu.querySelector('button[data-action="import"]');
+  if (importButton) {
+    const hasAbovevtt = selection.some((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+    importButton.disabled = !hasAbovevtt;
+  }
+}
+
+function avttOpenContextMenu(event, entry, options = {}) {
+  const { ensureSelection = true, implicitTarget = false } = options;
+  const menu = avttEnsureContextMenu();
+  event.preventDefault();
+  event.stopPropagation();
+
+  let selection = [];
+  if (entry && ensureSelection && entry.relativePath) {
+    selection = avttEnsureSelectionIncludes(entry.relativePath, entry.isFolder);
+  }
+  avttContextMenuState.targetPath = entry?.relativePath || "";
+  avttContextMenuState.isFolder = Boolean(entry?.isFolder);
+  avttContextMenuState.displayName = entry?.displayName || "";
+  avttContextMenuState.isImplicit = Boolean(implicitTarget || entry?.isImplicit);
+
+  const viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight;
+  menu.style.left = "-9999px";
+  menu.style.top = "-9999px";
+  menu.classList.remove("hidden");
+  const menuRect = menu.getBoundingClientRect();
+  let left = event.clientX;
+  let top = event.clientY;
+  if (left + menuRect.width > viewportWidth) {
+    left = Math.max(0, viewportWidth - menuRect.width - 10);
+  }
+  if (top + menuRect.height > viewportHeight) {
+    top = Math.max(0, viewportHeight - menuRect.height - 10);
+  }
+
+  menu.style.left = `${left + window.scrollX}px`;
+  menu.style.top = `${top + window.scrollY}px`;
+  avttUpdateContextMenuState();
+  avttApplyClipboardHighlights();
+  return selection;
+}
+
+async function avttHandleContextAction(action) {
+  switch (action) {
+    case "cut": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      avttSetClipboard(selection, AVTT_CLIPBOARD_MODE.CUT);
+      break;
+    }
+    case "paste": {
+      if (avttContextMenuState.isImplicit && !avttContextMenuState.targetPath) {
+        await avttHandlePasteFromClipboard(currentFolder);
+      } else if (avttContextMenuState.isFolder) {
+        await avttHandlePasteFromClipboard(avttContextMenuState.targetPath);
+      } else {
+        await avttHandlePasteFromClipboard(currentFolder);
+      }
+      break;
+    }
+    case "copyPath": {
+      avttCopySelectedPathsToClipboard();
+      break;
+    }
+    case "rename": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      avttHideExportMenu();
+      await avttRenameTarget();
+      break;
+    }
+    case "delete": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      avttHideExportMenu();
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      if (selection.length === 0) {
+        return;
+      }
+      await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+      avttApplyClipboardHighlights();
+      break;
+    }
+    case "import": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      if (selection.length === 0) return;
+      await avttImportSelectedFiles(selection);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function avttComputeNewKeyForDestination(entry, destinationFolder) {
+  const normalizedDestination =
+    destinationFolder && destinationFolder.endsWith("/")
+      ? destinationFolder
+      : destinationFolder
+      ? `${destinationFolder}/`
+      : "";
+  if (entry.isFolder) {
+    const trimmed = entry.key.replace(/\/$/, "");
+    const folderName = trimmed.split("/").pop();
+    if (!folderName) {
+      return null;
+    }
+    return `${normalizedDestination}${folderName}/`;
+  }
+  const fileName = entry.key.split("/").pop();
+  if (!fileName) {
+    return null;
+  }
+  return `${normalizedDestination}${fileName}`;
+}
+
+async function avttMoveEntries(moves, options = {}) {
+  const validMoves = Array.isArray(moves)
+    ? moves.filter(
+        (move) =>
+          move &&
+          move.fromKey &&
+          move.toKey &&
+          move.fromKey !== move.toKey &&
+          move.fromKey !== `${move.toKey}/` &&
+          move.toKey !== `${move.fromKey}/`,
+      )
+    : [];
+  if (validMoves.length === 0) {
+    return;
+  }
+  try {
+    const resolvedMoves = await avttResolveMoveConflicts(validMoves);
+    if (!resolvedMoves.length) {
+      if (options.clearClipboard) {
+        avttClearClipboard();
+      }
+      avttApplyClipboardHighlights();
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+      return;
+    }
+    const operation =
+      options.operation === "copy" || options.operation === "move"
+        ? options.operation
+        : "move";
+    const response = await fetch(`${AVTT_S3}?action=move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: window.PATREON_ID,
+        items: resolvedMoves.map((move) => ({
+          fromKey: move.fromKey,
+          toKey: move.toKey,
+          isFolder: Boolean(move.isFolder),
+          overwrite: Boolean(move.overwrite),
+        })),
+        operation,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json?.moved) {
+      throw new Error(json?.message || "Failed to move item(s).");
+    }
+    refreshFiles(
+      typeof options.refreshPath === "string" ? options.refreshPath : currentFolder,
+      true,
+      undefined,
+      undefined,
+      activeFilePickerFilter,
+    );
+    avttFolderListingCache.clear();
+    if (options.clearClipboard) {
+      avttClearClipboard();
+    } else {
+      avttApplyClipboardHighlights();
+    }
+  } catch (error) {
+    console.error("Failed to move entries", error);
+    alert(error.message || "Failed to move item(s).");
+  }
+}
+
+async function avttHandlePasteFromClipboard(destinationFolder = currentFolder) {
+  if (!avttClipboardHasEntries()) {
+    return;
+  }
+  const moves = [];
+  for (const entry of avttClipboard.items) {
+    if (
+      entry.isFolder &&
+      destinationFolder &&
+      destinationFolder.startsWith(entry.key)
+    ) {
+      alert("Cannot paste a folder inside itself.");
+      return;
+    }
+    const newKey = avttComputeNewKeyForDestination(entry, destinationFolder);
+    if (!newKey || newKey === entry.key) {
+      continue;
+    }
+    moves.push({
+      fromKey: entry.key,
+      toKey: newKey,
+      isFolder: entry.isFolder,
+      size: Number(entry.size) || 0,
+    });
+  }
+  if (moves.length === 0) {
+    return;
+  }
+  const operation =
+    avttClipboard.mode === AVTT_CLIPBOARD_MODE.COPY ? "copy" : "move";
+  await avttMoveEntries(moves, {
+    operation,
+    clearClipboard: operation === "move",
+    refreshPath: destinationFolder || currentFolder,
+  });
+  return true;
+}
+
+async function avttPromptRename(path, isFolder) {
+  if (!path) {
+    return false;
+  }
+  const normalizedPath = isFolder ? path.replace(/\/$/, "") : path;
+  const baseName = normalizedPath.split("/").pop() || "";
+  const parentPath = (() => {
+    const idx = normalizedPath.lastIndexOf("/");
+    return idx >= 0 ? `${normalizedPath.slice(0, idx + 1)}` : "";
+  })();
+  const promptValue = await avttPromptTextDialog({
+    title: isFolder ? "Rename Folder" : "Rename File",
+    message: `Enter a new name for "${baseName}".`,
+    defaultValue: baseName,
+    confirmLabel: "Rename",
+  });
+  if (promptValue === null || promptValue === undefined) {
+    return false;
+  }
+  const trimmedName = String(promptValue).trim();
+  if (!trimmedName || trimmedName === baseName) {
+    return false;
+  }
+  if (/[\\/]/.test(trimmedName)) {
+    alert("Names cannot contain slashes.");
+    return false;
+  }
+  const newKey = `${parentPath}${trimmedName}${isFolder ? "/" : ""}`;
+  if (newKey === path) {
+    return false;
+  }
+  if (isFolder && newKey.startsWith(`${path}`)) {
+    alert("Cannot rename a folder into its own sub-path.");
+    return false;
+  }
+  await avttMoveEntries(
+    [{ fromKey: path, toKey: newKey, isFolder }],
+    { operation: "move", clearClipboard: false },
+  );
+  return true;
+}
+
+async function avttRenameTarget() {
+  if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+    return;
+  }
+  await avttPromptRename(
+    avttContextMenuState.targetPath,
+    avttContextMenuState.isFolder,
+  );
+}
+
+function avttHandleDragStart(event, entry) {
+  avttHideContextMenu();
+  const selection = avttEnsureSelectionIncludes(entry.relativePath, entry.isFolder);
+  avttDragItems = selection.map((item) => ({ ...item }));
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    try {
+      event.dataTransfer.setData(
+        "application/json",
+        JSON.stringify(avttDragItems.map((item) => item.key)),
+      );
+    } catch (error) {
+      event.dataTransfer.setData(
+        "text/plain",
+        avttDragItems.map((item) => item.key).join(","),
+      );
+    }
+  }
+  const row = event.currentTarget;
+  if (row && row.classList) {
+    row.classList.add("avtt-dragging");
+  }
+}
+
+function avttHandleDragEnd() {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  rows.forEach((row) => {
+    row.classList.remove("avtt-dragging", "avtt-drop-target");
+  });
+  avttDragItems = null;
+  avttApplyClipboardHighlights();
+}
+
+function avttCanDropOnFolder(destinationPath) {
+  if (!Array.isArray(avttDragItems) || avttDragItems.length === 0) {
+    return false;
+  }
+  return !avttDragItems.some((item) => {
+    if (item.key === destinationPath) {
+      return true;
+    }
+    if (item.isFolder && destinationPath.startsWith(item.key)) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function avttHandleFolderDragEnter(event, element, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!avttCanDropOnFolder(destinationPath)) {
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "none";
+    }
+    element.classList.remove("avtt-drop-target");
+    return;
+  }
+  element.classList.add("avtt-drop-target");
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+}
+
+function avttHandleFolderDragOver(event, element, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!avttCanDropOnFolder(destinationPath)) {
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "none";
+    }
+    element.classList.remove("avtt-drop-target");
+    return;
+  }
+  element.classList.add("avtt-drop-target");
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+}
+
+function avttHandleFolderDragLeave(event, element) {
+  event.preventDefault();
+  event.stopPropagation();
+  const related = event.relatedTarget;
+  if (related && element.contains(related)) {
+    return;
+  }
+  element.classList.remove("avtt-drop-target");
+}
+
+async function avttHandleFolderDrop(event, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  const element = event.currentTarget;
+  if (element && element.classList) {
+    element.classList.remove("avtt-drop-target");
+  }
+  if (!avttCanDropOnFolder(destinationPath)) {
+    avttHandleDragEnd();
+    return;
+  }
+  if (!Array.isArray(avttDragItems) || avttDragItems.length === 0) {
+    avttHandleDragEnd();
+    return;
+  }
+  const moves = [];
+  for (const entry of avttDragItems) {
+    if (entry.key === destinationPath) {
+      continue;
+    }
+    if (entry.isFolder && destinationPath.startsWith(entry.key)) {
+      alert("Cannot move a folder inside itself.");
+      avttHandleDragEnd();
+      return;
+    }
+    const newKey = avttComputeNewKeyForDestination(entry, destinationPath);
+    if (!newKey || newKey === entry.key) {
+      continue;
+    }
+    moves.push({
+      fromKey: entry.key,
+      toKey: newKey,
+      isFolder: entry.isFolder,
+      size: Number(entry.size) || 0,
+    });
+  }
+  if (moves.length > 0) {
+    await avttMoveEntries(moves);
+  }
+  avttHandleDragEnd();
+}
+
 const userLimit = Object.freeze({
   low: 10 * 1024 * 1024 * 1024,
   mid: 25 * 1024 * 1024 * 1024,
@@ -798,7 +2235,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     false,
     undefined,
     "800px",
-    "600px",
+    "800px",
     undefined,
     undefined,
     false,
@@ -880,12 +2317,130 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 padding: 10px;
                 list-style: none;
                 padding: 0px;
-                height: calc(100% - 170px);
+                height: calc(100% - 220px);
                 overflow-y: auto;
+            }
+            #avtt-listing-toolbar {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin: 5px 10px 0 10px;
+            }
+            #avtt-listing-toolbar .avtt-toolbar-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            #avtt-listing-toolbar label {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            #avtt-column-headers {
+              display: grid;
+              grid-template-columns: 43px 1fr 173px 41px;
+              padding: 0 15px;
+              font-weight: bold;
+              color: var(--font-color, #000);
+            }
+            #avtt-column-headers span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            #avtt-column-headers .avtt-sortable-header {
+                cursor: pointer;
+                user-select: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            #avtt-column-headers .avtt-sortable-header.active {
+                color: var(--highlight-color, rgba(131, 185, 255, 1));
+            }
+            .avtt-sort-indicator {
+                font-size: 0.75em;
+            }
+            #avtt-column-headers span:last-child {
+                text-align: right;
+            }
+            #avtt-actions-menu {
+                position: relative;
+            }
+            .avtt-toolbar-link {
+                color: var(--highlight-color, rgba(131, 185, 255, 1));
+                margin: 0;
+                cursor: pointer;
+            }
+            .avtt-toolbar-button {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 4px 10px;
+                cursor: pointer;
+            }
+            .avtt-toolbar-button:active {
+                transform: translate(1px, 1px);
+            }
+            .avtt-toolbar-dropdown {
+                position: relative;
+            }
+            .avtt-toolbar-dropdown-list {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border-radius: 4px;
+                padding: 6px;
+                display: none;
+                z-index: 9999;
+                min-width: 140px;
+            }
+            #avtt-actions-dropdown{
+              left:0;
+              right: auto;
+            }
+            .avtt-toolbar-dropdown-list.visible {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .avtt-toolbar-dropdown-list button {
+                background: transparent;
+                color: inherit;
+                border: none;
+                text-align: left;
+                padding: 4px 8px;
+                border-radius: 3px;
+                cursor: pointer;
+            }
+            .avtt-toolbar-dropdown-list button:hover:not(:disabled) {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            .avtt-toolbar-dropdown-list button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
             #file-listing-section tr{
                 padding: 3px 5px;
                 margin: 5px 0px;
+            }
+            #file-listing-section tr.avtt-file-row {
+                cursor: default;
+            }
+            #file-listing-section tr.avtt-drop-target {
+                background: rgba(131, 185, 255, 0.15);
+                outline: 1px dashed rgba(131, 185, 255, 0.6);
+            }
+            #file-listing-section tr.avtt-cut-row {
+                opacity: 0.6;
+            }
+            #file-listing-section tr.avtt-dragging {
+                opacity: 0.5;
             }
             #file-listing-section tr input {
                 height: 16px;
@@ -899,8 +2454,31 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #file-listing-section tr td {
                 vertical-align: middle;
             }
+            #file-listing {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+            }
+            #file-listing td {
+                padding: 4px 16px;
+            }
+            #file-listing td:nth-of-type(1) {
+                width: 40px;
+                padding-right: 8px;
+            }
+            #file-listing td:nth-of-type(3) {
+                width: 120px;
+            }
+            #file-listing td:nth-of-type(4) {
+                width: 120px;
+                text-align: right;
+                padding-right: 16px;
+            }
+            #file-listing td.avtt-file-size {
+                text-align: right;
+            }
             label.avtt-file-name .material-symbols-outlined {
-                font-size: 26px;
+                font-size: 35px;
                 vertical-align: middle;
                 margin-right: 10px;
                 color: #e11414;
@@ -963,11 +2541,14 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 margin: 5px 0px 0px 0px;
             }
             #file-listing-section tr label{
-                flex-grow: 1;
+                margin: 0px;
+                display: flex;
+                align-items: center;
+            }
+            #file-listing-section tr span{
                 overflow: hidden;
                 text-overflow: ellipsis;    
                 white-space: nowrap;
-                margin-bottom: 0px;
             }
             #select-section{
                 display: flex;
@@ -978,7 +2559,102 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #file-listing-section tr:nth-of-type(odd) {
                 backdrop-filter: brightness(0.95);
             }
+            .avtt-context-menu {
+                position: absolute;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 6px;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                border-radius: 4px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 99999;
+            }
+            .avtt-context-menu.hidden {
+                display: none;
+            }
+            .avtt-context-menu button {
+                font: inherit;
+                background: transparent;
+                color: inherit;
+                border: none;
+                text-align: left;
+                padding: 4px 10px;
+                border-radius: 3px;
+                cursor: pointer;
+            }
+            .avtt-context-menu button:hover:not(:disabled) {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            .avtt-context-menu button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
         
+            .avtt-conflict-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.4);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 100000;
+            }
+            .avtt-conflict-modal {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border-radius: 6px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+                padding: 18px 20px;
+                width: min(420px, 90vw);
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .avtt-conflict-modal h3 {
+                margin: 0;
+                font-size: 1.1em;
+            }
+            .avtt-conflict-modal-buttons {
+                display: flex;
+                gap: 8px;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+            }
+            .avtt-conflict-modal button {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid gray;
+                border-radius: 4px;
+                padding: 6px 12px;
+                cursor: pointer;
+            }
+            .avtt-conflict-modal button:hover {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            .avtt-conflict-modal button:focus-visible {
+                outline: 2px solid var(--highlight-color, rgba(131, 185, 255, 1));
+                outline-offset: 2px;
+            }
+            .avtt-conflict-apply-all {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .avtt-conflict-modal input[type="text"] {
+                width: 100%;
+                padding: 6px 8px;
+                border: 1px solid #c6c6c6;
+                border-radius: 4px;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+            }
+            .avtt-conflict-modal input[type="text"]:focus {
+                outline: 2px solid var(--highlight-color, rgba(131, 185, 255, 1));
+                outline-offset: 1px;
+            }
         </style>
         <div id="avtt-file-picker">
             <div id="select-section">
@@ -986,30 +2662,56 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                     <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
                     <div id='patreon-tier'></div>
                 </div>
-                <div style='display: flex; align-items: center; gap: 10px;'>
-                    <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;'>Create Folder</div>
-                    <input id='create-folder-input' type='text' placeholder='folder name' />
-                </div>
-                <div style='display: flex; align-items: center; gap: 10px;'>
-                    <div id='uploading-file-indicator' style='display:none'></div>
-                    <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;' for="file-input">Upload File</label>
+                <div style='display: flex; gap: 10px; line-height: 16px; width: 100%; align-items: center; padding-left:20px;'>
+                  <div id="avtt-actions-menu" class="avtt-toolbar-dropdown">
+                    <button type="button" class="avtt-toolbar-link avtt-toolbar-button avtt-actions-toggle">Actions &#9662;</button>
+                    <div id="avtt-actions-dropdown" class="avtt-toolbar-dropdown-list">
+                      <button type="button" data-action="cut">Cut</button>
+                      <button type="button" data-action="paste">Paste</button>
+                      <button type="button" data-action="copy-path">Copy Path</button>
+                      <button type="button" data-action="rename">Rename</button>
+                      <button type="button" data-action="import">Import</button>
+                      <hr/>
+                      <button type="button" data-action="delete">Delete</button>
+                    </div>
+                  </div>
+                  <input id='search-files' type='text' placeholder='Search' />
+                  <div style='flex-grow:1'></div>
+                  <div id='uploading-file-indicator' style='display:none'></div>
+                    <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;line-height: 16px;' for="file-input">Upload File</label>
                     <input style='display:none;' type="file" multiple id="file-input"
                         accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt,application/pdf" />
-                    <input id='search-files' type='text' placeholder='Search' />
+                    <div id='create-folder' class='avtt-toolbar-link'>Create Folder</div>
+                    <div id="avtt-export-menu" class="avtt-toolbar-dropdown">
+                        <div id="avtt-export-toggle" class="avtt-toolbar-link avtt-toolbar-button">Take Export &#9662;</div>
+                        <div id="avtt-export-dropdown" class="avtt-toolbar-dropdown-list">
+                            <button type="button" data-export="campaign">Campaign Export</button>
+                            <button type="button" data-export="currentScene">Current Scene</button>
+                            <button type="button" data-export="tokenCustomization">Token Customization</button>
+                            <button type="button" data-export="journal">Journal</button>
+                            <button type="button" data-export="audio">Audio</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div id='upFolder' style='position: absolute; left: 30px; top:10px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
             </div>
+            <div id="avtt-listing-toolbar">
+                <div id="avtt-column-headers">
+                    <span><label for="avtt-select-files"><input type="checkbox" id="avtt-select-files" style='width:20px;height:20px'/></label></span>
+                    <span class="avtt-sortable-header" data-sort="name" data-label="Name">Name</span>
+                    <span class="avtt-sortable-header" data-sort="type" data-label="Type">Type</span>
+                    <span class="avtt-sortable-header" data-sort="size" data-label="Size">Size</span>
+                </div>
+            </div>
             <div id="file-listing-section">
                 <table id="file-listing">
                     <tr>
-                        <td>Loading...
-                        <td>
+                        <td colspan="4">Loading...</td>
                     </tr>
                 </table>
             </div>
             <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
-                <button id="delete-selected-files">Delete</button>
                 <button id="copy-path-to-clipboard" style="${typeof selectFunction === "function" ? "display: none;" : ""}">Copy Path</button>
                 <button id="select-file" style="${typeof selectFunction === "function" ? "" : "display: none;"}">Select</button>
             </div>
@@ -1022,6 +2724,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   draggableWindow.find(".sidebar-panel-loading-indicator").remove();
 
   $("body").append(draggableWindow);
+  activeFilePickerFilter = fileTypes;
+  avttEnsureContextMenu();
+  avttHideContextMenu();
 
   const tierLabel = document.getElementById("patreon-tier");
   if (tierLabel) {
@@ -1032,14 +2737,227 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
 
   const fileInput = document.getElementById("file-input");
   const createFolder = document.getElementById("create-folder");
-  const deleteSelectedButton = document.getElementById("delete-selected-files");
+  const exportMenu = document.getElementById("avtt-export-menu");
+  const exportDropdown = document.getElementById("avtt-export-dropdown");
+  const exportToggle = document.getElementById("avtt-export-toggle");
   const copyPathButton = document.getElementById("copy-path-to-clipboard");
   const searchInput = document.getElementById("search-files");
   const selectFile = document.getElementById("select-file");
   const filePickerElement = document.getElementById("avtt-file-picker");
   const uploadingIndicator = document.getElementById("uploading-file-indicator");
+  const selectFilesToggle = document.getElementById("avtt-select-files");
+  const actionsMenu = document.getElementById("avtt-actions-menu");
+  const actionsDropdown = document.getElementById("avtt-actions-dropdown");
+  const actionsToggle = actionsMenu
+    ? actionsMenu.querySelector(".avtt-actions-toggle")
+    : null;
+
+  if (selectFilesToggle) {
+    selectFilesToggle.addEventListener("change", (event) => {
+      const shouldSelect = Boolean(event.target.checked);
+      const nonFolderCheckboxes = avttGetNonFolderCheckboxes();
+      nonFolderCheckboxes.forEach((checkbox) => {
+        checkbox.checked = shouldSelect;
+      });
+      if (nonFolderCheckboxes.length) {
+        const lastCheckbox = nonFolderCheckboxes[nonFolderCheckboxes.length - 1];
+        let indexAttr = null;
+        if (lastCheckbox && typeof lastCheckbox.getAttribute === "function") {
+          indexAttr = lastCheckbox.getAttribute("data-index");
+        }
+        avttLastSelectedIndex =
+          shouldSelect && indexAttr !== null ? Number(indexAttr) : null;
+      } else {
+        avttLastSelectedIndex = null;
+      }
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+      avttApplyClipboardHighlights();
+    });
+  }
+
+  const handleExportOption = async (option) => {
+    avttHideExportMenu();
+    avttHideContextMenu();
+    avttHideActionsMenu();
+    const exportHandlers = {
+      campaign: () => {
+        if (typeof window.export_file !== "function") {
+          throw new Error("Campaign export is not available.");
+        }
+        return window.export_file();
+      },
+      currentScene: () => {
+        if (typeof window.export_current_scene !== "function") {
+          throw new Error("Current scene export is not available.");
+        }
+        return window.export_current_scene();
+      },
+      tokenCustomization: () => {
+        if (typeof window.export_token_customization !== "function") {
+          throw new Error("Token customization export is not available.");
+        }
+        return window.export_token_customization();
+      },
+      journal: () => {
+        if (typeof window.export_journal !== "function") {
+          throw new Error("Journal export is not available.");
+        }
+        return window.export_journal();
+      },
+      audio: () => {
+        if (typeof window.export_audio !== "function") {
+          throw new Error("Audio export is not available.");
+        }
+        return window.export_audio();
+      },
+    };
+    const handler = exportHandlers[option];
+    if (typeof handler !== "function") {
+      alert("Selected export option is not available.");
+      return;
+    }
+    try {
+      const { data, filename, mimeType } = await avttCaptureDownload(handler);
+      const fileName =
+        typeof filename === "string" && filename.trim()
+          ? filename.trim()
+          : `${option}-${Date.now()}.abovevtt`;
+
+      const blob = new Blob([data], { type: mimeType || "text/plain" });
+      const syntheticFile = new File([blob], fileName, {
+        type: mimeType || "text/plain",
+      });
+      await uploadSelectedFiles([syntheticFile]);
+    } catch (error) {
+      console.error("Export upload failed", error);
+      alert(error?.message || "Failed to export data.");
+    } finally {
+      if (typeof window.$ === "function") {
+        try {
+          $(".import-loading-indicator").remove();
+        } catch (cleanupError) {
+          // ignore
+        }
+      }
+    }
+  };
+
+  if (actionsToggle && actionsDropdown && actionsMenu) {
+    const handleActionsOutsideClick = (event) => {
+      if (!actionsDropdown.classList.contains("visible")) {
+        return;
+      }
+      if (!actionsMenu.contains(event.target)) {
+        avttHideActionsMenu();
+        avttHideExportMenu();
+      }
+    };
+    const handleActionsWindowBlur = () => {
+      avttHideActionsMenu();
+      avttHideExportMenu();
+    };
+    actionsToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      avttToggleActionsMenu();
+    });
+    actionsDropdown
+      .querySelectorAll("button[data-action]")
+      .forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const action = button.getAttribute("data-action");
+          await avttHandleToolbarAction(action);
+        });
+      });
+    document.addEventListener("click", handleActionsOutsideClick, true);
+    window.addEventListener("blur", handleActionsWindowBlur);
+    const cleanupActionsMenuHandlers = () => {
+      document.removeEventListener("click", handleActionsOutsideClick, true);
+      window.removeEventListener("blur", handleActionsWindowBlur);
+    };
+    draggableWindow
+      .off("remove.actionsMenu")
+      .on("remove.actionsMenu", () => {
+        cleanupActionsMenuHandlers();
+        avttHideActionsMenu();
+        avttHideExportMenu();
+      });
+    draggableWindow.find(".title_bar_close_button")
+      .off("click.actionsMenu")
+      .on("click.actionsMenu", () => {
+        cleanupActionsMenuHandlers();
+        avttHideActionsMenu();
+        avttHideExportMenu();
+      });
+  }
+
+
+  if (exportToggle && exportDropdown && exportMenu) {
+    const handleExportOutsideClick = (event) => {
+      if (!exportDropdown.classList.contains("visible")) {
+        return;
+      }
+      if (!exportMenu.contains(event.target)) {
+        avttHideExportMenu();
+      }
+    };
+    const handleExportWindowBlur = () => {
+      avttHideExportMenu();
+    };
+    exportToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      avttToggleExportMenu();
+    });
+    exportDropdown
+      .querySelectorAll("button[data-export]")
+      .forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const exportType = button.getAttribute("data-export");
+          await handleExportOption(exportType);
+        });
+      });
+    document.addEventListener("click", handleExportOutsideClick, true);
+    window.addEventListener("blur", handleExportWindowBlur);
+    const cleanupExportMenuHandlers = () => {
+      document.removeEventListener("click", handleExportOutsideClick, true);
+      window.removeEventListener("blur", handleExportWindowBlur);
+    };
+    draggableWindow
+      .off("remove.exportMenu")
+      .on("remove.exportMenu", () => {
+        cleanupExportMenuHandlers();
+        avttHideExportMenu();
+      });
+    draggableWindow.find(".title_bar_close_button")
+      .off("click.exportMenu")
+      .on("click.exportMenu", () => {
+        cleanupExportMenuHandlers();
+        avttHideExportMenu();
+      });
+  }
+
+  const columnHeadersContainer = document.getElementById("avtt-column-headers");
+  if (columnHeadersContainer) {
+    columnHeadersContainer
+      .querySelectorAll(".avtt-sortable-header")
+      .forEach((header) => {
+        header.addEventListener("click", () => {
+          const column = header.getAttribute("data-sort");
+          avttToggleSort(column);
+        });
+      });
+    avttUpdateSortIndicators();
+  }
 
   refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
 
   const showUploadingProgress = (index, total) => {
     if (!uploadingIndicator) {
@@ -1091,36 +3009,75 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     let totalSize = 0;
     let uploadedBytes = 0;
     let uploadedCount = 0;
+    let conflictPolicy = null;
+    const userUsedElement = document.getElementById("user-used");
 
     for (let i = 0; i < fileArray.length; i += 1) {
       const selectedFile = fileArray[i];
       showUploadingProgress(i, fileArray.length);
-      document.getElementById("user-used").innerHTML = formatFileSize(
-        totalSize + S3_Current_Size,
-      );
+
       const extension = getFileExtension(selectedFile.name);
       if (!isAllowedExtension(extension)) {
         alert("Skipping unsupported file type");
-        if (i < fileArray.length) {
-          continue;
+        if (i === fileArray.length - 1) {
+          hideUploadingIndicator();
         }
-        hideUploadingIndicator();
-        return;
+        continue;
       }
 
+      let targetKey = resolveUploadKey(selectedFile);
+      let action = "overwrite";
 
-      totalSize += selectedFile.size;
-      if (activeUserLimit !== undefined && totalSize + S3_Current_Size > activeUserLimit) {
-        alert("Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.");
-        if (i < fileArray.length) {
-          continue;
-        }
-        hideUploadingIndicator();
-        return;
-      }
       try {
-        const uploadKey = resolveUploadKey(selectedFile);
-        const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(uploadKey)}&user=${window.PATREON_ID}&upload=true`);
+        const exists = await avttDoesObjectExist(targetKey);
+        if (exists) {
+          if (conflictPolicy?.applyAll) {
+            action = conflictPolicy.action;
+          } else {
+            const conflictResult = await avttPromptUploadConflict({ fileName: targetKey });
+            if (!conflictResult || !conflictResult.action) {
+              action = "skip";
+            } else {
+              action = conflictResult.action;
+              if (conflictResult.applyAll) {
+                conflictPolicy = {
+                  action,
+                  applyAll: true,
+                };
+              }
+            }
+          }
+        }
+      } catch (existError) {
+        console.warn("Failed to verify if file exists before upload", existError);
+      }
+
+      if (action === "skip") {
+        continue;
+      }
+
+      if (action === "keepBoth") {
+        try {
+          targetKey = await avttDeriveUniqueKey(targetKey);
+        } catch (deriveError) {
+          console.error("Failed to generate unique key for duplicate upload", deriveError);
+          alert("Failed to generate a unique name for a duplicate file. Skipping.");
+          continue;
+        }
+      }
+
+      const prospectiveTotal = totalSize + selectedFile.size;
+      if (
+        activeUserLimit !== undefined &&
+        prospectiveTotal + S3_Current_Size > activeUserLimit
+      ) {
+        alert("Skipping File. This upload would exceed the storage limit your Patreon tier. Delete some files before uploading more.");
+        hideUploadingIndicator();
+        return;
+      }
+
+      try {
+        const presignResponse = await fetch(`${AVTT_S3}?filename=${encodeURIComponent(targetKey)}&user=${window.PATREON_ID}&upload=true`);
         if (!presignResponse.ok) {
           throw new Error("Failed to retrieve upload URL.");
         }
@@ -1137,21 +3094,25 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
           method: "PUT",
           body: selectedFile,
           headers: uploadHeaders,
-          signal: avttUploadSignal, 
+          signal: avttUploadSignal,
         });
 
         if (!uploadResponse.ok) {
           throw new Error("Upload failed.");
         }
 
+        totalSize = prospectiveTotal;
+        if (userUsedElement) {
+          userUsedElement.innerHTML = formatFileSize(totalSize + S3_Current_Size);
+        }
+        avttRegisterPendingUploadKey(targetKey, Number(selectedFile.size) || 0);
         uploadedBytes += Number(selectedFile.size) || 0;
         uploadedCount += 1;
       } catch (error) {
         console.error(error);
-        if (error === 'User cancelled upload by closing window.') {
+        if (error === "User cancelled upload by closing window.") {
           alert(error || "Aborted manually.");
-        }
-        else{
+        } else {
           alert(error.message || "An unexpected error occurred while uploading.");
         }
         if (uploadedCount > 0) {
@@ -1166,6 +3127,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       await applyUsageDelta(uploadedBytes, uploadedCount);
     }
 
+    avttFolderListingCache.clear();
     refreshFiles(currentFolder, true);
     showUploadComplete();
   };
@@ -1362,51 +3324,51 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       debounceSearchFiles(searchTerm, fileTypes);
     });
 
-  createFolder.addEventListener("click", async (event) => {
-    const folderName = $("#create-folder-input").val();
+  createFolder.addEventListener("click", async () => {
+    avttHideExportMenu();
+    avttHideActionsMenu();
+    avttHideContextMenu();
+    const userInput = await avttPromptTextDialog({
+      title: "Create Folder",
+      message: "Enter a name for the new folder.",
+      placeholder: "Folder name",
+      confirmLabel: "Create",
+    });
+    if (userInput === null) {
+      return;
+    }
+    const trimmed = String(userInput).trim();
+    if (!trimmed) {
+      alert("Folder name cannot be empty.");
+      return;
+    }
+    if (/[\\/]/.test(trimmed)) {
+      alert("Folder names cannot contain slashes.");
+      return;
+    }
+    const folderName = trimmed.replace(/\/+$/g, "");
+    if (!folderName) {
+      alert("Folder name cannot be empty.");
+      return;
+    }
     try {
       await fetch(
         `${AVTT_S3}?folderName=${encodeURIComponent(`${currentFolder}${folderName}`)}&user=${window.PATREON_ID}`,
       );
+      avttFolderListingCache.clear();
       refreshFiles(currentFolder);
-    } catch {
+    } catch (error) {
+      console.error("Failed to create folder", error);
       alert("Failed to create folder");
     }
   });
 
-  copyPathButton.addEventListener("click", () => {
-    const selectedCheckboxes = $(
-      '#file-listing input[type="checkbox"]:checked',
-    );
-
-    if (selectedCheckboxes.length == 0) {
-      return;
-    }
-    const paths = [];
-    for (const selected of selectedCheckboxes) {
-      paths.push(
-        `above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`,
-      );
-    }
-    const copyText = paths.join(", ");
-    navigator.clipboard.writeText(copyText);
-  });
-
-  deleteSelectedButton.addEventListener("click", async () => {
-    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked').get();
-    if (selectedCheckboxes.length === 0) {
-      return;
-    }
-    const selections = selectedCheckboxes.map((element) => {
-      const sizeAttr = Number(element.getAttribute("data-size"));
-      return {
-        key: element.value,
-        size: Number.isFinite(sizeAttr) ? sizeAttr : 0,
-        isFolder: element.classList.contains("folder"),
-      };
+  if (copyPathButton) {
+    copyPathButton.addEventListener("click", () => {
+      avttCopySelectedPathsToClipboard();
+      avttUpdateActionsMenuState();
     });
-    await deleteFilesFromS3Folder(selections);
-  });
+  }
 
   function isAllowedExtension(extension) {
     return (
@@ -1473,6 +3435,13 @@ function refreshFiles(
   searchTerm,
   fileTypes,
 ) {
+    currentFolder = typeof path === "string" ? path : "";
+    activeFilePickerFilter = fileTypes;
+    avttFolderListingCache.clear();
+    avttLastSelectedIndex = null;
+    avttHideActionsMenu();
+    avttHideExportMenu();
+    avttUpdateSortIndicators();
     if (recheckSize) {
         getUserUploadedFileSize().then((size) => {
         S3_Current_Size = size;
@@ -1493,6 +3462,39 @@ function refreshFiles(
     }
 
     const fileListing = document.getElementById("file-listing");
+    $('#file-listing')
+      .off('change.avttSelection')
+      .on('change.avttSelection', 'input[type="checkbox"]', () => {
+        avttUpdateSelectNonFoldersCheckbox();
+        avttUpdateActionsMenuState();
+      });
+    const fileListingSection = document.getElementById("file-listing-section");
+    if (fileListingSection && !fileListingSection.dataset.avttContextBound) {
+      fileListingSection.addEventListener("contextmenu", (event) => {
+        const row = event.target.closest("tr.avtt-file-row");
+        if (row) {
+          return;
+        }
+        const targetTag = String(event.target?.tagName || "").toLowerCase();
+        if (targetTag === "input" || event.target?.isContentEditable) {
+          return;
+        }
+        avttOpenContextMenu(
+          event,
+          {
+            relativePath: currentFolder,
+            isFolder: true,
+            displayName:
+              currentFolder && currentFolder !== ""
+                ? currentFolder.replace(/\/$/, "").split("/").pop()
+                : "Home",
+            isImplicit: true,
+          },
+          { ensureSelection: false, implicitTarget: true },
+        );
+      });
+      fileListingSection.dataset.avttContextBound = "true";
+    }
     const upFolder = $("#upFolder");
     if (path != ""){
       const splitPath = path.replace(/\/$/gi, "").split("/");
@@ -1517,99 +3519,234 @@ function refreshFiles(
 
 
     const insertFiles = (files, searchTerm, fileTypes) => {
-        console.log("Files in folder: ", files);
-        if (files.length === 0) {
-        fileListing.innerHTML = "<tr><td>No files found.</td></tr>";
-        } else {
-        fileListing.innerHTML = "";
-        for (const fileEntry of files) {
-            const listItem = document.createElement("tr");
-            const regEx = new RegExp(`^${window.PATREON_ID}/`, "gi");
-            const rawKey =
-            typeof fileEntry === "object" && fileEntry !== null
-                ? fileEntry.Key || fileEntry.key || ""
-                : fileEntry;
-            if (!rawKey) {
+      console.log("Files in folder: ", files);
+      const normalizedSearch =
+        typeof searchTerm === "string" ? searchTerm.toLowerCase() : undefined;
+
+      const fileTypeIcon = {
+        [avttFilePickerTypes.FOLDER]: "folder",
+        [avttFilePickerTypes.UVTT]: "description",
+        [avttFilePickerTypes.IMAGE]: "imagesmode",
+        [avttFilePickerTypes.VIDEO]: "video_file",
+        [avttFilePickerTypes.AUDIO]: "audio_file",
+        [avttFilePickerTypes.PDF]: "picture_as_pdf",
+        [avttFilePickerTypes.ABOVEVTT]: "description",
+        [avttFilePickerTypes.CSV]: "csv",
+      };
+
+      const regEx = new RegExp(`^${window.PATREON_ID}/`, "gi");
+      const prepared = [];
+
+      for (const fileEntry of files) {
+        const rawKey =
+          typeof fileEntry === "object" && fileEntry !== null
+            ? fileEntry.Key || fileEntry.key || ""
+            : fileEntry;
+        if (!rawKey) {
+          continue;
+        }
+        const relativePath = rawKey.replace(regEx, "");
+        const isFolder = /\/$/gi.test(relativePath);
+        const size =
+          typeof fileEntry === "object" &&
+          fileEntry !== null &&
+          Number.isFinite(Number(fileEntry.Size))
+            ? Number(fileEntry.Size)
+            : 0;
+
+        const extension = getFileExtension(rawKey);
+        let type;
+        if (isFolder) {
+          type = avttFilePickerTypes.FOLDER;
+        } else if (allowedJsonTypes.includes(extension)) {
+          type = avttFilePickerTypes.UVTT;
+        } else if (allowedImageTypes.includes(extension)) {
+          type = avttFilePickerTypes.IMAGE;
+        } else if (allowedVideoTypes.includes(extension)) {
+          type = avttFilePickerTypes.VIDEO;
+        } else if (allowedAudioTypes.includes(extension)) {
+          type = avttFilePickerTypes.AUDIO;
+        } else if (allowedDocTypes.includes(extension)) {
+          type = avttFilePickerTypes.PDF;
+        } else if (allowedTextTypes.includes(extension)) {
+          if (
+            extension.toLowerCase() ===
+            avttFilePickerTypes.ABOVEVTT.toLowerCase()
+          ) {
+            type = avttFilePickerTypes.ABOVEVTT;
+          } else if (
+            extension.toLowerCase() === avttFilePickerTypes.CSV.toLowerCase()
+          ) {
+            type = avttFilePickerTypes.CSV;
+          }
+        }
+
+        if (normalizedSearch) {
+          const displayName = relativePath.split("/").filter(Boolean).pop() || "";
+          if (
+            !relativePath.toLowerCase().includes(normalizedSearch) &&
+            !(type && type.toLowerCase() === normalizedSearch) &&
+            !displayName.toLowerCase().includes(normalizedSearch)
+          ) {
             continue;
-            }
-            const path = rawKey.replace(regEx, "");
-            const size =
-            typeof fileEntry === "object" &&
-            fileEntry !== null &&
-            Number.isFinite(Number(fileEntry.Size))
-                ? Number(fileEntry.Size)
-                : 0;
+          }
+        }
 
-            const isFolder = path.match(/\/$/gi);
-            const extension = getFileExtension(rawKey);
-            let type;
-            if (isFolder) {
-              type = avttFilePickerTypes.FOLDER;
-            } else if (allowedJsonTypes.includes(extension)) {
-              type = avttFilePickerTypes.UVTT;
-            } else if (allowedImageTypes.includes(extension)) {
-              type = avttFilePickerTypes.IMAGE;
-            } else if (allowedVideoTypes.includes(extension)) {
-              type = avttFilePickerTypes.VIDEO;
-            } else if (allowedAudioTypes.includes(extension)) {
-              type = avttFilePickerTypes.AUDIO;
-            } else if (allowedDocTypes.includes(extension)) {
-              type = avttFilePickerTypes.PDF;
-            } else if (allowedTextTypes.includes(extension)) {
-              if (extension.toLowerCase() === avttFilePickerTypes.ABOVEVTT.toLowerCase()) {
-                type = avttFilePickerTypes.ABOVEVTT;
-              } else if (extension.toLowerCase() === avttFilePickerTypes.CSV.toLowerCase()) {
-                type = avttFilePickerTypes.CSV;
-              }
-            }
+        if (fileTypes && fileTypes.length > 0) {
+          if (type !== avttFilePickerTypes.FOLDER && !fileTypes.includes(type)) {
+            continue;
+          }
+        }
 
-            const fileTypeIcon = {
-              [avttFilePickerTypes.FOLDER]: "folder",
-              [avttFilePickerTypes.UVTT]: "description",
-              [avttFilePickerTypes.IMAGE]: "imagesmode",
-              [avttFilePickerTypes.VIDEO]: "video_file",
-              [avttFilePickerTypes.AUDIO]: "audio_file",
-              [avttFilePickerTypes.PDF]: "picture_as_pdf",
-              [avttFilePickerTypes.ABOVEVTT]: "description",
-              [avttFilePickerTypes.CSV]: "csv",
-            }
+        prepared.push({
+          rawKey,
+          relativePath,
+          size,
+          isFolder,
+          type,
+          displayName: relativePath.split("/").filter(Boolean).pop() || relativePath,
+        });
+      }
 
-           
-            const input = $(
-            `<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? "folder" : ""}" value="${path}" data-size="${isFolder ? 0 : size}"></td>`,
-            );
-            const label = $(
-              `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}"><span class="material-symbols-outlined">${fileTypeIcon[type]}</span>${path.split('/').filter(d=>d).pop()}</label></td>`,
-            );
+      if (prepared.length === 0) {
+        fileListing.innerHTML = "<tr><td colspan='4'>No files found.</td></tr>";
+        avttApplyClipboardHighlights();
+        avttUpdateSelectNonFoldersCheckbox();
+        avttUpdateActionsMenuState();
+        return;
+      }
 
-            
-            if (searchTerm != undefined) {
-            const lowerSearch = searchTerm.toLowerCase();
+      avttSortEntries(prepared);
+      const setLineImgSrc = async (container, entry) => {
+        const path = entry?.rawKey || entry?.relativePath || "";
+        try{
+          if (entry.type !== avttFilePickerTypes.IMAGE && entry.type !== avttFilePickerTypes.VIDEO) 
+            return;
+          
+          if (!path) 
+            return;
+          const url = await getAvttStorageUrl(path);
 
-            if (
-                !path.toLowerCase().includes(lowerSearch) &&
-                type.toLowerCase() != lowerSearch
-            )
-                continue;
-            }
-            if (fileTypes != undefined && fileTypes.length > 0) {
-            if (type != avttFilePickerTypes.FOLDER && !fileTypes.includes(type))
-                continue;
-            }
+          if (!url) 
+            return;
+          
+          if(entry.type === avttFilePickerTypes.IMAGE){
+            const img = document.createElement("img");
+            img.src = url;
+            img.style.width = "35px";
+            img.style.height = "35px";
+            img.style.objectFit = "cover";
+            img.style.marginRight = "10px";
+            img.style.verticalAlign = "middle";
+            img.loading = "lazy";
 
-            const typeCell = $(`<td>${type}</td>`);
-
-            $(listItem).append(input, label, typeCell);
-            if (isFolder) {
-            label.off("click.openFolder").on("click.openFolder", function (e) {
-                e.preventDefault();
-                refreshFiles(path, undefined, undefined, undefined, fileTypes);
-                currentFolder = path;
+            container.replaceWith(img);
+          }else if(entry.type === avttFilePickerTypes.VIDEO){
+            const video = document.createElement("video");
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+ 
+            const $video = $(video);
+            $video.one('loadedmetadata', function () {
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
             });
-            }
-            fileListing.appendChild(listItem);
+
+            $video.one('canplay', function () {
+              canvas.style.display = 'inline';
+              ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+              $video.off('loadedmetadata');
+              $video.off('canplay');
+              video.src = "";
+              $video.remove();              
+            });
+            canvas.style.width = "35px";
+            canvas.style.height = "35px";
+            canvas.style.marginRight = "10px";
+            canvas.style.verticalAlign = "middle";
+            canvas.style.objectFit = "cover";
+            video.currentTime = 0.001;
+            video.src = url;
+            video.load();
+
+            container.replaceWith(canvas);
+          }
+        } catch(error){
+          console.warn("Failed to load preview for ", path, error);
         }
+      }
+      fileListing.innerHTML = "";
+      prepared.forEach((entry, index) => {
+        const listItem = document.createElement("tr");
+        listItem.classList.add("avtt-file-row");
+        listItem.dataset.path = entry.relativePath;
+        listItem.dataset.isFolder = entry.isFolder ? "true" : "false";
+        listItem.dataset.type = entry.type || "";
+        listItem.setAttribute("draggable", "true");
+        const checkboxCell = $(`<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`);
+        const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span><span>${entry.displayName}</span></label></td>`);
+        const typeCell = $(`<td>${entry.type || ""}</td>`);
+        const sizeValue = entry.isFolder ? "" : formatFileSize(entry.size || 0);
+        const sizeCell = $(`<td class="avtt-file-size">${sizeValue}</td>`);
+
+        const iconElement = labelCell.find("span.material-symbols-outlined")[0];
+        if (iconElement) {
+          setLineImgSrc(iconElement, entry);
         }
+
+        $(listItem).append(checkboxCell, labelCell, typeCell, sizeCell);
+        if (entry.isFolder) {
+          labelCell
+            .off("click.openFolder")
+            .on("click.openFolder", function (e) {
+              e.preventDefault();
+              refreshFiles(
+                entry.relativePath,
+                undefined,
+                undefined,
+                undefined,
+                fileTypes,
+              );
+              currentFolder = entry.relativePath;
+            });
+        }
+        listItem.addEventListener("click", () => {
+          $("input").blur();
+        });
+        const checkboxElement = checkboxCell.find("input")[0];
+        if (checkboxElement) {
+          checkboxElement.setAttribute("data-index", String(index));
+          checkboxElement.addEventListener("click", (clickEvent) => {
+            avttHandleCheckboxClick(clickEvent, index);
+          });
+        }
+        listItem.addEventListener("dragstart", (dragEvent) => {
+          avttHandleDragStart(dragEvent, entry);
+        });
+        listItem.addEventListener("dragend", avttHandleDragEnd);
+        if (entry.isFolder) {
+          listItem.addEventListener("dragenter", (dragEvent) => {
+            avttHandleFolderDragEnter(dragEvent, listItem, entry.relativePath);
+          });
+          listItem.addEventListener("dragover", (dragEvent) => {
+            avttHandleFolderDragOver(dragEvent, listItem, entry.relativePath);
+          });
+          listItem.addEventListener("dragleave", (dragEvent) => {
+            avttHandleFolderDragLeave(dragEvent, listItem);
+          });
+          listItem.addEventListener("drop", async (dragEvent) => {
+            await avttHandleFolderDrop(dragEvent, entry.relativePath);
+          });
+        }
+        listItem.addEventListener("contextmenu", (contextEvent) => {
+          avttOpenContextMenu(contextEvent, entry);
+        });
+
+        fileListing.appendChild(listItem);
+      });
+      avttApplyClipboardHighlights();
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
     };
     if (allFiles) {
         getAllUserFiles()
@@ -1698,7 +3835,7 @@ async function deleteFilesFromS3Folder(selections, fileTypes) {
   }
 }
 
-// Enforce sequential fetches with retry backoff to protect the S3 endpoint.
+
 const GET_FILE_FROM_S3_MAX_RETRIES = 5;
 const GET_FILE_FROM_S3_BASE_DELAY_MS = 250;
 const GET_FILE_FROM_S3_MAX_DELAY_MS = 4000;

@@ -222,10 +222,30 @@ function init_mixer() {
                 $('style#mixer-paused').remove();
             }    
 
+            function waitForPlayer(id, callback = () => {}) {
+                if (typeof window.MIXER._players[id] !== "undefined") {
+                    callback();
+                }
+                else {
+                    setTimeout(function () { waitForPlayer(id, callback)}, 250);
+                }
+            }
 
-            $(item).append(channelNameDiv, window.MIXER.channelVolumeSlider(id), channel_play_pause, loop, remove, window.MIXER.channelProgressBar(id));
-
-            mixerChannels.append(item);
+            waitForPlayer(id, () => {
+                $(item).append(channelNameDiv, window.MIXER.channelVolumeSlider(id), channel_play_pause, loop, remove, window.MIXER.channelProgressBar(id));
+                mixerChannels.append(item);
+                if (channel.paused) {
+                    play_svg.css('display', 'block');
+                    pause_svg.css('display', 'none');
+                    channel_play_pause.toggleClass('playing pressed', false);
+                }
+                else {
+                    play_svg.css('display', 'none');
+                    pause_svg.css('display', 'none');
+                    validIcon.css('display', 'block');
+                    channel_play_pause.toggleClass('audio-error', false);
+                }
+            })
         });
     }
 

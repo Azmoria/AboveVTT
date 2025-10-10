@@ -7575,6 +7575,12 @@ background-image: var(--avtt-mask);
     top: 0;
     background-repeat: no-repeat;
 }
+#sounds-panel button span.avtt-btn-status {
+    background-position: -2px -3px;
+    top: 0px;
+    left: 0px;
+}
+
 #edit_scene_form button span.avtt-btn-status{
     background-position: 0px 0px;
     width: 20px;

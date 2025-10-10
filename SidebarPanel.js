@@ -1469,7 +1469,7 @@ function build_sidebar_list_row(listItem) {
           did_change_mytokens_items();   
         }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
         avttButton.toggleClass('token-row-button avtt-file-button', true);
-        avttButton.attr('title', 'Create token from AVTT File Picker'); 
+        avttButton.attr('title', "Create token from Azmoria's AVTT File Picker"); 
 
         let addTokenMenu = $(`<div class='addTokenMenu'></div>`)
 
