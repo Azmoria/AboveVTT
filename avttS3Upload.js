@@ -1020,7 +1020,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
   }
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
+
 
   const fileInput = document.getElementById("file-input");
   const createFolder = document.getElementById("create-folder");
@@ -1101,14 +1101,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         hideUploadingIndicator();
         return;
       }
-      if (selectedFile.size > MAX_FILE_SIZE) {
-        alert("Skipping file. File is too large - 50MB maximum.");
-        if (i < fileArray.length) {
-          continue;
-        }
-        hideUploadingIndicator();
-        return;
-      }
+
 
       totalSize += selectedFile.size;
       if (
