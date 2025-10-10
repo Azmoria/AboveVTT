@@ -32,6 +32,8 @@ function avttSelectPaths(paths) {
   $('#file-listing input[type="checkbox"]').each(function () {
     this.checked = pathSet.has(this.value);
   });
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
 }
 
 function avttEnsureSelectionIncludes(path, isFolder) {
@@ -64,6 +66,7 @@ function avttClearClipboard() {
   avttClipboard = { mode: null, items: [] };
   avttApplyClipboardHighlights();
   avttUpdateContextMenuState();
+  avttUpdateActionsMenuState();
 }
 
 function avttApplyClipboardHighlights() {
@@ -104,11 +107,172 @@ function avttSetClipboard(items, mode) {
   };
   avttApplyClipboardHighlights();
   avttUpdateContextMenuState();
+  avttUpdateActionsMenuState();
   return true;
 }
 
 function avttClipboardHasEntries() {
   return Array.isArray(avttClipboard.items) && avttClipboard.items.length > 0;
+}
+
+function avttCopySelectedPathsToClipboard() {
+  const selections = avttGetSelectedEntries();
+  if (!selections.length) {
+    return false;
+  }
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    console.warn("Clipboard API is not available.");
+    return false;
+  }
+  const paths = selections.map(
+    (entry) => `above-bucket-not-a-url/${window.PATREON_ID}/${entry.key}`,
+  );
+  const copyText = paths.join(", ");
+  const copyPromise = navigator.clipboard.writeText(copyText);
+  if (copyPromise && typeof copyPromise.then === "function") {
+    copyPromise.catch((error) => {
+      console.error("Failed to copy AVTT paths", error);
+    });
+  }
+  return true;
+}
+
+function avttGetNonFolderCheckboxes() {
+  return Array.from(
+    document.querySelectorAll(
+      '#file-listing input[type="checkbox"]:not(.folder)',
+    ),
+  );
+}
+
+function avttUpdateSelectNonFoldersCheckbox() {
+  const toggle = document.getElementById("avtt-select-files");
+  if (!toggle) {
+    return;
+  }
+  const nonFolderCheckboxes = avttGetNonFolderCheckboxes();
+  if (!nonFolderCheckboxes.length) {
+    toggle.checked = false;
+    toggle.indeterminate = false;
+    toggle.disabled = true;
+    return;
+  }
+  toggle.disabled = false;
+  const selectedCount = nonFolderCheckboxes.filter((checkbox) => checkbox.checked).length;
+  if (selectedCount === 0) {
+    toggle.checked = false;
+    toggle.indeterminate = false;
+  } else if (selectedCount === nonFolderCheckboxes.length) {
+    toggle.checked = true;
+    toggle.indeterminate = false;
+  } else {
+    toggle.checked = false;
+    toggle.indeterminate = true;
+  }
+}
+
+function avttUpdateActionsMenuState() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  const selection = avttGetSelectedEntries();
+  const hasSelection = selection.length > 0;
+  const singleSelection = selection.length === 1;
+
+  const cutButton = dropdown.querySelector('[data-action="cut"]');
+  if (cutButton) {
+    cutButton.disabled = !hasSelection;
+  }
+  const deleteButton = dropdown.querySelector('[data-action="delete"]');
+  if (deleteButton) {
+    deleteButton.disabled = !hasSelection;
+  }
+  const copyPathButton = dropdown.querySelector('[data-action="copy-path"]');
+  if (copyPathButton) {
+    copyPathButton.disabled = !hasSelection;
+  }
+  const renameButton = dropdown.querySelector('[data-action="rename"]');
+  if (renameButton) {
+    renameButton.disabled = !singleSelection;
+  }
+  const pasteButton = dropdown.querySelector('[data-action="paste"]');
+  if (pasteButton) {
+    pasteButton.disabled = !avttClipboardHasEntries();
+  }
+}
+
+function avttHideActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.remove("visible");
+}
+
+function avttShowActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  avttUpdateActionsMenuState();
+  dropdown.classList.add("visible");
+}
+
+function avttToggleActionsMenu() {
+  const dropdown = document.getElementById("avtt-actions-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  if (dropdown.classList.contains("visible")) {
+    avttHideActionsMenu();
+  } else {
+    avttShowActionsMenu();
+  }
+}
+
+async function avttHandleToolbarAction(action) {
+  let handled = false;
+  switch (action) {
+    case "cut": {
+      handled = avttCutSelectedFiles();
+      break;
+    }
+    case "paste": {
+      if (avttClipboardHasEntries()) {
+        handled = Boolean(await avttHandlePasteFromClipboard(currentFolder));
+      }
+      break;
+    }
+    case "copy-path":
+    case "copyPath": {
+      handled = avttCopySelectedPathsToClipboard();
+      break;
+    }
+    case "rename": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length === 1) {
+        handled = Boolean(
+          await avttPromptRename(selection[0].key, selection[0].isFolder),
+        );
+      }
+      break;
+    }
+    case "delete": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length > 0) {
+        await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
+        handled = true;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  if (handled) {
+    avttHideActionsMenu();
+  }
+  avttUpdateActionsMenuState();
 }
 
 function avttCutSelectedFiles() {
@@ -208,6 +372,8 @@ function avttUpdateContextMenuState() {
   if (!menu) {
     return;
   }
+  const selection = avttGetSelectedEntries();
+  const hasSelection = selection.length > 0;
   const pasteButton = menu.querySelector('button[data-action="paste"]');
   if (pasteButton) {
     pasteButton.disabled = !avttClipboardHasEntries();
@@ -215,6 +381,7 @@ function avttUpdateContextMenuState() {
   const renameButton = menu.querySelector('button[data-action="rename"]');
   const cutButton = menu.querySelector('button[data-action="cut"]');
   const deleteButton = menu.querySelector('button[data-action="delete"]');
+  const copyPathButton = menu.querySelector('button[data-action="copyPath"]');
   const hasExplicitTarget =
     Boolean(avttContextMenuState.targetPath) && !avttContextMenuState.isImplicit;
   if (renameButton) {
@@ -225,6 +392,9 @@ function avttUpdateContextMenuState() {
   }
   if (deleteButton) {
     deleteButton.disabled = !hasExplicitTarget;
+  }
+  if (copyPathButton) {
+    copyPathButton.disabled = !hasSelection;
   }
 }
 
@@ -291,21 +461,7 @@ async function avttHandleContextAction(action) {
       break;
     }
     case "copyPath": {
-      try {   
-        const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
-
-        if (selectedCheckboxes.length == 0) {
-          return;
-        }
-        const paths = [];
-        for (const selected of selectedCheckboxes) {
-          paths.push(`above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`);
-        }
-        const copyText = paths.join(", ");
-        navigator.clipboard.writeText(copyText);
-      } catch (err) {
-        console.error('Failed to copy text: ', err);
-      }
+      avttCopySelectedPathsToClipboard();
       break;
     }
     case "rename": {
@@ -448,44 +604,51 @@ async function avttHandlePasteFromClipboard(destinationFolder = currentFolder) {
   return true;
 }
 
-async function avttRenameTarget() {
-  const path = avttContextMenuState.targetPath;
+async function avttPromptRename(path, isFolder) {
   if (!path) {
-    return;
+    return false;
   }
-  const isFolder = avttContextMenuState.isFolder;
-  const baseName = isFolder
-    ? path.replace(/\/$/, "").split("/").pop() || ""
-    : path.split("/").pop() || "";
+  const normalizedPath = isFolder ? path.replace(/\/$/, "") : path;
+  const baseName = normalizedPath.split("/").pop() || "";
   const parentPath = (() => {
-    if (isFolder) {
-      const trimmed = path.replace(/\/$/, "");
-      const idx = trimmed.lastIndexOf("/");
-      return idx >= 0 ? `${trimmed.slice(0, idx + 1)}` : "";
-    }
-    const idx = path.lastIndexOf("/");
-    return idx >= 0 ? `${path.slice(0, idx + 1)}` : "";
+    const idx = normalizedPath.lastIndexOf("/");
+    return idx >= 0 ? `${normalizedPath.slice(0, idx + 1)}` : "";
   })();
   const newName = window.prompt("Enter a new name:", baseName);
-  if (!newName || !newName.trim() || newName === baseName) {
-    return;
+  if (newName === null || newName === undefined) {
+    return false;
   }
   const trimmedName = newName.trim();
+  if (!trimmedName || trimmedName === baseName) {
+    return false;
+  }
   if (/[\\/]/.test(trimmedName)) {
     alert("Names cannot contain slashes.");
-    return;
+    return false;
   }
   const newKey = `${parentPath}${trimmedName}${isFolder ? "/" : ""}`;
   if (newKey === path) {
-    return;
+    return false;
   }
   if (isFolder && newKey.startsWith(`${path}`)) {
     alert("Cannot rename a folder into its own sub-path.");
+    return false;
+  }
+  await avttMoveEntries(
+    [{ fromKey: path, toKey: newKey, isFolder }],
+    { operation: "move", clearClipboard: false },
+  );
+  return true;
+}
+
+async function avttRenameTarget() {
+  if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
     return;
   }
-  await avttMoveEntries([
-    { fromKey: path, toKey: newKey, isFolder },
-  ]);
+  await avttPromptRename(
+    avttContextMenuState.targetPath,
+    avttContextMenuState.isFolder,
+  );
 }
 
 function avttHandleDragStart(event, entry) {
@@ -1499,6 +1662,83 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 height: calc(100% - 170px);
                 overflow-y: auto;
             }
+            #avtt-listing-toolbar {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin: 45px 10px 0 10px;
+            }
+            #avtt-listing-toolbar .avtt-toolbar-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            #avtt-listing-toolbar label {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            #avtt-column-headers {
+                display: grid;
+                grid-template-columns: 40px 1fr 90px 120px;
+                padding: 0 16px;
+                font-weight: bold;
+                color: var(--font-color, #000);
+            }
+            #avtt-column-headers span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            #avtt-column-headers span:last-child {
+                text-align: right;
+            }
+            #avtt-actions-menu {
+                position: relative;
+            }
+            #avtt-actions-menu button.avtt-actions-toggle {
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 4px 10px;
+                cursor: pointer;
+            }
+            #avtt-actions-dropdown {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                border-radius: 4px;
+                padding: 6px;
+                display: none;
+                z-index: 9999;
+                min-width: 140px;
+            }
+            #avtt-actions-dropdown.visible {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            #avtt-actions-dropdown button {
+                background: transparent;
+                color: inherit;
+                border: none;
+                text-align: left;
+                padding: 4px 8px;
+                border-radius: 3px;
+                cursor: pointer;
+            }
+            #avtt-actions-dropdown button:hover:not(:disabled) {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            #avtt-actions-dropdown button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
             #file-listing-section tr{
                 padding: 3px 5px;
                 margin: 5px 0px;
@@ -1527,6 +1767,28 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             }
             #file-listing-section tr td {
                 vertical-align: middle;
+            }
+            #file-listing {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            #file-listing td {
+                padding: 4px 16px;
+            }
+            #file-listing td:nth-of-type(1) {
+                width: 40px;
+                padding-right: 8px;
+            }
+            #file-listing td:nth-of-type(3) {
+                width: 120px;
+            }
+            #file-listing td:nth-of-type(4) {
+                width: 120px;
+                text-align: right;
+                padding-right: 16px;
+            }
+            #file-listing td.avtt-file-size {
+                text-align: right;
             }
             label.avtt-file-name .material-symbols-outlined {
                 font-size: 35px;
@@ -1664,11 +1926,31 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             </div>
             <div id='upFolder' style='position: absolute; left: 30px; top:10px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
             </div>
+            <div id="avtt-listing-toolbar">
+                <div class="avtt-toolbar-row">
+                    <label for="avtt-select-files"><input type="checkbox" id="avtt-select-files" />Select all files (non-folders)</label>
+                    <div id="avtt-actions-menu">
+                        <button type="button" class="avtt-actions-toggle">Actions &#9662;</button>
+                        <div id="avtt-actions-dropdown">
+                            <button type="button" data-action="cut">Cut</button>
+                            <button type="button" data-action="paste">Paste</button>
+                            <button type="button" data-action="copy-path">Copy Path</button>
+                            <button type="button" data-action="rename">Rename</button>
+                            <button type="button" data-action="delete">Delete</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="avtt-column-headers">
+                    <span></span>
+                    <span>Name</span>
+                    <span>Type</span>
+                    <span>Size</span>
+                </div>
+            </div>
             <div id="file-listing-section">
                 <table id="file-listing">
                     <tr>
-                        <td>Loading...
-                        <td>
+                        <td colspan="4">Loading...</td>
                     </tr>
                 </table>
             </div>
@@ -1705,8 +1987,75 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   const selectFile = document.getElementById("select-file");
   const filePickerElement = document.getElementById("avtt-file-picker");
   const uploadingIndicator = document.getElementById("uploading-file-indicator");
+  const selectFilesToggle = document.getElementById("avtt-select-files");
+  const actionsMenu = document.getElementById("avtt-actions-menu");
+  const actionsDropdown = document.getElementById("avtt-actions-dropdown");
+  const actionsToggle = actionsMenu
+    ? actionsMenu.querySelector(".avtt-actions-toggle")
+    : null;
+
+  if (selectFilesToggle) {
+    selectFilesToggle.addEventListener("change", (event) => {
+      const shouldSelect = Boolean(event.target.checked);
+      const nonFolderCheckboxes = avttGetNonFolderCheckboxes();
+      nonFolderCheckboxes.forEach((checkbox) => {
+        checkbox.checked = shouldSelect;
+      });
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+    });
+  }
+
+  if (actionsToggle && actionsDropdown && actionsMenu) {
+    const handleActionsOutsideClick = (event) => {
+      if (!actionsDropdown.classList.contains("visible")) {
+        return;
+      }
+      if (!actionsMenu.contains(event.target)) {
+        avttHideActionsMenu();
+      }
+    };
+    const handleActionsWindowBlur = () => {
+      avttHideActionsMenu();
+    };
+    actionsToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      avttToggleActionsMenu();
+    });
+    actionsDropdown
+      .querySelectorAll("button[data-action]")
+      .forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const action = button.getAttribute("data-action");
+          await avttHandleToolbarAction(action);
+        });
+      });
+    document.addEventListener("click", handleActionsOutsideClick, true);
+    window.addEventListener("blur", handleActionsWindowBlur);
+    const cleanupActionsMenuHandlers = () => {
+      document.removeEventListener("click", handleActionsOutsideClick, true);
+      window.removeEventListener("blur", handleActionsWindowBlur);
+    };
+    draggableWindow
+      .off("remove.actionsMenu")
+      .on("remove.actionsMenu", () => {
+        cleanupActionsMenuHandlers();
+        avttHideActionsMenu();
+      });
+    draggableWindow.find(".title_bar_close_button")
+      .off("click.actionsMenu")
+      .on("click.actionsMenu", () => {
+        cleanupActionsMenuHandlers();
+        avttHideActionsMenu();
+      });
+  }
 
   refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
+  avttUpdateSelectNonFoldersCheckbox();
+  avttUpdateActionsMenuState();
 
   const showUploadingProgress = (index, total) => {
     if (!uploadingIndicator) {
@@ -2041,19 +2390,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
   });
 
-  copyPathButton.addEventListener("click", () => {
-    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
-
-    if (selectedCheckboxes.length == 0) {
-      return;
-    }
-    const paths = [];
-    for (const selected of selectedCheckboxes) {
-      paths.push(`above-bucket-not-a-url/${window.PATREON_ID}/${selected.value}`);
-    }
-    const copyText = paths.join(", ");
-    navigator.clipboard.writeText(copyText);
-  });
+  if (copyPathButton) {
+    copyPathButton.addEventListener("click", () => {
+      avttCopySelectedPathsToClipboard();
+      avttUpdateActionsMenuState();
+    });
+  }
 
   deleteSelectedButton.addEventListener("click", async () => {
     const selections = avttGetSelectedEntries();
@@ -2061,6 +2403,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       return;
     }
     await deleteFilesFromS3Folder(selections, activeFilePickerFilter);
+    avttUpdateActionsMenuState();
   });
 
   function isAllowedExtension(extension) {
@@ -2130,6 +2473,7 @@ function refreshFiles(
 ) {
     currentFolder = typeof path === "string" ? path : "";
     activeFilePickerFilter = fileTypes;
+    avttHideActionsMenu();
     if (recheckSize) {
         getUserUploadedFileSize().then((size) => {
         S3_Current_Size = size;
@@ -2150,6 +2494,12 @@ function refreshFiles(
     }
 
     const fileListing = document.getElementById("file-listing");
+    $('#file-listing')
+      .off('change.avttSelection')
+      .on('change.avttSelection', 'input[type="checkbox"]', () => {
+        avttUpdateSelectNonFoldersCheckbox();
+        avttUpdateActionsMenuState();
+      });
     const fileListingSection = document.getElementById("file-listing-section");
     if (fileListingSection && !fileListingSection.dataset.avttContextBound) {
       fileListingSection.addEventListener("contextmenu", (event) => {
@@ -2291,7 +2641,10 @@ function refreshFiles(
       }
 
       if (prepared.length === 0) {
-        fileListing.innerHTML = "<tr><td>No files found.</td></tr>";
+        fileListing.innerHTML = "<tr><td colspan='4'>No files found.</td></tr>";
+        avttApplyClipboardHighlights();
+        avttUpdateSelectNonFoldersCheckbox();
+        avttUpdateActionsMenuState();
         return;
       }
 
@@ -2313,11 +2666,11 @@ function refreshFiles(
         return a.relativePath.localeCompare(b.relativePath);
       });
       const setLineImgSrc = async (container, entry) => {
+        const path = entry?.rawKey || entry?.relativePath || "";
         try{
           if (entry.type !== avttFilePickerTypes.IMAGE && entry.type !== avttFilePickerTypes.VIDEO) 
             return;
           
-          const path = entry.rawKey;
           if (!path) 
             return;
           const url = await getAvttStorageUrl(path);
@@ -2381,9 +2734,13 @@ function refreshFiles(
         const checkboxCell = $(`<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`);
         const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`);
         const typeCell = $(`<td>${entry.type || ""}</td>`);
-        const sizeCell = $(`<td>${entry.isFolder ? "" : formatFileSize(entry.size) || ""}</td>`);
+        const sizeValue = entry.isFolder ? "" : formatFileSize(entry.size || 0);
+        const sizeCell = $(`<td class="avtt-file-size">${sizeValue}</td>`);
 
-        setLineImgSrc(labelCell.find("span.material-symbols-outlined")[0], entry);
+        const iconElement = labelCell.find("span.material-symbols-outlined")[0];
+        if (iconElement) {
+          setLineImgSrc(iconElement, entry);
+        }
 
         $(listItem).append(checkboxCell, labelCell, typeCell, sizeCell);
         if (entry.isFolder) {
@@ -2429,6 +2786,8 @@ function refreshFiles(
         fileListing.appendChild(listItem);
       }
       avttApplyClipboardHighlights();
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
     };
     if (allFiles) {
         getAllUserFiles()
@@ -2517,7 +2876,7 @@ async function deleteFilesFromS3Folder(selections, fileTypes) {
   }
 }
 
-// Enforce sequential fetches with retry backoff to protect the S3 endpoint.
+
 const GET_FILE_FROM_S3_MAX_RETRIES = 5;
 const GET_FILE_FROM_S3_BASE_DELAY_MS = 250;
 const GET_FILE_FROM_S3_MAX_DELAY_MS = 4000;
