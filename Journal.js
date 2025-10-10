@@ -2310,12 +2310,12 @@ class JournalManager{
 			const src = currTarget.src;
 			const href = currTarget.href;
 
-			if (src.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
+			if (src?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
 				let url = src.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
 				url = await getAvttStorageUrl(url);
 				$(currTarget).attr('src', url);
 			}
-			else if (href.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
+			else if (href?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
 				let url = href.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
 				url = await getAvttStorageUrl(url);
 				$(currTarget).attr('href', url);
@@ -2325,15 +2325,15 @@ class JournalManager{
 		const iframes = $newHTML.find('.journal-site-embed')
 		for (let i = 0; i < iframes.length; i++) {
 			let url = $(iframes[i]).text();
-			if (url.includes('dropbox.com')) {
+			if (url?.includes('dropbox.com')) {
 				url = url.replace('dl=0', 'raw=1')
 			}
-			else if (url.match(/drive\.google\.com.*\/view\?usp=/gi)) {
+			else if (url?.match(/drive\.google\.com.*\/view\?usp=/gi)) {
 				url = url.replace(/view\?usp=/gi, 'preview?usp=')
-			} else if (url.match(/youtube.com/gi)) {
+			} else if (url?.match(/youtube.com/gi)) {
 				url = url.replace("youtube.com", "youtube-nocookie.com");
 				url = url.replace(/watch\?v=(.*)/gi, 'embed/$1');
-			} else if (url.startsWith('above-bucket-not-a-url')) {
+			} else if (url?.startsWith('above-bucket-not-a-url')) {
 				url = await getAvttStorageUrl(url);
 			}
 			encodeURI(url);
