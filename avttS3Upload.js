@@ -390,7 +390,7 @@ function avttUpdateSortIndicators() {
       header.classList.add("active");
       const indicator = document.createElement("span");
       indicator.className = "avtt-sort-indicator";
-      indicator.textContent = avttSortState.direction === "asc" ? "▲" : "▼";
+      indicator.textContent = avttSortState.direction === "asc" ? "\u25B2" : "\u25BC";
       header.appendChild(indicator);
     }
   });
@@ -428,10 +428,12 @@ function avttGetParentFolder(relativeKey) {
     return "";
   }
   const normalized = relativeKey.replace(/\\/g, "/");
-  if (!normalized.includes("/")) {
+  const trimmed = normalized.replace(/\/+$/, "");
+  const lastSlash = trimmed.lastIndexOf("/");
+  if (lastSlash < 0) {
     return "";
   }
-  return normalized.replace(/[^/]+$/, "");
+  return `${trimmed.slice(0, lastSlash + 1)}`;
 }
 
 async function avttGetFolderListingCached(folderPath = "") {
@@ -449,6 +451,16 @@ async function avttGetFolderListingCached(folderPath = "") {
     avttFolderListingCache.set(normalized, []);
     return [];
   }
+}
+
+async function avttGetEntryForKey(relativeKey) {
+  const parentFolder = avttGetParentFolder(relativeKey);
+  const listing = await avttGetFolderListingCached(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
+  return (
+    listing.find((entry) => (entry?.Key || entry?.key) === normalizedKey) ||
+    null
+  );
 }
 
 function avttRegisterPendingUploadKey(relativeKey, size = 0) {
@@ -470,22 +482,27 @@ function avttRegisterPendingUploadKey(relativeKey, size = 0) {
 }
 
 async function avttDoesObjectExist(relativeKey) {
-  const parentFolder = avttGetParentFolder(relativeKey);
-  const listing = await avttGetFolderListingCached(parentFolder);
-  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
-  return listing.some((entry) => (entry?.Key || entry?.key) === normalizedKey);
+  const entry = await avttGetEntryForKey(relativeKey);
+  return Boolean(entry);
 }
 
 async function avttDeriveUniqueKey(originalKey) {
   const parentFolder = avttGetParentFolder(originalKey);
-  const baseNameWithExt = originalKey.slice(parentFolder.length);
-  const dotIndex = baseNameWithExt.lastIndexOf(".");
+  const isFolder = /\/$/.test(originalKey);
+  const relativeName = originalKey
+    .slice(parentFolder.length)
+    .replace(/\/+$/, "");
+  const baseNameWithExt = relativeName || "item";
+  const dotIndex = isFolder ? -1 : baseNameWithExt.lastIndexOf(".");
   const baseName =
     dotIndex >= 0 ? baseNameWithExt.slice(0, dotIndex) : baseNameWithExt;
-  const extension = dotIndex >= 0 ? baseNameWithExt.slice(dotIndex) : "";
+  const extension =
+    !isFolder && dotIndex >= 0 ? baseNameWithExt.slice(dotIndex) : "";
   let counter = 1;
   while (counter < 1000) {
-    const candidateName = `${baseName} (${counter})${extension}`;
+    const candidateName = isFolder
+      ? `${baseName} (${counter})/`
+      : `${baseName} (${counter})${extension}`;
     const candidateKey = `${parentFolder}${candidateName}`;
     const exists = await avttDoesObjectExist(candidateKey);
     if (!exists) {
@@ -495,6 +512,69 @@ async function avttDeriveUniqueKey(originalKey) {
     counter += 1;
   }
   throw new Error("Unable to generate a unique filename for the uploaded file.");
+}
+
+async function avttResolveMoveConflicts(moves) {
+  const resolved = [];
+  let conflictPolicy = null;
+
+  for (const move of moves) {
+    let targetKey = move.toKey;
+    let action = "overwrite";
+    let existingEntry = null;
+
+    try {
+      existingEntry = await avttGetEntryForKey(targetKey);
+    } catch (error) {
+      console.warn("Failed to inspect destination before move", error);
+      existingEntry = null;
+    }
+
+    const exists = Boolean(existingEntry);
+    if (exists) {
+      if (conflictPolicy?.applyAll) {
+        action = conflictPolicy.action;
+      } else {
+        const conflictResult = await avttPromptUploadConflict({
+          fileName: targetKey,
+        });
+        if (!conflictResult || !conflictResult.action) {
+          action = "skip";
+        } else {
+          action = conflictResult.action;
+          if (conflictResult.applyAll) {
+            conflictPolicy = {
+              action,
+              applyAll: true,
+            };
+          }
+        }
+      }
+    }
+
+    if (action === "skip") {
+      continue;
+    }
+
+    if (action === "keepBoth") {
+      try {
+        targetKey = await avttDeriveUniqueKey(targetKey);
+      } catch (deriveError) {
+        console.error("Failed to generate unique destination during move", deriveError);
+        alert("Failed to generate a unique name. Skipping this item.");
+        continue;
+      }
+    }
+
+    avttRegisterPendingUploadKey(targetKey, Number(move.size) || 0);
+    resolved.push({
+      ...move,
+      toKey: targetKey,
+      overwrite: action === "overwrite" && exists,
+    });
+  }
+
+  return resolved;
 }
 
 async function avttPromptUploadConflict({ fileName }) {
@@ -856,6 +936,16 @@ async function avttMoveEntries(moves, options = {}) {
     return;
   }
   try {
+    const resolvedMoves = await avttResolveMoveConflicts(validMoves);
+    if (!resolvedMoves.length) {
+      if (options.clearClipboard) {
+        avttClearClipboard();
+      }
+      avttApplyClipboardHighlights();
+      avttUpdateSelectNonFoldersCheckbox();
+      avttUpdateActionsMenuState();
+      return;
+    }
     const operation =
       options.operation === "copy" || options.operation === "move"
         ? options.operation
@@ -865,10 +955,11 @@ async function avttMoveEntries(moves, options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user: window.PATREON_ID,
-        items: validMoves.map((move) => ({
+        items: resolvedMoves.map((move) => ({
           fromKey: move.fromKey,
           toKey: move.toKey,
           isFolder: Boolean(move.isFolder),
+          overwrite: Boolean(move.overwrite),
         })),
         operation,
       }),
@@ -884,6 +975,7 @@ async function avttMoveEntries(moves, options = {}) {
       undefined,
       activeFilePickerFilter,
     );
+    avttFolderListingCache.clear();
     if (options.clearClipboard) {
       avttClearClipboard();
     } else {
@@ -917,6 +1009,7 @@ async function avttHandlePasteFromClipboard(destinationFolder = currentFolder) {
       fromKey: entry.key,
       toKey: newKey,
       isFolder: entry.isFolder,
+      size: Number(entry.size) || 0,
     });
   }
   if (moves.length === 0) {
@@ -1102,6 +1195,7 @@ async function avttHandleFolderDrop(event, destinationPath) {
       fromKey: entry.key,
       toKey: newKey,
       isFolder: entry.isFolder,
+      size: Number(entry.size) || 0,
     });
   }
   if (moves.length > 0) {
@@ -2018,6 +2112,19 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
+            #avtt-column-headers .avtt-sortable-header {
+                cursor: pointer;
+                user-select: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            #avtt-column-headers .avtt-sortable-header.active {
+                color: var(--highlight-color, rgba(131, 185, 255, 1));
+            }
+            .avtt-sort-indicator {
+                font-size: 0.75em;
+            }
             #avtt-column-headers span:last-child {
                 text-align: right;
             }
@@ -2333,7 +2440,6 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 </table>
             </div>
             <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
-                <button id="delete-selected-files">Delete</button>
                 <button id="copy-path-to-clipboard" style="${typeof selectFunction === "function" ? "display: none;" : ""}">Copy Path</button>
                 <button id="select-file" style="${typeof selectFunction === "function" ? "" : "display: none;"}">Select</button>
             </div>
