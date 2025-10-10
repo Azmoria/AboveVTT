@@ -3,6 +3,603 @@ const AVTT_S3 =
 
 let S3_Current_Size = 0;
 let currentFolder = "";
+let activeFilePickerFilter;
+const AVTT_CLIPBOARD_MODE = Object.freeze({
+  CUT: "cut",
+  COPY: "copy",
+});
+let avttClipboard = { mode: null, items: [] };
+let avttDragItems = null;
+const avttContextMenuState = {
+  element: null,
+  targetPath: "",
+  isFolder: false,
+  displayName: "",
+  isImplicit: false,
+};
+
+function avttGetSelectedEntries() {
+  const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked').get();
+  return selectedCheckboxes.map((element) => ({
+    key: element.value,
+    size: Number(element.getAttribute("data-size")) || 0,
+    isFolder: element.classList.contains("folder"),
+  }));
+}
+
+function avttSelectPaths(paths) {
+  const pathSet = new Set(Array.isArray(paths) ? paths : []);
+  $('#file-listing input[type="checkbox"]').each(function () {
+    this.checked = pathSet.has(this.value);
+  });
+}
+
+function avttEnsureSelectionIncludes(path, isFolder) {
+  const selected = avttGetSelectedEntries();
+  const hasPath = selected.some((entry) => entry.key === path);
+  if (hasPath) {
+    return selected;
+  }
+  avttSelectPaths([path]);
+  const checkbox = $('#file-listing input[type="checkbox"]').filter(function () {
+    return this.value === path;
+  });
+  checkbox.each(function () {
+    this.classList.toggle("folder", isFolder);
+  });
+  return avttGetSelectedEntries();
+}
+
+function avttFindRowByPath(path) {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  for (const row of rows) {
+    if (row.dataset && row.dataset.path === path) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function avttClearClipboard() {
+  avttClipboard = { mode: null, items: [] };
+  avttApplyClipboardHighlights();
+  avttUpdateContextMenuState();
+}
+
+function avttApplyClipboardHighlights() {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  rows.forEach((row) => row.classList.remove("avtt-cut-row"));
+  if (
+    avttClipboard.mode !== AVTT_CLIPBOARD_MODE.CUT ||
+    !Array.isArray(avttClipboard.items) ||
+    avttClipboard.items.length === 0
+  ) {
+    return;
+  }
+  for (const entry of avttClipboard.items) {
+    const row = avttFindRowByPath(entry.key);
+    if (row) {
+      row.classList.add("avtt-cut-row");
+    }
+  }
+}
+
+function avttSetClipboard(items, mode) {
+  const entries = Array.isArray(items)
+    ? items
+        .map((item) => ({
+          key: item.key,
+          size: Number(item.size) || 0,
+          isFolder: Boolean(item.isFolder),
+        }))
+        .filter((item) => item.key)
+    : [];
+  if (!entries.length || !mode) {
+    avttClearClipboard();
+    return false;
+  }
+  avttClipboard = {
+    mode,
+    items: entries,
+  };
+  avttApplyClipboardHighlights();
+  avttUpdateContextMenuState();
+  return true;
+}
+
+function avttClipboardHasEntries() {
+  return Array.isArray(avttClipboard.items) && avttClipboard.items.length > 0;
+}
+
+function avttCutSelectedFiles() {
+  const selections = avttGetSelectedEntries();
+  if (!selections.length) {
+    return false;
+  }
+  return avttSetClipboard(selections, AVTT_CLIPBOARD_MODE.CUT);
+}
+
+async function avttPasteFiles(destinationFolder) {
+  if (!avttClipboardHasEntries()) {
+    return false;
+  }
+  return await avttHandlePasteFromClipboard(
+    typeof destinationFolder === "string" ? destinationFolder : currentFolder,
+  );
+}
+
+window.avttCutSelectedFiles = avttCutSelectedFiles;
+window.avttPasteFiles = avttPasteFiles;
+window.avttClipboardHasEntries = avttClipboardHasEntries;
+
+function avttEnsureContextMenu() {
+  if (avttContextMenuState.element) {
+    return avttContextMenuState.element;
+  }
+  const menu = document.createElement("div");
+  menu.id = "avtt-file-context-menu";
+  menu.className = "avtt-context-menu hidden";
+  menu.innerHTML = `
+    <button type="button" data-action="cut">Cut</button>
+    <button type="button" data-action="paste">Paste</button>
+    <button type="button" data-action="rename">Rename</button>
+    <button type="button" data-action="delete">Delete</button>
+  `;
+  document.body.appendChild(menu);
+
+  menu.addEventListener("click", async (event) => {
+    const button = event.target;
+    const action = button?.getAttribute("data-action");
+    if (!action || button.disabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    await avttHandleContextAction(action);
+    avttHideContextMenu();
+  });
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target;
+      if (!menu.contains(target)) {
+        avttHideContextMenu();
+      }
+    },
+    true,
+  );
+
+  document.addEventListener(
+    "contextmenu",
+    (event) => {
+      const target = event.target;
+      if (!menu.contains(target)) {
+        avttHideContextMenu();
+      }
+    },
+    true,
+  );
+
+  window.addEventListener("blur", () => {
+    avttHideContextMenu();
+  });
+
+  avttContextMenuState.element = menu;
+  return menu;
+}
+
+function avttHideContextMenu() {
+  const menu = avttContextMenuState.element;
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.style.top = "-9999px";
+    menu.style.left = "-9999px";
+  }
+  avttContextMenuState.targetPath = "";
+  avttContextMenuState.isFolder = false;
+  avttContextMenuState.displayName = "";
+  avttContextMenuState.isImplicit = false;
+}
+
+function avttUpdateContextMenuState() {
+  const menu = avttContextMenuState.element;
+  if (!menu) {
+    return;
+  }
+  const pasteButton = menu.querySelector('button[data-action="paste"]');
+  if (pasteButton) {
+    pasteButton.disabled = !avttClipboardHasEntries();
+  }
+  const renameButton = menu.querySelector('button[data-action="rename"]');
+  const cutButton = menu.querySelector('button[data-action="cut"]');
+  const deleteButton = menu.querySelector('button[data-action="delete"]');
+  const hasExplicitTarget =
+    Boolean(avttContextMenuState.targetPath) && !avttContextMenuState.isImplicit;
+  if (renameButton) {
+    renameButton.disabled = !hasExplicitTarget;
+  }
+  if (cutButton) {
+    cutButton.disabled = !hasExplicitTarget;
+  }
+  if (deleteButton) {
+    deleteButton.disabled = !hasExplicitTarget;
+  }
+}
+
+function avttOpenContextMenu(event, entry, options = {}) {
+  const { ensureSelection = true, implicitTarget = false } = options;
+  const menu = avttEnsureContextMenu();
+  event.preventDefault();
+  event.stopPropagation();
+
+  let selection = [];
+  if (entry && ensureSelection && entry.relativePath) {
+    selection = avttEnsureSelectionIncludes(entry.relativePath, entry.isFolder);
+  }
+  avttContextMenuState.targetPath = entry?.relativePath || "";
+  avttContextMenuState.isFolder = Boolean(entry?.isFolder);
+  avttContextMenuState.displayName = entry?.displayName || "";
+  avttContextMenuState.isImplicit = Boolean(implicitTarget || entry?.isImplicit);
+
+  const viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight;
+  menu.style.left = "-9999px";
+  menu.style.top = "-9999px";
+  menu.classList.remove("hidden");
+  const menuRect = menu.getBoundingClientRect();
+  let left = event.clientX;
+  let top = event.clientY;
+  if (left + menuRect.width > viewportWidth) {
+    left = Math.max(0, viewportWidth - menuRect.width - 10);
+  }
+  if (top + menuRect.height > viewportHeight) {
+    top = Math.max(0, viewportHeight - menuRect.height - 10);
+  }
+
+  menu.style.left = `${left + window.scrollX}px`;
+  menu.style.top = `${top + window.scrollY}px`;
+  avttUpdateContextMenuState();
+  avttApplyClipboardHighlights();
+  return selection;
+}
+
+async function avttHandleContextAction(action) {
+  switch (action) {
+    case "cut": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      avttSetClipboard(selection, AVTT_CLIPBOARD_MODE.CUT);
+      break;
+    }
+    case "paste": {
+      if (avttContextMenuState.isImplicit && !avttContextMenuState.targetPath) {
+        await avttHandlePasteFromClipboard(currentFolder);
+      } else if (avttContextMenuState.isFolder) {
+        await avttHandlePasteFromClipboard(avttContextMenuState.targetPath);
+      } else {
+        await avttHandlePasteFromClipboard(currentFolder);
+      }
+      break;
+    }
+    case "rename": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      await avttRenameTarget();
+      break;
+    }
+    case "delete": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      if (selection.length === 0) {
+        return;
+      }
+      await deleteFilesFromS3Folder(selection, activeFilePickerFilter);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function avttComputeNewKeyForDestination(entry, destinationFolder) {
+  const normalizedDestination =
+    destinationFolder && destinationFolder.endsWith("/")
+      ? destinationFolder
+      : destinationFolder
+      ? `${destinationFolder}/`
+      : "";
+  if (entry.isFolder) {
+    const trimmed = entry.key.replace(/\/$/, "");
+    const folderName = trimmed.split("/").pop();
+    if (!folderName) {
+      return null;
+    }
+    return `${normalizedDestination}${folderName}/`;
+  }
+  const fileName = entry.key.split("/").pop();
+  if (!fileName) {
+    return null;
+  }
+  return `${normalizedDestination}${fileName}`;
+}
+
+async function avttMoveEntries(moves, options = {}) {
+  const validMoves = Array.isArray(moves)
+    ? moves.filter(
+        (move) =>
+          move &&
+          move.fromKey &&
+          move.toKey &&
+          move.fromKey !== move.toKey &&
+          move.fromKey !== `${move.toKey}/` &&
+          move.toKey !== `${move.fromKey}/`,
+      )
+    : [];
+  if (validMoves.length === 0) {
+    return;
+  }
+  try {
+    const operation =
+      options.operation === "copy" || options.operation === "move"
+        ? options.operation
+        : "move";
+    const response = await fetch(`${AVTT_S3}?action=move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: window.PATREON_ID,
+        items: validMoves.map((move) => ({
+          fromKey: move.fromKey,
+          toKey: move.toKey,
+          isFolder: Boolean(move.isFolder),
+        })),
+        operation,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok || !json?.moved) {
+      throw new Error(json?.message || "Failed to move item(s).");
+    }
+    refreshFiles(
+      typeof options.refreshPath === "string" ? options.refreshPath : currentFolder,
+      true,
+      undefined,
+      undefined,
+      activeFilePickerFilter,
+    );
+    if (options.clearClipboard) {
+      avttClearClipboard();
+    } else {
+      avttApplyClipboardHighlights();
+    }
+  } catch (error) {
+    console.error("Failed to move entries", error);
+    alert(error.message || "Failed to move item(s).");
+  }
+}
+
+async function avttHandlePasteFromClipboard(destinationFolder = currentFolder) {
+  if (!avttClipboardHasEntries()) {
+    return;
+  }
+  const moves = [];
+  for (const entry of avttClipboard.items) {
+    if (
+      entry.isFolder &&
+      destinationFolder &&
+      destinationFolder.startsWith(entry.key)
+    ) {
+      alert("Cannot paste a folder inside itself.");
+      return;
+    }
+    const newKey = avttComputeNewKeyForDestination(entry, destinationFolder);
+    if (!newKey || newKey === entry.key) {
+      continue;
+    }
+    moves.push({
+      fromKey: entry.key,
+      toKey: newKey,
+      isFolder: entry.isFolder,
+    });
+  }
+  if (moves.length === 0) {
+    return;
+  }
+  const operation =
+    avttClipboard.mode === AVTT_CLIPBOARD_MODE.COPY ? "copy" : "move";
+  await avttMoveEntries(moves, {
+    operation,
+    clearClipboard: operation === "move",
+    refreshPath: destinationFolder || currentFolder,
+  });
+  return true;
+}
+
+async function avttRenameTarget() {
+  const path = avttContextMenuState.targetPath;
+  if (!path) {
+    return;
+  }
+  const isFolder = avttContextMenuState.isFolder;
+  const baseName = isFolder
+    ? path.replace(/\/$/, "").split("/").pop() || ""
+    : path.split("/").pop() || "";
+  const parentPath = (() => {
+    if (isFolder) {
+      const trimmed = path.replace(/\/$/, "");
+      const idx = trimmed.lastIndexOf("/");
+      return idx >= 0 ? `${trimmed.slice(0, idx + 1)}` : "";
+    }
+    const idx = path.lastIndexOf("/");
+    return idx >= 0 ? `${path.slice(0, idx + 1)}` : "";
+  })();
+  const newName = window.prompt("Enter a new name:", baseName);
+  if (!newName || !newName.trim() || newName === baseName) {
+    return;
+  }
+  const trimmedName = newName.trim();
+  if (/[\\/]/.test(trimmedName)) {
+    alert("Names cannot contain slashes.");
+    return;
+  }
+  const newKey = `${parentPath}${trimmedName}${isFolder ? "/" : ""}`;
+  if (newKey === path) {
+    return;
+  }
+  if (isFolder && newKey.startsWith(`${path}`)) {
+    alert("Cannot rename a folder into its own sub-path.");
+    return;
+  }
+  await avttMoveEntries([
+    { fromKey: path, toKey: newKey, isFolder },
+  ]);
+}
+
+function avttHandleDragStart(event, entry) {
+  avttHideContextMenu();
+  const selection = avttEnsureSelectionIncludes(entry.relativePath, entry.isFolder);
+  avttDragItems = selection.map((item) => ({ ...item }));
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    try {
+      event.dataTransfer.setData(
+        "application/json",
+        JSON.stringify(avttDragItems.map((item) => item.key)),
+      );
+    } catch (error) {
+      event.dataTransfer.setData(
+        "text/plain",
+        avttDragItems.map((item) => item.key).join(","),
+      );
+    }
+  }
+  const row = event.currentTarget;
+  if (row && row.classList) {
+    row.classList.add("avtt-dragging");
+  }
+}
+
+function avttHandleDragEnd() {
+  const rows = document.querySelectorAll("#file-listing tr.avtt-file-row");
+  rows.forEach((row) => {
+    row.classList.remove("avtt-dragging", "avtt-drop-target");
+  });
+  avttDragItems = null;
+  avttApplyClipboardHighlights();
+}
+
+function avttCanDropOnFolder(destinationPath) {
+  if (!Array.isArray(avttDragItems) || avttDragItems.length === 0) {
+    return false;
+  }
+  return !avttDragItems.some((item) => {
+    if (item.key === destinationPath) {
+      return true;
+    }
+    if (item.isFolder && destinationPath.startsWith(item.key)) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function avttHandleFolderDragEnter(event, element, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!avttCanDropOnFolder(destinationPath)) {
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "none";
+    }
+    element.classList.remove("avtt-drop-target");
+    return;
+  }
+  element.classList.add("avtt-drop-target");
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+}
+
+function avttHandleFolderDragOver(event, element, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!avttCanDropOnFolder(destinationPath)) {
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "none";
+    }
+    element.classList.remove("avtt-drop-target");
+    return;
+  }
+  element.classList.add("avtt-drop-target");
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+}
+
+function avttHandleFolderDragLeave(event, element) {
+  event.preventDefault();
+  event.stopPropagation();
+  const related = event.relatedTarget;
+  if (related && element.contains(related)) {
+    return;
+  }
+  element.classList.remove("avtt-drop-target");
+}
+
+async function avttHandleFolderDrop(event, destinationPath) {
+  event.preventDefault();
+  event.stopPropagation();
+  const element = event.currentTarget;
+  if (element && element.classList) {
+    element.classList.remove("avtt-drop-target");
+  }
+  if (!avttCanDropOnFolder(destinationPath)) {
+    avttHandleDragEnd();
+    return;
+  }
+  if (!Array.isArray(avttDragItems) || avttDragItems.length === 0) {
+    avttHandleDragEnd();
+    return;
+  }
+  const moves = [];
+  for (const entry of avttDragItems) {
+    if (entry.key === destinationPath) {
+      continue;
+    }
+    if (entry.isFolder && destinationPath.startsWith(entry.key)) {
+      alert("Cannot move a folder inside itself.");
+      avttHandleDragEnd();
+      return;
+    }
+    const newKey = avttComputeNewKeyForDestination(entry, destinationPath);
+    if (!newKey || newKey === entry.key) {
+      continue;
+    }
+    moves.push({
+      fromKey: entry.key,
+      toKey: newKey,
+      isFolder: entry.isFolder,
+    });
+  }
+  if (moves.length > 0) {
+    await avttMoveEntries(moves);
+  }
+  avttHandleDragEnd();
+}
+
 const userLimit = Object.freeze({
   low: 10 * 1024 * 1024 * 1024,
   mid: 25 * 1024 * 1024 * 1024,
@@ -887,6 +1484,19 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 padding: 3px 5px;
                 margin: 5px 0px;
             }
+            #file-listing-section tr.avtt-file-row {
+                cursor: default;
+            }
+            #file-listing-section tr.avtt-drop-target {
+                background: rgba(131, 185, 255, 0.15);
+                outline: 1px dashed rgba(131, 185, 255, 0.6);
+            }
+            #file-listing-section tr.avtt-cut-row {
+                opacity: 0.6;
+            }
+            #file-listing-section tr.avtt-dragging {
+                opacity: 0.5;
+            }
             #file-listing-section tr input {
                 height: 16px;
                 width: 16px;
@@ -978,6 +1588,39 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #file-listing-section tr:nth-of-type(odd) {
                 backdrop-filter: brightness(0.95);
             }
+            .avtt-context-menu {
+                position: absolute;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 6px;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                border-radius: 4px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 99999;
+            }
+            .avtt-context-menu.hidden {
+                display: none;
+            }
+            .avtt-context-menu button {
+                font: inherit;
+                background: transparent;
+                color: inherit;
+                border: none;
+                text-align: left;
+                padding: 4px 10px;
+                border-radius: 3px;
+                cursor: pointer;
+            }
+            .avtt-context-menu button:hover:not(:disabled) {
+                background: rgba(131, 185, 255, 0.2);
+            }
+            .avtt-context-menu button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
         
         </style>
         <div id="avtt-file-picker">
@@ -1022,6 +1665,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   draggableWindow.find(".sidebar-panel-loading-indicator").remove();
 
   $("body").append(draggableWindow);
+  activeFilePickerFilter = fileTypes;
+  avttEnsureContextMenu();
+  avttHideContextMenu();
 
   const tierLabel = document.getElementById("patreon-tier");
   if (tierLabel) {
@@ -1393,19 +2039,11 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   });
 
   deleteSelectedButton.addEventListener("click", async () => {
-    const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked').get();
-    if (selectedCheckboxes.length === 0) {
+    const selections = avttGetSelectedEntries();
+    if (selections.length === 0) {
       return;
     }
-    const selections = selectedCheckboxes.map((element) => {
-      const sizeAttr = Number(element.getAttribute("data-size"));
-      return {
-        key: element.value,
-        size: Number.isFinite(sizeAttr) ? sizeAttr : 0,
-        isFolder: element.classList.contains("folder"),
-      };
-    });
-    await deleteFilesFromS3Folder(selections);
+    await deleteFilesFromS3Folder(selections, activeFilePickerFilter);
   });
 
   function isAllowedExtension(extension) {
@@ -1473,6 +2111,8 @@ function refreshFiles(
   searchTerm,
   fileTypes,
 ) {
+    currentFolder = typeof path === "string" ? path : "";
+    activeFilePickerFilter = fileTypes;
     if (recheckSize) {
         getUserUploadedFileSize().then((size) => {
         S3_Current_Size = size;
@@ -1493,6 +2133,33 @@ function refreshFiles(
     }
 
     const fileListing = document.getElementById("file-listing");
+    const fileListingSection = document.getElementById("file-listing-section");
+    if (fileListingSection && !fileListingSection.dataset.avttContextBound) {
+      fileListingSection.addEventListener("contextmenu", (event) => {
+        const row = event.target.closest("tr.avtt-file-row");
+        if (row) {
+          return;
+        }
+        const targetTag = String(event.target?.tagName || "").toLowerCase();
+        if (targetTag === "input" || event.target?.isContentEditable) {
+          return;
+        }
+        avttOpenContextMenu(
+          event,
+          {
+            relativePath: currentFolder,
+            isFolder: true,
+            displayName:
+              currentFolder && currentFolder !== ""
+                ? currentFolder.replace(/\/$/, "").split("/").pop()
+                : "Home",
+            isImplicit: true,
+          },
+          { ensureSelection: false, implicitTarget: true },
+        );
+      });
+      fileListingSection.dataset.avttContextBound = "true";
+    }
     const upFolder = $("#upFolder");
     if (path != ""){
       const splitPath = path.replace(/\/$/gi, "").split("/");
@@ -1517,99 +2184,178 @@ function refreshFiles(
 
 
     const insertFiles = (files, searchTerm, fileTypes) => {
-        console.log("Files in folder: ", files);
-        if (files.length === 0) {
-        fileListing.innerHTML = "<tr><td>No files found.</td></tr>";
-        } else {
-        fileListing.innerHTML = "";
-        for (const fileEntry of files) {
-            const listItem = document.createElement("tr");
-            const regEx = new RegExp(`^${window.PATREON_ID}/`, "gi");
-            const rawKey =
-            typeof fileEntry === "object" && fileEntry !== null
-                ? fileEntry.Key || fileEntry.key || ""
-                : fileEntry;
-            if (!rawKey) {
+      console.log("Files in folder: ", files);
+      const normalizedSearch =
+        typeof searchTerm === "string" ? searchTerm.toLowerCase() : undefined;
+
+      const fileTypeIcon = {
+        [avttFilePickerTypes.FOLDER]: "folder",
+        [avttFilePickerTypes.UVTT]: "description",
+        [avttFilePickerTypes.IMAGE]: "imagesmode",
+        [avttFilePickerTypes.VIDEO]: "video_file",
+        [avttFilePickerTypes.AUDIO]: "audio_file",
+        [avttFilePickerTypes.PDF]: "picture_as_pdf",
+        [avttFilePickerTypes.ABOVEVTT]: "description",
+        [avttFilePickerTypes.CSV]: "csv",
+      };
+
+      const regEx = new RegExp(`^${window.PATREON_ID}/`, "gi");
+      const prepared = [];
+
+      for (const fileEntry of files) {
+        const rawKey =
+          typeof fileEntry === "object" && fileEntry !== null
+            ? fileEntry.Key || fileEntry.key || ""
+            : fileEntry;
+        if (!rawKey) {
+          continue;
+        }
+        const relativePath = rawKey.replace(regEx, "");
+        const isFolder = /\/$/gi.test(relativePath);
+        const size =
+          typeof fileEntry === "object" &&
+          fileEntry !== null &&
+          Number.isFinite(Number(fileEntry.Size))
+            ? Number(fileEntry.Size)
+            : 0;
+
+        const extension = getFileExtension(rawKey);
+        let type;
+        if (isFolder) {
+          type = avttFilePickerTypes.FOLDER;
+        } else if (allowedJsonTypes.includes(extension)) {
+          type = avttFilePickerTypes.UVTT;
+        } else if (allowedImageTypes.includes(extension)) {
+          type = avttFilePickerTypes.IMAGE;
+        } else if (allowedVideoTypes.includes(extension)) {
+          type = avttFilePickerTypes.VIDEO;
+        } else if (allowedAudioTypes.includes(extension)) {
+          type = avttFilePickerTypes.AUDIO;
+        } else if (allowedDocTypes.includes(extension)) {
+          type = avttFilePickerTypes.PDF;
+        } else if (allowedTextTypes.includes(extension)) {
+          if (
+            extension.toLowerCase() ===
+            avttFilePickerTypes.ABOVEVTT.toLowerCase()
+          ) {
+            type = avttFilePickerTypes.ABOVEVTT;
+          } else if (
+            extension.toLowerCase() === avttFilePickerTypes.CSV.toLowerCase()
+          ) {
+            type = avttFilePickerTypes.CSV;
+          }
+        }
+
+        if (normalizedSearch) {
+          const displayName = relativePath.split("/").filter(Boolean).pop() || "";
+          if (
+            !relativePath.toLowerCase().includes(normalizedSearch) &&
+            !(type && type.toLowerCase() === normalizedSearch) &&
+            !displayName.toLowerCase().includes(normalizedSearch)
+          ) {
             continue;
-            }
-            const path = rawKey.replace(regEx, "");
-            const size =
-            typeof fileEntry === "object" &&
-            fileEntry !== null &&
-            Number.isFinite(Number(fileEntry.Size))
-                ? Number(fileEntry.Size)
-                : 0;
+          }
+        }
 
-            const isFolder = path.match(/\/$/gi);
-            const extension = getFileExtension(rawKey);
-            let type;
-            if (isFolder) {
-              type = avttFilePickerTypes.FOLDER;
-            } else if (allowedJsonTypes.includes(extension)) {
-              type = avttFilePickerTypes.UVTT;
-            } else if (allowedImageTypes.includes(extension)) {
-              type = avttFilePickerTypes.IMAGE;
-            } else if (allowedVideoTypes.includes(extension)) {
-              type = avttFilePickerTypes.VIDEO;
-            } else if (allowedAudioTypes.includes(extension)) {
-              type = avttFilePickerTypes.AUDIO;
-            } else if (allowedDocTypes.includes(extension)) {
-              type = avttFilePickerTypes.PDF;
-            } else if (allowedTextTypes.includes(extension)) {
-              if (extension.toLowerCase() === avttFilePickerTypes.ABOVEVTT.toLowerCase()) {
-                type = avttFilePickerTypes.ABOVEVTT;
-              } else if (extension.toLowerCase() === avttFilePickerTypes.CSV.toLowerCase()) {
-                type = avttFilePickerTypes.CSV;
-              }
-            }
+        if (fileTypes && fileTypes.length > 0) {
+          if (type !== avttFilePickerTypes.FOLDER && !fileTypes.includes(type)) {
+            continue;
+          }
+        }
 
-            const fileTypeIcon = {
-              [avttFilePickerTypes.FOLDER]: "folder",
-              [avttFilePickerTypes.UVTT]: "description",
-              [avttFilePickerTypes.IMAGE]: "imagesmode",
-              [avttFilePickerTypes.VIDEO]: "video_file",
-              [avttFilePickerTypes.AUDIO]: "audio_file",
-              [avttFilePickerTypes.PDF]: "picture_as_pdf",
-              [avttFilePickerTypes.ABOVEVTT]: "description",
-              [avttFilePickerTypes.CSV]: "csv",
-            }
+        prepared.push({
+          rawKey,
+          relativePath,
+          size,
+          isFolder,
+          type,
+          displayName: relativePath.split("/").filter(Boolean).pop() || relativePath,
+        });
+      }
 
-           
-            const input = $(
-            `<td><input type="checkbox" id='input-${path}' class="avtt-file-checkbox ${isFolder ? "folder" : ""}" value="${path}" data-size="${isFolder ? 0 : size}"></td>`,
-            );
-            const label = $(
-              `<td><label for='input-${path}' style="cursor:pointer;" class="avtt-file-name  ${isFolder ? "folder" : ""}" title="${path}"><span class="material-symbols-outlined">${fileTypeIcon[type]}</span>${path.split('/').filter(d=>d).pop()}</label></td>`,
-            );
+      if (prepared.length === 0) {
+        fileListing.innerHTML = "<tr><td>No files found.</td></tr>";
+        return;
+      }
 
-            
-            if (searchTerm != undefined) {
-            const lowerSearch = searchTerm.toLowerCase();
+      prepared.sort((a, b) => {
+        if (a.isFolder && !b.isFolder) {
+          return -1;
+        }
+        if (!a.isFolder && b.isFolder) {
+          return 1;
+        }
+        const nameCompare = a.displayName.localeCompare(
+          b.displayName,
+          undefined,
+          { sensitivity: "base" },
+        );
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+        return a.relativePath.localeCompare(b.relativePath);
+      });
 
-            if (
-                !path.toLowerCase().includes(lowerSearch) &&
-                type.toLowerCase() != lowerSearch
-            )
-                continue;
-            }
-            if (fileTypes != undefined && fileTypes.length > 0) {
-            if (type != avttFilePickerTypes.FOLDER && !fileTypes.includes(type))
-                continue;
-            }
+      fileListing.innerHTML = "";
+      for (const entry of prepared) {
+        const listItem = document.createElement("tr");
+        listItem.classList.add("avtt-file-row");
+        listItem.dataset.path = entry.relativePath;
+        listItem.dataset.isFolder = entry.isFolder ? "true" : "false";
+        listItem.dataset.type = entry.type || "";
+        listItem.setAttribute("draggable", "true");
+        const checkboxCell = $(
+          `<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`,
+        );
+        const labelCell = $(
+          `<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`,
+        );
+        const typeCell = $(`<td>${entry.type || ""}</td>`);
 
-            const typeCell = $(`<td>${type}</td>`);
-
-            $(listItem).append(input, label, typeCell);
-            if (isFolder) {
-            label.off("click.openFolder").on("click.openFolder", function (e) {
-                e.preventDefault();
-                refreshFiles(path, undefined, undefined, undefined, fileTypes);
-                currentFolder = path;
+        $(listItem).append(checkboxCell, labelCell, typeCell);
+        if (entry.isFolder) {
+          labelCell
+            .off("click.openFolder")
+            .on("click.openFolder", function (e) {
+              e.preventDefault();
+              refreshFiles(
+                entry.relativePath,
+                undefined,
+                undefined,
+                undefined,
+                fileTypes,
+              );
+              currentFolder = entry.relativePath;
             });
-            }
-            fileListing.appendChild(listItem);
         }
+        listItem.addEventListener("click", (event) => {
+          $('input').blur();
+        });
+        listItem.addEventListener("dragstart", (event) => {
+          avttHandleDragStart(event, entry);
+        });
+        listItem.addEventListener("dragend", avttHandleDragEnd);
+        if (entry.isFolder) {
+          listItem.addEventListener("dragenter", (event) => {
+            avttHandleFolderDragEnter(event, listItem, entry.relativePath);
+          });
+          listItem.addEventListener("dragover", (event) => {
+            avttHandleFolderDragOver(event, listItem, entry.relativePath);
+          });
+          listItem.addEventListener("dragleave", (event) => {
+            avttHandleFolderDragLeave(event, listItem);
+          });
+          listItem.addEventListener("drop", async (event) => {
+            await avttHandleFolderDrop(event, entry.relativePath);
+          });
         }
+        listItem.addEventListener("contextmenu", (event) => {
+          avttOpenContextMenu(event, entry);
+        });
+
+        fileListing.appendChild(listItem);
+      }
+      avttApplyClipboardHighlights();
     };
     if (allFiles) {
         getAllUserFiles()
