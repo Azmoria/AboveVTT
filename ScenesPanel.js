@@ -1269,7 +1269,7 @@ function edit_scene_dialog(scene_id) {
 	const dropBoxOptions1 = dropBoxOptions(function(links){playerMapRow.find('input').val(links[0].link)});
 	const dropBoxbutton1 = createCustomDropboxChooser('Choose Map from Dropbox', dropBoxOptions1);
 	const onedriveButton1 = createCustomOnedriveChooser('Choose Map from Onedrive', function(links){playerMapRow.find('input').val(links[0].link)})
-	const avttButton1 = createCustomAvttChooser('Choose Map from AVTT File Picker', function (links) { playerMapRow.find('input').val(links[0].link)});
+	const avttButton1 = createCustomAvttChooser("Choose Map from Azmoria's AVTT File Picker", function (links) { playerMapRow.find('input').val(links[0].link)});
 
 
 	const dmMapRow = form_row('dm_map', 'DM Only Map', null, true)
@@ -1277,7 +1277,7 @@ function edit_scene_dialog(scene_id) {
 	const dropBoxOptions2 = dropBoxOptions(function(links){dmMapRow.find('input').val(links[0].link)});
 	const dropBoxbutton2 = createCustomDropboxChooser('Choose DM Map from Dropbox', dropBoxOptions2);
 	const onedriveButton2 = createCustomOnedriveChooser('Choose DM Map from Onedrive', function(links){dmMapRow.find('input').val(links[0].link)})
-	const avttButton2 = createCustomAvttChooser('Choose Map from AVTT File Picker', function (links) { dmMapRow.find('input').val(links[0].link) });
+	const avttButton2 = createCustomAvttChooser("Choose Map from Azmoria's AVTT File Picker", function (links) { dmMapRow.find('input').val(links[0].link) });
 	
 	// add in toggles for these 2 rows
 	playerMapRow.append(form_toggle("player_map_is_video", "Video map?", false, handle_map_toggle_click))
@@ -2877,8 +2877,8 @@ async function create_scene_root_container(fullPath, parentId) {
 		Dropbox.choose(dropboxOptionsImport)
 	});
 	const avttFileImport = await build_tutorial_import_list_item({
-		"title": "AVTT File Picker Image or Video",
-		"description": "Build a scene using a AVTT File Picker image or video file.",
+		"title": "Azmoria's AVTT File Picker Image or Video",
+		"description": "Build a scene using Azmoria's AVTT File Picker image or video file.",
 		"category": "Scenes",
 		"player_map": "",
 	}, `${window.EXTENSION_PATH}assets/avtt-logo.png`, false);
@@ -2991,7 +2991,7 @@ function build_UVTT_import_container(){
 	const dropBoxOptions1 = dropBoxOptions(function(links){$('#player_map_row input').val(links[0].link)}, false, ['.dd2vtt', '.uvtt', '.df2vtt']);
 	const dropBoxbutton1 = createCustomDropboxChooser('Choose UVTT file from Dropbox', dropBoxOptions1);
 	const onedriveButton1 = createCustomOnedriveChooser('Choose UVTT file from Onedrive', function(links){$('#player_map_row input').val(links[0].link)}, 'single', ['.dd2vtt', '.uvtt', '.df2vtt'])
-	const avttButton1 = createCustomAvttChooser('Choose UVTT File from AVTT File Picker', function (links) { $('#player_map_row input').val(links[0].link) }, [avttFilePickerTypes.UVTT]);
+	const avttButton1 = createCustomAvttChooser("Choose UVTT File from Azmoria's AVTT File Picker", function (links) { $('#player_map_row input').val(links[0].link) }, [avttFilePickerTypes.UVTT]);
 
 	form.append(dropBoxbutton1, avttButton1);
 	//form.append(onedriveButton1); if we ever get this working again, or one drive changes things to make them accessible we can reenable it

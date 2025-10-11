@@ -2457,6 +2457,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #file-listing {
                 width: 100%;
                 border-collapse: collapse;
+                table-layout: fixed;
             }
             #file-listing td {
                 padding: 4px 16px;
@@ -2540,13 +2541,14 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 margin: 5px 0px 0px 0px;
             }
             #file-listing-section tr label{
-                flex-grow: 1;
+                margin: 0px;
+                display: flex;
+                align-items: center;
+            }
+            #file-listing-section tr span{
                 overflow: hidden;
                 text-overflow: ellipsis;    
                 white-space: nowrap;
-                margin-bottom: 0px;
-                display:flex;
-                align-items: center;
             }
             #select-section{
                 display: flex;
@@ -3682,7 +3684,7 @@ function refreshFiles(
         listItem.dataset.type = entry.type || "";
         listItem.setAttribute("draggable", "true");
         const checkboxCell = $(`<td><input type="checkbox" id='input-${entry.relativePath}' class="avtt-file-checkbox ${entry.isFolder ? "folder" : ""}" value="${entry.relativePath}" data-size="${entry.isFolder ? 0 : entry.size}"></td>`);
-        const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span>${entry.displayName}</label></td>`);
+        const labelCell = $(`<td><label for='input-${entry.relativePath}' style="cursor:pointer;" class="avtt-file-name  ${entry.isFolder ? "folder" : ""}" title="${entry.relativePath}"><span class="material-symbols-outlined">${fileTypeIcon[entry.type] || ""}</span><span>${entry.displayName}</span></label></td>`);
         const typeCell = $(`<td>${entry.type || ""}</td>`);
         const sizeValue = entry.isFolder ? "" : formatFileSize(entry.size || 0);
         const sizeCell = $(`<td class="avtt-file-size">${sizeValue}</td>`);
