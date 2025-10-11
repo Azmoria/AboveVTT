@@ -21,6 +21,537 @@ let avttClipboard = { mode: null, items: [] };
 let avttDragItems = null;
 let avttLastSelectedIndex = null;
 const avttFolderListingCache = new Map();
+let avttAllFilesCache = null;
+const avttUsageCache = {
+  totalBytes: null,
+  objectCount: null,
+  pending: null,
+};
+let avttSearchActive = false;
+let avttLastBrowsedFolder = "";
+
+function avttNormalizeRelativePath(path) {
+  if (typeof path !== "string") {
+    return "";
+  }
+  return path.replace(/\\/g, "/");
+}
+
+function avttNormalizeFolderPath(folderPath) {
+  const normalized = avttNormalizeRelativePath(folderPath);
+  if (!normalized) {
+    return "";
+  }
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+function avttEnsureFolderListing(folderPath) {
+  const normalized = typeof folderPath === "string" ? folderPath : "";
+  if (!avttFolderListingCache.has(normalized)) {
+    avttFolderListingCache.set(normalized, []);
+  }
+  return avttFolderListingCache.get(normalized);
+}
+
+function avttCloneListingEntry(entry) {
+  if (entry && typeof entry === "object") {
+    const clone = { ...entry };
+    if (entry.Key) {
+      clone.Key = entry.Key;
+    } else if (entry.key) {
+      clone.Key = entry.key;
+    }
+    if (typeof clone.Size === "number") {
+      clone.Size = Number.isFinite(clone.Size) ? clone.Size : 0;
+    } else if (typeof entry.size === "number") {
+      clone.Size = Number.isFinite(entry.size) ? entry.size : 0;
+    } else {
+      clone.Size = 0;
+    }
+    return clone;
+  }
+  if (typeof entry === "string") {
+    return { Key: entry, Size: 0 };
+  }
+  return null;
+}
+
+function avttStoreFolderListing(folderPath, entries) {
+  const normalized = typeof folderPath === "string" ? folderPath : "";
+  if (!Array.isArray(entries)) {
+    avttFolderListingCache.set(normalized, []);
+    return;
+  }
+  const cloned = entries
+    .map(avttCloneListingEntry)
+    .filter((entry) => entry && entry.Key);
+  avttFolderListingCache.set(normalized, cloned);
+}
+
+function avttPrimeListingCachesFromFullListing(entries) {
+  if (!Array.isArray(entries)) {
+    avttAllFilesCache = null;
+    return;
+  }
+  avttFolderListingCache.clear();
+  avttAllFilesCache = entries
+    .map(avttCloneListingEntry)
+    .filter((entry) => entry && entry.Key);
+  const grouped = new Map();
+  for (const entry of avttAllFilesCache) {
+    const relative = avttExtractRelativeKey(entry.Key);
+    const parentFolder = avttGetParentFolder(relative);
+    if (!grouped.has(parentFolder)) {
+      grouped.set(parentFolder, []);
+    }
+    grouped.get(parentFolder).push({ ...entry });
+  }
+  // Ensure all ancestor folders exist in the grouped map even if there is no
+  // explicit folder object returned from the server. This lets the UI show
+  // folder entries for implicit folders.
+  const initialFolderKeys = Array.from(grouped.keys());
+  for (const folder of initialFolderKeys) {
+    let parent = avttGetParentFolder(folder);
+    while (parent !== "") {
+      if (!grouped.has(parent)) {
+        grouped.set(parent, []);
+      }
+      parent = avttGetParentFolder(parent);
+    }
+  }
+
+  // For each folder that exists (either explicitly or implicitly because it
+  // contained files), ensure its parent listing contains a folder entry
+  // representing that folder. Also add the implicit folder entry to
+  // avttAllFilesCache so other cache operations can find it.
+  for (const folderPath of Array.from(grouped.keys())) {
+    if (!folderPath) continue; // skip root
+    const parent = avttGetParentFolder(folderPath);
+    const absoluteFolderKey = `${window.PATREON_ID}/${folderPath}`;
+    const parentListing = grouped.get(parent) || [];
+    const alreadyPresentInParent = parentListing.some(
+      (e) => (e?.Key || e?.key || "") === absoluteFolderKey,
+    );
+    if (!alreadyPresentInParent) {
+      // Add a minimal folder entry to the parent's listing
+      const folderEntry = { Key: absoluteFolderKey, Size: 0 };
+      parentListing.push(folderEntry);
+      grouped.set(parent, parentListing);
+
+      // Ensure avttAllFilesCache contains this folder entry as well
+      const existsInAll = avttAllFilesCache.some(
+        (e) => (e?.Key || e?.key || "") === absoluteFolderKey,
+      );
+      if (!existsInAll) {
+        avttAllFilesCache.push({ ...folderEntry });
+      }
+    }
+  }
+
+  // Finally store grouped listings into the folder cache
+  for (const [folderPath, listing] of grouped.entries()) {
+    avttStoreFolderListing(folderPath, listing);
+  }
+  if (!grouped.has("")) {
+    avttStoreFolderListing("", []);
+  }
+  // Attempt to persist the freshly primed caches to IndexedDB (if available)
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+// IndexedDB persistence helpers for avtt caches
+let avttPersistTimer = null;
+function avttSchedulePersist(delay = 250) {
+  if (avttPersistTimer) {
+    clearTimeout(avttPersistTimer);
+  }
+  avttPersistTimer = setTimeout(() => {
+    avttPersistTimer = null;
+    avttPersistCachesToIndexedDB();
+  }, delay);
+}
+
+function avttWriteFilePickerRecords(records = []) {
+  return new Promise((resolve, reject) => {
+    if (!window.globalIndexedDB) {
+      return reject(new Error('globalIndexedDB not available'));
+    }
+    try {
+      const tx = window.globalIndexedDB.transaction(['avttFilePicker'], 'readwrite');
+      const store = tx.objectStore('avttFilePicker');
+      const clearReq = store.clear();
+      clearReq.onsuccess = () => {
+        try {
+          for (const rec of Array.isArray(records) ? records : []) {
+            // ensure the key exists
+            if (!rec || !rec.fileEntry) continue;
+            store.put(rec);
+          }
+        } catch (err) {
+          // continue and let transaction complete/error
+          console.warn('avttWriteFilePickerRecords put failed', err);
+        }
+      };
+      clearReq.onerror = (e) => {
+        console.warn('avttWriteFilePickerRecords clear failed', e);
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+
+function avttReadFilePickerRecords() {
+  return new Promise((resolve, reject) => {
+    if (!window.globalIndexedDB) {
+      return reject(new Error('globalIndexedDB not available'));
+    }
+    try {
+      const tx = window.globalIndexedDB.transaction(['avttFilePicker'], 'readonly');
+      const store = tx.objectStore('avttFilePicker');
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = (e) => reject(e);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+function avttPersistCachesToIndexedDB() {
+  const records = [];
+  if (Array.isArray(avttAllFilesCache)) {
+    for (const entry of avttAllFilesCache) {
+      const key = entry?.Key || entry?.key || null;
+      if (!key) continue;
+      records.push({ fileEntry: key, type: "file", payload: avttCloneListingEntry(entry) });
+    }
+  }
+  for (const [folderPath, listing] of avttFolderListingCache.entries()) {
+    const recordKey = `folder:${folderPath}`;
+    const clonedListing = Array.isArray(listing) ? listing.map(avttCloneListingEntry) : [];
+    records.push({ fileEntry: recordKey, type: "folderListing", payload: clonedListing });
+  }
+  try {
+    avttWriteFilePickerRecords(records).catch((err) => {
+      console.warn("avttWriteFilePickerRecords failed", err);
+    });
+  } catch (err) {
+    console.warn("avttPersistCachesToIndexedDB write helper failed", err);
+  }
+  return;
+}
+
+function avttLoadCachesFromIndexedDB() {
+  
+  return avttReadFilePickerRecords().then((results) => {
+    avttFolderListingCache.clear();
+    avttAllFilesCache = [];
+    for (const rec of results) {
+      if (!rec || !rec.fileEntry) continue;
+      if (rec.type === "file" && rec.payload) {
+        avttAllFilesCache.push(avttCloneListingEntry(rec.payload));
+      } else if (rec.type === "folderListing" && typeof rec.fileEntry === "string") {
+        const folderKey = rec.fileEntry.replace(/^folder:/, "");
+        const listing = Array.isArray(rec.payload) ? rec.payload.map(avttCloneListingEntry) : [];
+        avttFolderListingCache.set(folderKey, listing);
+      }
+    }
+    if (!avttFolderListingCache.has("")) {
+      avttFolderListingCache.set("", []);
+    }
+  });
+}
+
+try {
+  if (window.globalIndexedDB) {
+    avttLoadCachesFromIndexedDB().catch(() => {});
+  } else {
+    let attempts = 0;
+    const poll = setInterval(() => {
+      attempts += 1;
+      if (window.globalIndexedDB) {
+        clearInterval(poll);
+        avttLoadCachesFromIndexedDB().catch(() => {});
+      } else if (attempts > 50) {
+        clearInterval(poll);
+      }
+    }, 100);
+  }
+} catch (e) {
+
+}
+
+function avttExtractRelativeKey(absoluteKey) {
+  const prefix = `${window.PATREON_ID}/`;
+  if (typeof absoluteKey !== "string") {
+    return "";
+  }
+  return absoluteKey.startsWith(prefix)
+    ? absoluteKey.slice(prefix.length)
+    : avttNormalizeRelativePath(absoluteKey);
+}
+
+function avttBuildCacheEntry(relativeKey, size = 0, sourceEntry = null) {
+  if (sourceEntry && typeof sourceEntry === "object") {
+    const cloned = avttCloneListingEntry(sourceEntry);
+    if (cloned?.Key) {
+      return cloned;
+    }
+  }
+  const normalizedRelative = avttNormalizeRelativePath(relativeKey);
+  if (!normalizedRelative) {
+    return null;
+  }
+  return {
+    Key: `${window.PATREON_ID}/${normalizedRelative}`,
+    Size: Number.isFinite(Number(size)) ? Number(size) : 0,
+  };
+}
+
+function avttUpsertCacheEntry(relativeKey, size = 0, sourceEntry = null) {
+  const normalizedRelative = avttNormalizeRelativePath(relativeKey);
+  if (!normalizedRelative) {
+    return;
+  }
+  const parentFolder = avttGetParentFolder(normalizedRelative);
+  const listing = avttEnsureFolderListing(parentFolder);
+  const normalizedKey = `${window.PATREON_ID}/${normalizedRelative}`;
+  const existingIndex = listing.findIndex(
+    (entry) => (entry?.Key || entry?.key || "") === normalizedKey,
+  );
+  const newEntry = avttBuildCacheEntry(normalizedRelative, size, sourceEntry);
+  if (!newEntry) {
+    return;
+  }
+  if (existingIndex >= 0) {
+    listing[existingIndex] = newEntry;
+  } else {
+    listing.push(newEntry);
+  }
+  if (Array.isArray(avttAllFilesCache)) {
+    const allIndex = avttAllFilesCache.findIndex(
+      (entry) => (entry?.Key || entry?.key || "") === normalizedKey,
+    );
+    if (allIndex >= 0) {
+      avttAllFilesCache[allIndex] = { ...newEntry };
+    } else {
+      avttAllFilesCache.push({ ...newEntry });
+    }
+  }
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+function avttRemoveCacheEntry(relativeKey) {
+  const normalizedRelative = avttNormalizeRelativePath(relativeKey);
+  if (!normalizedRelative) {
+    return;
+  }
+  const parentFolder = avttGetParentFolder(normalizedRelative);
+  if (avttFolderListingCache.has(parentFolder)) {
+    const listing = avttFolderListingCache.get(parentFolder);
+    const normalizedKey = `${window.PATREON_ID}/${normalizedRelative}`;
+    const filtered = listing.filter(
+      (entry) => (entry?.Key || entry?.key || entry) !== normalizedKey,
+    );
+    avttFolderListingCache.set(parentFolder, filtered);
+  }
+  if (Array.isArray(avttAllFilesCache)) {
+    const normalizedKey = `${window.PATREON_ID}/${normalizedRelative}`;
+    avttAllFilesCache = avttAllFilesCache.filter(
+      (entry) => (entry?.Key || entry?.key || entry) !== normalizedKey,
+    );
+  }
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+function avttRemoveFolderCacheRecursively(folderPath) {
+  const normalizedFolder = avttNormalizeFolderPath(folderPath);
+  if (!normalizedFolder) {
+    return;
+  }
+  const absolutePrefix = `${window.PATREON_ID}/${normalizedFolder}`;
+  for (const key of Array.from(avttFolderListingCache.keys())) {
+    if (key === normalizedFolder || key.startsWith(normalizedFolder)) {
+      avttFolderListingCache.delete(key);
+    }
+  }
+  if (Array.isArray(avttAllFilesCache)) {
+    avttAllFilesCache = avttAllFilesCache.filter((entry) => {
+      const absolute = entry?.Key || entry?.key || "";
+      return typeof absolute === "string"
+        ? !absolute.startsWith(absolutePrefix)
+        : true;
+    });
+  }
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+function avttMoveFolderCaches(fromFolder, toFolder) {
+  const source = avttNormalizeFolderPath(fromFolder);
+  const target = avttNormalizeFolderPath(toFolder);
+  if (!source || source === target) {
+    return;
+  }
+  const absoluteSource = `${window.PATREON_ID}/${source}`;
+  const absoluteTarget = `${window.PATREON_ID}/${target}`;
+  const pendingUpdates = [];
+  for (const [key, listing] of avttFolderListingCache.entries()) {
+    if (key === source || key.startsWith(source)) {
+      const newKey = `${target}${key.slice(source.length)}`;
+      const remappedListing = listing.map((entry) => {
+        const absolute = entry?.Key || entry?.key || "";
+        if (typeof absolute !== "string") {
+          return avttCloneListingEntry(entry);
+        }
+        if (!absolute.startsWith(absoluteSource)) {
+          return avttCloneListingEntry(entry);
+        }
+        const suffix = absolute.slice(absoluteSource.length);
+        return {
+          ...avttCloneListingEntry(entry),
+          Key: `${absoluteTarget}${suffix}`,
+        };
+      });
+      pendingUpdates.push({ oldKey: key, newKey, listing: remappedListing });
+    }
+  }
+  for (const update of pendingUpdates) {
+    avttFolderListingCache.delete(update.oldKey);
+  }
+  for (const update of pendingUpdates) {
+    avttFolderListingCache.set(update.newKey, update.listing);
+  }
+  if (Array.isArray(avttAllFilesCache)) {
+    avttAllFilesCache = avttAllFilesCache.map((entry) => {
+      const absolute = entry?.Key || entry?.key || "";
+      if (typeof absolute !== "string" || !absolute.startsWith(absoluteSource)) {
+        return avttCloneListingEntry(entry);
+      }
+      const suffix = absolute.slice(absoluteSource.length);
+      return {
+        ...avttCloneListingEntry(entry),
+        Key: `${absoluteTarget}${suffix}`,
+      };
+    });
+  }
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+function avttCopyFolderCaches(fromFolder, toFolder) {
+  const source = avttNormalizeFolderPath(fromFolder);
+  const target = avttNormalizeFolderPath(toFolder);
+  if (!source || !target || source === target) {
+    return;
+  }
+  const absoluteSource = `${window.PATREON_ID}/${source}`;
+  const gathered = [];
+  if (Array.isArray(avttAllFilesCache)) {
+    for (const entry of avttAllFilesCache) {
+      const absolute = entry?.Key || entry?.key || "";
+      if (typeof absolute !== "string" || !absolute.startsWith(absoluteSource)) {
+        continue;
+      }
+      gathered.push(avttCloneListingEntry(entry));
+    }
+  } else {
+    for (const [key, listing] of avttFolderListingCache.entries()) {
+      if (key === source || key.startsWith(source)) {
+        for (const entry of listing) {
+          const absolute = entry?.Key || entry?.key || "";
+          if (typeof absolute !== "string" || !absolute.startsWith(absoluteSource)) {
+            continue;
+          }
+          gathered.push(avttCloneListingEntry(entry));
+        }
+      }
+    }
+    const parentListing = avttFolderListingCache.get(avttGetParentFolder(source));
+    if (parentListing) {
+      const folderEntry = parentListing.find((entry) => {
+        const absolute = entry?.Key || entry?.key || "";
+        return typeof absolute === "string" && absolute === absoluteSource;
+      });
+      if (folderEntry) {
+        gathered.push(avttCloneListingEntry(folderEntry));
+      }
+    }
+  }
+  if (!gathered.length) {
+    avttUpsertCacheEntry(target, 0);
+    avttEnsureFolderListing(target);
+    return;
+  }
+  for (const entry of gathered) {
+    const absolute = entry?.Key || entry?.key || "";
+    if (typeof absolute !== "string" || !absolute.startsWith(absoluteSource)) {
+      continue;
+    }
+    const suffix = absolute.slice(absoluteSource.length);
+    const newRelative = `${target}${suffix}`;
+    const clone = {
+      ...avttCloneListingEntry(entry),
+      Key: `${window.PATREON_ID}/${newRelative}`,
+    };
+    avttUpsertCacheEntry(newRelative, clone.Size, clone);
+  }
+  avttEnsureFolderListing(target);
+  try {
+    avttSchedulePersist();
+  } catch (e) {
+    
+  }
+}
+
+function avttAdjustCachedUsage(deltaBytes = 0, deltaObjects = 0) {
+  if (typeof deltaBytes === "number" && deltaBytes !== 0) {
+    S3_Current_Size = Math.max(0, Number(S3_Current_Size || 0) + deltaBytes);
+  }
+  if (typeof deltaObjects === "number" && deltaObjects !== 0) {
+    if (typeof avttUsageCache.objectCount === "number") {
+      avttUsageCache.objectCount = Math.max(
+        0,
+        Number(avttUsageCache.objectCount) + deltaObjects,
+      );
+    }
+  }
+  if (typeof avttUsageCache.totalBytes === "number" && deltaBytes !== 0) {
+    avttUsageCache.totalBytes = Math.max(
+      0,
+      Number(avttUsageCache.totalBytes) + deltaBytes,
+    );
+  }
+  const usedElement = document.getElementById("user-used");
+  if (usedElement) {
+    usedElement.innerHTML = formatFileSize(S3_Current_Size);
+  }
+  const tierLabel = document.getElementById("patreon-tier");
+  if (tierLabel && typeof activeUserTier === "object") {
+    tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
+  }
+}
 
 function avttEscapeHtml(value) {
   const span = document.createElement("span");
@@ -435,9 +966,17 @@ function avttRefreshWithCurrentSort() {
   const searchInput = document.getElementById("search-files");
   const searchTerm = searchInput ? searchInput.value.trim() : "";
   if (searchTerm) {
-    refreshFiles("", false, true, searchTerm, activeFilePickerFilter);
+    refreshFiles("", false, true, searchTerm, activeFilePickerFilter, {
+      useCache: true,
+      revalidate: !Array.isArray(avttAllFilesCache),
+    });
   } else {
-    refreshFiles(currentFolder, false, false, undefined, activeFilePickerFilter);
+    refreshFiles(currentFolder, false, false, undefined, activeFilePickerFilter, {
+      useCache: true,
+      revalidate:
+        !avttFolderListingCache.has(currentFolder) ||
+        !Array.isArray(avttFolderListingCache.get(currentFolder)),
+    });
   }
 }
 
@@ -499,21 +1038,7 @@ async function avttGetEntryForKey(relativeKey) {
 }
 
 function avttRegisterPendingUploadKey(relativeKey, size = 0) {
-  const parentFolder = avttGetParentFolder(relativeKey);
-  if (!avttFolderListingCache.has(parentFolder)) {
-    return;
-  }
-  const listing = avttFolderListingCache.get(parentFolder);
-  const normalizedKey = `${window.PATREON_ID}/${relativeKey}`;
-  const existing = listing.find((entry) => (entry?.Key || entry?.key) === normalizedKey);
-  if (existing) {
-    existing.Size = size;
-  } else {
-    listing.push({
-      Key: normalizedKey,
-      Size: size,
-    });
-  }
+  avttUpsertCacheEntry(relativeKey, size);
 }
 
 async function avttDoesObjectExist(relativeKey) {
@@ -865,7 +1390,7 @@ async function avttImportSelectedFiles(selection) {
       build_import_loading_indicator('Importing Files');
     }
   } catch (e) {
-    // ignore
+    
   }
 
   window.__IMPORT_SCENES_BUFFER = [];
@@ -1203,14 +1728,38 @@ async function avttMoveEntries(moves, options = {}) {
     if (!response.ok || !json?.moved) {
       throw new Error(json?.message || "Failed to move item(s).");
     }
+    const refreshPath =
+      typeof options.refreshPath === "string" ? options.refreshPath : currentFolder;
+
+    if (operation === "move") {
+      for (const move of resolvedMoves) {
+        const size = Number(move.size) || 0;
+        if (move.isFolder) {
+          avttRemoveCacheEntry(move.fromKey);
+          avttMoveFolderCaches(move.fromKey, move.toKey);
+        } else {
+          avttRemoveCacheEntry(move.fromKey);
+        }
+        avttUpsertCacheEntry(move.toKey, size);
+      }
+    } else {
+      for (const move of resolvedMoves) {
+        const size = Number(move.size) || 0;
+        if (move.isFolder) {
+          avttCopyFolderCaches(move.fromKey, move.toKey);
+        }
+        avttUpsertCacheEntry(move.toKey, size);
+      }
+    }
+
     refreshFiles(
-      typeof options.refreshPath === "string" ? options.refreshPath : currentFolder,
+      refreshPath,
       true,
       undefined,
       undefined,
       activeFilePickerFilter,
+      { useCache: true, revalidate: false },
     );
-    avttFolderListingCache.clear();
     if (options.clearClipboard) {
       avttClearClipboard();
     } else {
@@ -1378,7 +1927,6 @@ function avttHandleFolderDragEnter(event, element, destinationPath) {
 
 function avttHandleFolderDragOver(event, element, destinationPath) {
   event.preventDefault();
-  event.stopPropagation();
   if (!avttCanDropOnFolder(destinationPath)) {
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "none";
@@ -1394,7 +1942,6 @@ function avttHandleFolderDragOver(event, element, destinationPath) {
 
 function avttHandleFolderDragLeave(event, element) {
   event.preventDefault();
-  event.stopPropagation();
   const related = event.relatedTarget;
   if (related && element.contains(related)) {
     return;
@@ -1404,7 +1951,6 @@ function avttHandleFolderDragLeave(event, element) {
 
 async function avttHandleFolderDrop(event, destinationPath) {
   event.preventDefault();
-  event.stopPropagation();
   const element = event.currentTarget;
   if (element && element.classList) {
     element.classList.remove("avtt-drop-target");
@@ -2222,13 +2768,52 @@ function applyActiveMembership(membership) {
   }
 }
 
-const debounceSearchFiles = mydebounce((searchTerm, fileTypes) => {
-  if (!searchTerm || searchTerm == "") {
-    refreshFiles(currentFolder, undefined, undefined, undefined, fileTypes);
-    return;
+let avttActiveSearchAbortController = null;
+const avttDebouncedSearchHandler = mydebounce((searchTerm, fileTypes) => {
+  const controller = new AbortController();
+  avttActiveSearchAbortController = controller;
+  const { signal } = controller;
+
+  const refreshPromise =
+    !searchTerm || searchTerm === ""
+      ? refreshFiles(
+          currentFolder,
+          undefined,
+          undefined,
+          undefined,
+          fileTypes,
+          {
+            signal,
+            useCache: true,
+            revalidate:
+              !avttFolderListingCache.has(currentFolder) ||
+              !Array.isArray(avttFolderListingCache.get(currentFolder)),
+          },
+        )
+      : refreshFiles("", false, true, searchTerm, fileTypes, {
+          signal,
+          useCache: true,
+          revalidate: !Array.isArray(avttAllFilesCache),
+        });
+
+  if (refreshPromise && typeof refreshPromise.finally === "function") {
+    refreshPromise.finally(() => {
+      if (avttActiveSearchAbortController === controller) {
+        avttActiveSearchAbortController = null;
+      }
+    });
+  } else if (avttActiveSearchAbortController === controller) {
+    avttActiveSearchAbortController = null;
   }
-  refreshFiles("", false, true, searchTerm, fileTypes);
-}, 200);
+}, 400);
+
+const debounceSearchFiles = (searchTerm, fileTypes) => {
+  if (avttActiveSearchAbortController) {
+    avttActiveSearchAbortController.abort();
+    avttActiveSearchAbortController = null;
+  }
+  avttDebouncedSearchHandler(searchTerm, fileTypes);
+};
 
 async function launchFilePicker(selectFunction = false, fileTypes = []) {
   $("#avtt-s3-uploader").find(".title_bar_close_button").click();
@@ -2239,7 +2824,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     false,
     undefined,
     "800px",
-    "800px",
+    "600px",
     undefined,
     undefined,
     false,
@@ -2310,8 +2895,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 top: -6px;
                 position: relative;
                 padding: 10px;
-                height: calc(100% - 25px);
-                overflow: scroll;
+                height: calc(100% - 15px);
+                overflow: auto;
                 border: 1px solid #ddd;
             }
             #file-listing-section {
@@ -2321,7 +2906,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 padding: 10px;
                 list-style: none;
                 padding: 0px;
-                height: calc(100% - 220px);
+                height: calc(100% - 165px);
                 overflow-y: auto;
             }
             #avtt-listing-toolbar {
@@ -2506,7 +3091,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             }
 
             #avtt-file-picker.avtt-drop-over #file-listing-section {
-                backdrop-filter: brightness(1.05);
+              background: color-mix(in srgb, var(--background-color, #fff), rgb(131, 185, 255) 20%);)
             }
             #upFolder{
               display:flex;
@@ -2855,7 +3440,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         try {
           $(".import-loading-indicator").remove();
         } catch (cleanupError) {
-          // ignore
+          
         }
       }
     }
@@ -3138,7 +3723,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         uploadedCount += 1;
       } catch (error) {
         console.error(error);
-        if (error === "User cancelled upload by closing window.") {
+        if (typeof error === "string") {
           alert(error || "Aborted manually.");
         } else {
           alert(error.message || "An unexpected error occurred while uploading.");
@@ -3155,8 +3740,14 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       await applyUsageDelta(uploadedBytes, uploadedCount);
     }
 
-    avttFolderListingCache.clear();
-    refreshFiles(currentFolder, true);
+    refreshFiles(
+      currentFolder,
+      true,
+      undefined,
+      undefined,
+      activeFilePickerFilter,
+      { useCache: true, revalidate: false },
+    );
     showUploadComplete();
   };
 
@@ -3302,7 +3893,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     preventDefaults(event);
     dragDepth = Math.max(dragDepth - 1, 0);
     if (dragDepth === 0) {
-      clearDropState();
+      if ($(event.fromElement).closest('#avtt-file-picker').length === 0)
+        clearDropState();
     }
   });
 
@@ -3383,8 +3975,17 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       await fetch(
         `${AVTT_S3}?folderName=${encodeURIComponent(`${currentFolder}${folderName}`)}&user=${window.PATREON_ID}`,
       );
-      avttFolderListingCache.clear();
-      refreshFiles(currentFolder);
+      const newFolderPath = `${currentFolder}${folderName}/`;
+      avttUpsertCacheEntry(newFolderPath, 0);
+      avttEnsureFolderListing(newFolderPath);
+      refreshFiles(
+        currentFolder,
+        false,
+        false,
+        undefined,
+        fileTypes,
+        { useCache: true, revalidate: false },
+      );
     } catch (error) {
       console.error("Failed to create folder", error);
       alert("Failed to create folder");
@@ -3462,7 +4063,21 @@ function refreshFiles(
   allFiles = false,
   searchTerm,
   fileTypes,
+  options = {},
 ) {
+    // Clear any queued getFileFromS3 requests (these are pending preview/fetch requests)
+    // This prevents stale queued requests from running after a folder/refresh change.
+    try {
+      clearGetFileFromS3Queue();
+    } catch (e) {
+      console.warn('Failed to clear getFileFromS3Queue on refresh', e);
+    }
+    let {
+      signal,
+      useCache = true,
+      revalidate,
+    } = options;
+    const normalizedPath = typeof path === "string" ? path : "";
 
     const fileListingSection = document.getElementById("file-listing-section");
     if ($('#file-listing-section .sidebar-panel-loading-indicator').length == 0){
@@ -3470,28 +4085,40 @@ function refreshFiles(
     }
     currentFolder = typeof path === "string" ? path : "";
     activeFilePickerFilter = fileTypes;
-    avttFolderListingCache.clear();
     avttLastSelectedIndex = null;
     avttHideActionsMenu();
     avttHideExportMenu();
     avttUpdateSortIndicators();
     if (recheckSize) {
-        getUserUploadedFileSize().then((size) => {
-        S3_Current_Size = size;
-        document.getElementById("user-used").innerHTML = formatFileSize(S3_Current_Size);
-        document.getElementById("user-limit").innerHTML = formatFileSize(activeUserLimit);
-        const tierLabel = document.getElementById("patreon-tier");
-        if (tierLabel) {
-            tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
-        }
+        getUserUploadedFileSize(false, { signal })
+        .then((size) => {
+          S3_Current_Size = size;
+          document.getElementById("user-used").innerHTML = formatFileSize(S3_Current_Size);
+          document.getElementById("user-limit").innerHTML = formatFileSize(activeUserLimit);
+          const tierLabel = document.getElementById("patreon-tier");
+          if (tierLabel) {
+              tierLabel.textContent = `Patreon tier: ${activeUserTier.label} | Upload limit ${formatFileSize(activeUserLimit)}`;
+          }
+        })
+        .catch((error) => {
+          if (error?.name !== "AbortError") {
+            console.warn("Failed to refresh usage size", error);
+          }
         });
     }
     if(!window.firstFilePickerLoad){
-        getUserUploadedFileSize(true).then((size) => {
+        getUserUploadedFileSize(true, { signal })
+        .then((size) => {
             S3_Current_Size = size;
             document.getElementById("user-used").innerHTML = formatFileSize(S3_Current_Size);
+        })
+        .catch((error) => {
+          if (error?.name !== "AbortError") {
+            console.warn("Failed to load initial usage details", error);
+          }
         });
         window.firstFilePickerLoad = true;
+        useCache = false;
     }
 
     const fileListing = document.getElementById("file-listing");
@@ -3539,7 +4166,12 @@ function refreshFiles(
       upFolder.find('.avtt-breadcrumb').on("click", function (e) {
         e.preventDefault();
         const newPath = e.currentTarget.getAttribute("data-path");
-        refreshFiles(newPath, undefined, undefined, undefined, fileTypes);
+        refreshFiles(newPath, undefined, undefined, undefined, fileTypes, {
+          useCache: true,
+          revalidate:
+            !avttFolderListingCache.has(newPath) ||
+            !Array.isArray(avttFolderListingCache.get(newPath)),
+        });
         currentFolder = newPath;
       });
       upFolder.show();
@@ -3551,6 +4183,9 @@ function refreshFiles(
 
 
     const insertFiles = (files, searchTerm, fileTypes) => {
+      if (signal?.aborted) {
+        return;
+      }
       $('#file-listing-section .sidebar-panel-loading-indicator').remove();
       console.log("Files in folder: ", files);
       const normalizedSearch =
@@ -3650,66 +4285,71 @@ function refreshFiles(
       }
 
       avttSortEntries(prepared);
-      const setLineImgSrc = async (container, entry) => {
-        const path = entry?.rawKey || entry?.relativePath || "";
-        try{
-          if (entry.type !== avttFilePickerTypes.IMAGE && entry.type !== avttFilePickerTypes.VIDEO) 
-            return;
-          
-          if (!path) 
-            return;
-          const url = await getAvttStorageUrl(path);
+      const setLineImgSrc = (container, entry) => {
+        requestAnimationFrame(async () => {
+          const path = entry?.rawKey || entry?.relativePath || "";
+          try {
+            if (entry.type !== avttFilePickerTypes.IMAGE && entry.type !== avttFilePickerTypes.VIDEO)
+              return;
 
-          if (!url) 
-            return;
-          
-          if(entry.type === avttFilePickerTypes.IMAGE){
-            const img = document.createElement("img");
-            img.src = url;
-            img.style.width = "35px";
-            img.style.height = "35px";
-            img.style.objectFit = "cover";
-            img.style.marginRight = "10px";
-            img.style.verticalAlign = "middle";
-            img.loading = "lazy";
+            if (!path)
+              return;
+            await async_sleep(0.01);
+            const url = await getAvttStorageUrl(path);
 
-            container.replaceWith(img);
-          }else if(entry.type === avttFilePickerTypes.VIDEO){
-            const video = document.createElement("video");
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
- 
-            const $video = $(video);
-            $video.one('loadedmetadata', function () {
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-            });
+            if (!url)
+              return;
 
-            $video.one('canplay', function () {
-              canvas.style.display = 'inline';
-              ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-              $video.off('loadedmetadata');
-              $video.off('canplay');
-              video.src = "";
-              $video.remove();              
-            });
-            canvas.style.width = "35px";
-            canvas.style.height = "35px";
-            canvas.style.marginRight = "10px";
-            canvas.style.verticalAlign = "middle";
-            canvas.style.objectFit = "cover";
-            video.currentTime = 0.001;
-            video.src = url;
-            video.load();
+            if (entry.type === avttFilePickerTypes.IMAGE) {
+              const img = document.createElement("img");
+              img.src = url;
+              img.style.width = "35px";
+              img.style.height = "35px";
+              img.style.objectFit = "cover";
+              img.style.marginRight = "10px";
+              img.style.verticalAlign = "middle";
+              img.loading = "lazy";
 
-            container.replaceWith(canvas);
+              container.replaceWith(img);
+            } else if (entry.type === avttFilePickerTypes.VIDEO) {
+              const video = document.createElement("video");
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
+
+              const $video = $(video);
+              $video.one('loadedmetadata', function () {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+              });
+
+              $video.one('canplay', function () {
+                canvas.style.display = 'inline';
+                ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+                $video.off('loadedmetadata');
+                $video.off('canplay');
+                video.src = "";
+                $video.remove();
+              });
+              canvas.style.width = "35px";
+              canvas.style.height = "35px";
+              canvas.style.marginRight = "10px";
+              canvas.style.verticalAlign = "middle";
+              canvas.style.objectFit = "cover";
+              video.currentTime = 0.001;
+              video.src = url;
+              video.load();
+
+              container.replaceWith(canvas);
+            }
+          } catch (error) {
+            console.warn("Failed to load preview for ", path, error);
           }
-        } catch(error){
-          console.warn("Failed to load preview for ", path, error);
-        }
+        });
       }
       fileListing.innerHTML = "";
-      prepared.forEach((entry, index) => {
+      prepared.forEach(async (entry, index) => {
+
+        await async_sleep(0.01);
         const listItem = document.createElement("tr");
         listItem.classList.add("avtt-file-row");
         listItem.dataset.path = entry.relativePath;
@@ -3739,6 +4379,12 @@ function refreshFiles(
                 undefined,
                 undefined,
                 fileTypes,
+                {
+                  useCache: true,
+                  revalidate:
+                    !avttFolderListingCache.has(entry.relativePath) ||
+                    !Array.isArray(avttFolderListingCache.get(entry.relativePath)),
+                },
               );
               currentFolder = entry.relativePath;
             });
@@ -3782,23 +4428,52 @@ function refreshFiles(
       avttUpdateActionsMenuState();
 
     };
-    if (allFiles) {
-        getAllUserFiles()
-        .then((files) => insertFiles(files, searchTerm, fileTypes))
-        .catch((err) => {
-            alert("Error fetching folder listing. See console for details.");
-            console.error("Error fetching folder listing: ", err);
-          $('#file-listing-section .sidebar-panel-loading-indicator').remove();
-        });
-    } else {
-        getFolderListingFromS3(path)
-        .then((files) => insertFiles(files, searchTerm, fileTypes))
-        .catch((err) => {
-            alert("Error fetching folder listing. See console for details.");
-            console.error("Error fetching folder listing: ", err);
-          $('#file-listing-section .sidebar-panel-loading-indicator').remove();
-        });
+    const hasCachedAllFiles =
+      Array.isArray(avttAllFilesCache) && avttAllFilesCache.length > 0;
+    const hasCachedFolder =
+      avttFolderListingCache.has(normalizedPath) &&
+      Array.isArray(avttFolderListingCache.get(normalizedPath));
+    const hasCachedData = allFiles ? hasCachedAllFiles : hasCachedFolder;
+    const shouldUseCachedData = useCache && hasCachedData;
+
+    if (shouldUseCachedData) {
+      const cachedEntries = allFiles
+        ? avttAllFilesCache
+        : avttFolderListingCache.get(normalizedPath);
+      insertFiles(cachedEntries || [], searchTerm, fileTypes);
     }
+
+    const wantsRevalidate =
+      revalidate !== undefined ? revalidate : !hasCachedData;
+    const shouldFetch =
+      wantsRevalidate || !hasCachedData || !useCache;
+    if (!shouldFetch) {
+      return Promise.resolve();
+    }
+
+    const fetchPromise = allFiles
+      ? getAllUserFiles({ signal })
+      : getFolderListingFromS3(path, { signal });
+
+    const handledPromise = fetchPromise
+      .then((files) => {
+        if (allFiles) {
+          avttPrimeListingCachesFromFullListing(files);
+        } else {
+          avttStoreFolderListing(normalizedPath, files);
+        }
+        insertFiles(files, searchTerm, fileTypes);
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") {
+          return;
+        }
+        alert("Error fetching folder listing. See console for details.");
+        console.error("Error fetching folder listing: ", err);
+        $('#file-listing-section .sidebar-panel-loading-indicator').remove();
+      });
+
+    return handledPromise;
 }
 
 async function sendUsageUpdate(payload) {
@@ -3833,7 +4508,11 @@ async function applyUsageDelta(deltaBytes, deltaObjects) {
   if (bytes === 0 && objects === 0) {
     return null;
   }
-  return await sendUsageUpdate({ deltaBytes: bytes, objectDelta: objects });
+  const result = await sendUsageUpdate({ deltaBytes: bytes, objectDelta: objects });
+  if (result) {
+    avttAdjustCachedUsage(bytes, objects);
+  }
+  return result;
 }
 
 async function deleteFilesFromS3Folder(selections, fileTypes) {
@@ -3864,7 +4543,21 @@ async function deleteFilesFromS3Folder(selections, fileTypes) {
     if (!response.ok || !json.deleted) {
       throw new Error(json?.message || "Failed to delete file(s)");
     }
-    refreshFiles(currentFolder, true, undefined, undefined, fileTypes);
+    for (const entry of entries) {
+      if (entry.isFolder) {
+        avttRemoveFolderCacheRecursively(entry.key);
+      }
+      avttRemoveCacheEntry(entry.key);
+    }
+    avttAdjustCachedUsage(-payload.totalSize, -payload.objectCount);
+    refreshFiles(
+      currentFolder,
+      true,
+      undefined,
+      undefined,
+      fileTypes,
+      { useCache: true, revalidate: false },
+    );
   } catch (error) {
     console.error("Failed to delete files", error);
     alert(error.message || "Failed to delete file(s).");
@@ -3878,6 +4571,32 @@ const GET_FILE_FROM_S3_MAX_DELAY_MS = 4000;
 const getFileFromS3Queue = [];
 const getFileFromS3Pending = new Map();
 let isProcessingGetFileFromS3Queue = false;
+
+function clearGetFileFromS3Queue() {
+  if (!Array.isArray(getFileFromS3Queue) || getFileFromS3Queue.length === 0) return;
+  try {
+    // Reject all queued (not-yet-processed) requests so callers don't hang
+    while (getFileFromS3Queue.length > 0) {
+      const item = getFileFromS3Queue.shift();
+      try {
+        if (item && typeof item.reject === 'function') {
+          item.reject(new DOMException('Cancelled', 'AbortError'));
+        }
+      } catch (e) {
+        console.warn('Failed to reject queued getFileFromS3 item', e);
+      }
+      try {
+        if (item && item.cacheKey) {
+          getFileFromS3Pending.delete(item.cacheKey);
+        }
+      } catch (e) {
+        
+      }
+    }
+  } catch (e) {
+    console.warn('Error while clearing getFileFromS3Queue', e);
+  }
+}
 
 function getFileFromS3Delay(ms) {
   return new Promise((resolve) => {
@@ -3968,13 +4687,26 @@ async function getFileFromS3(fileName) {
   }
 
   const queuedPromise = new Promise((resolve, reject) => {
-    getFileFromS3Queue.push({
-      originalName,
-      cacheKey,
-      sanitizedKey,
-      resolve,
-      reject,
-    });
+    // Avoid pushing duplicate queue items for the same cacheKey
+    const alreadyQueued = getFileFromS3Queue.find((q) => q && q.cacheKey === cacheKey);
+    if (!alreadyQueued) {
+      getFileFromS3Queue.push({
+        originalName,
+        cacheKey,
+        sanitizedKey,
+        resolve,
+        reject,
+      });
+    } else {
+      // If already queued, hook up to the existing pending promise if present
+      if (getFileFromS3Pending.has(cacheKey)) {
+        const existing = getFileFromS3Pending.get(cacheKey);
+        existing.then(resolve).catch(reject);
+      } else {
+        // fallback: still push (rare) to ensure this caller gets resolved
+        getFileFromS3Queue.push({ originalName, cacheKey, sanitizedKey, resolve, reject });
+      }
+    }
   });
   getFileFromS3Pending.set(cacheKey, queuedPromise);
   processGetFileFromS3Queue();
@@ -3986,61 +4718,115 @@ async function getFileFromS3(fileName) {
   }
 }
 
-async function getFolderListingFromS3(folderPath) {
-  const url = await fetch(`${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(folderPath)}&list=true`);
+async function getFolderListingFromS3(folderPath, options = {}) {
+  const { signal } = options;
+  const url = await fetch(
+    `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(folderPath)}&list=true`,
+    { signal },
+  );
   const json = await url.json();
   const folderContents = json.folderContents || [];
   return folderContents;
 }
 
-async function getUserUploadedFileSize(forceFullCheck=false) {
-    async function fallBack(){
-        const folderContents = await getAllUserFiles();
-        let userSize = 0;
-        let objectCount = 0;
-        for (const file of folderContents) {
-            if (!file || !file.Key) {
-                continue;
-            }
-            userSize += Number(file.Size) || 0;
-            objectCount += 1;
-        }
-        try {
-            await fetch(`${AVTT_S3}?action=usage&user=${window.PATREON_ID}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ totalBytes: userSize, objectCount }),
-            });
-        } catch (persistError) {
-            console.warn("Failed to persist usage fallback", persistError);
-        }
-        return userSize;
+async function getUserUploadedFileSize(forceFullCheck = false, options = {}) {
+  const { signal, bypassCache = false } = options;
+  const shouldUseCache = !forceFullCheck && !bypassCache;
+  if (shouldUseCache) {
+    if (avttUsageCache.pending) {
+      return avttUsageCache.pending;
     }
+    if (typeof avttUsageCache.totalBytes === "number") {
+      return avttUsageCache.totalBytes;
+    }
+  }
 
-    if (forceFullCheck)
-        return await fallBack()
-
+  const fallBack = async () => {
+    const folderContents = await getAllUserFiles({ signal });
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    let userSize = 0;
+    let objectCount = 0;
+    for (const file of folderContents) {
+      if (!file) {
+        continue;
+      }
+      const key = file.Key || file.key;
+      if (!key) {
+        continue;
+      }
+      userSize += Number(file.Size) || 0;
+      objectCount += 1;
+    }
+    avttPrimeListingCachesFromFullListing(folderContents);
+    avttUsageCache.objectCount = objectCount;
     try {
-        const response = await fetch(
-        `${AVTT_S3}?action=usage&user=${window.PATREON_ID}`,
-        );
-        const json = await response.json();
-        if (!response.ok) {
-        throw new Error(json?.message || "Usage lookup failed");
-        }
-        if (typeof json.totalBytes === "number") {
-        return json.totalBytes;
-        }
-        throw new Error("Usage total missing");
-    } catch (error) {
-        console.warn("Falling back to full listing for usage", error);
-        return await fallBack()
+      await fetch(`${AVTT_S3}?action=usage&user=${window.PATREON_ID}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ totalBytes: userSize, objectCount }),
+        signal,
+      });
+    } catch (persistError) {
+      if (persistError?.name !== "AbortError") {
+        console.warn("Failed to persist usage fallback", persistError);
+      }
     }
+    return userSize;
+  };
+
+  const usagePromise = (async () => {
+    if (forceFullCheck) {
+      return await fallBack();
+    }
+    try {
+      const response = await fetch(
+        `${AVTT_S3}?action=usage&user=${window.PATREON_ID}`,
+        { signal },
+      );
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || "Usage lookup failed");
+      }
+      if (typeof json.totalBytes === "number") {
+        if (typeof json.objectCount === "number") {
+          avttUsageCache.objectCount = json.objectCount;
+        }
+        return json.totalBytes;
+      }
+      throw new Error("Usage total missing");
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      console.warn("Falling back to full listing for usage", error);
+      return await fallBack();
+    }
+  })();
+
+  if (shouldUseCache) {
+    avttUsageCache.pending = usagePromise;
+  }
+
+  try {
+    const totalBytes = await usagePromise;
+    avttUsageCache.totalBytes = Number.isFinite(Number(totalBytes))
+      ? Number(totalBytes)
+      : 0;
+    return avttUsageCache.totalBytes;
+  } finally {
+    if (shouldUseCache) {
+      avttUsageCache.pending = null;
+    }
+  }
 }
 
-async function getAllUserFiles() {
+async function getAllUserFiles(options = {}) {
+  const { signal } = options;
   const url = await fetch(
     `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent("")}&list=true&includeSubDirFiles=true`,
+    { signal },
   );
   const json = await url.json();
   const folderContents = json.folderContents;

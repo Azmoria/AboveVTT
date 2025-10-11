@@ -554,8 +554,8 @@ function openDB() {
     })
   );
    
-  promises.push(new Promise(async (resolve, reject) => {
-      const DBOpenRequest2 = await indexedDB.open(`AboveVTT-Global`, 2);
+  promises.push(new Promise((resolve, reject) => {
+      const DBOpenRequest2 = indexedDB.open(`AboveVTT-Global`, 3);
       
       DBOpenRequest2.onsuccess = (e) => {
         resolve(DBOpenRequest2.result);
@@ -570,6 +570,9 @@ function openDB() {
           }
           if(!db.objectStoreNames?.contains('journalData')){
             const objectStore2 = db.createObjectStore("journalData", { keyPath: "journalId" });
+          }
+          if (!db.objectStoreNames?.contains('avttFilePicker')) {
+            const objectStore3 = db.createObjectStore("avttFilePicker", { keyPath: "fileEntry" });
           }
       };
     })
