@@ -1152,6 +1152,10 @@ function avttComputeNewKeyForDestination(entry, destinationFolder) {
 }
 
 async function avttMoveEntries(moves, options = {}) {
+  const fileListingSection = document.getElementById("file-listing-section");
+  if ($('#file-listing-section .sidebar-panel-loading-indicator').length == 0) {
+    $(fileListingSection).append(build_combat_tracker_loading_indicator('Loading files...'));
+  }
   const validMoves = Array.isArray(moves)
     ? moves.filter(
         (move) =>
@@ -2675,7 +2679,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                       <button type="button" data-action="delete">Delete</button>
                     </div>
                   </div>
-                  <input id='search-files' type='text' placeholder='Search' />
+                  <input id='search-files' type='search' placeholder='Search' />
                   <div style='flex-grow:1'></div>
                   <div id='uploading-file-indicator' style='display:none'></div>
                     <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;line-height: 16px;' for="file-input">Upload File</label>
@@ -2704,7 +2708,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                     <span class="avtt-sortable-header" data-sort="size" data-label="Size">Size</span>
                 </div>
             </div>
-            <div id="file-listing-section">
+            <div id="file-listing-section" style='position: relative;'>
                 <table id="file-listing">
                     <tr>
                         <td colspan="4">Loading...</td>
@@ -3435,6 +3439,11 @@ function refreshFiles(
   searchTerm,
   fileTypes,
 ) {
+
+    const fileListingSection = document.getElementById("file-listing-section");
+    if ($('#file-listing-section .sidebar-panel-loading-indicator').length == 0){
+      $(fileListingSection).append(build_combat_tracker_loading_indicator('Loading files...'));
+    }
     currentFolder = typeof path === "string" ? path : "";
     activeFilePickerFilter = fileTypes;
     avttFolderListingCache.clear();
@@ -3468,7 +3477,6 @@ function refreshFiles(
         avttUpdateSelectNonFoldersCheckbox();
         avttUpdateActionsMenuState();
       });
-    const fileListingSection = document.getElementById("file-listing-section");
     if (fileListingSection && !fileListingSection.dataset.avttContextBound) {
       fileListingSection.addEventListener("contextmenu", (event) => {
         const row = event.target.closest("tr.avtt-file-row");
@@ -3519,6 +3527,7 @@ function refreshFiles(
 
 
     const insertFiles = (files, searchTerm, fileTypes) => {
+      $('#file-listing-section .sidebar-panel-loading-indicator').remove();
       console.log("Files in folder: ", files);
       const normalizedSearch =
         typeof searchTerm === "string" ? searchTerm.toLowerCase() : undefined;
@@ -3747,6 +3756,7 @@ function refreshFiles(
       avttApplyClipboardHighlights();
       avttUpdateSelectNonFoldersCheckbox();
       avttUpdateActionsMenuState();
+
     };
     if (allFiles) {
         getAllUserFiles()
@@ -3754,6 +3764,7 @@ function refreshFiles(
         .catch((err) => {
             alert("Error fetching folder listing. See console for details.");
             console.error("Error fetching folder listing: ", err);
+          $('#file-listing-section .sidebar-panel-loading-indicator').remove();
         });
     } else {
         getFolderListingFromS3(path)
@@ -3761,6 +3772,7 @@ function refreshFiles(
         .catch((err) => {
             alert("Error fetching folder listing. See console for details.");
             console.error("Error fetching folder listing: ", err);
+          $('#file-listing-section .sidebar-panel-loading-indicator').remove();
         });
     }
 }

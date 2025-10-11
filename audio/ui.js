@@ -748,7 +748,7 @@ function init_trackLibrary() {
     });
     trackLibrary.dispatchEvent(new Event('onchange'));
     
-    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, importCSV, exportCSV, importTrackFields, trackList);
+    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, avttButton, importCSV, exportCSV, importTrackFields, trackList);
 }
 
 function init() {

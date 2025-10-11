@@ -7232,7 +7232,10 @@ input.max_hp[disabled]{
     fill: #201911;
     stroke: #0c0a08;
 }
-
+div#file-listing-section .sidebar-panel-loading-indicator {
+    background: none !important;
+    filter: drop-shadow(2px 2px 4px #000)
+}
 /*one button*/
 .encounter-builder-page :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(1) {
     margin-right:60px;
@@ -7575,11 +7578,6 @@ background-image: var(--avtt-mask);
     top: 0;
     background-repeat: no-repeat;
 }
-#sounds-panel button span.avtt-btn-status {
-    background-position: -2px -3px;
-    top: 0px;
-    left: 0px;
-}
 
 #edit_scene_form button span.avtt-btn-status{
     background-position: 0px 0px;
@@ -7639,7 +7637,11 @@ button span.onedrive-btn-status{
 #sounds-panel button.avttPicker span{
     top: 2px;
 }
-
+#sounds-panel button span.avtt-btn-status {
+    background-position: -2px -3px;
+    top: 0px;
+    left: 0px;
+}
 #sounds-panel .sidebar-panel-body>button{
     vertical-align:top;
 }
