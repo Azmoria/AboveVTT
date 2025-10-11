@@ -2642,6 +2642,20 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 outline: 2px solid var(--highlight-color, rgba(131, 185, 255, 1));
                 outline-offset: 2px;
             }
+            #cancel-avtt-upload-button {
+              background: var(--background-color, #fff) !important;
+              color: var(--font-color, #000) !important;
+              border: 1px solid gray;
+              border-radius: 2px !important;
+              padding: 0px !important;
+              width: 15px;
+              height: 15px;
+              font-size: 10px;
+              float: right;
+            }    
+            #cancel-avtt-upload-button:hover{
+              color: #F00 !important;
+            }
             .avtt-conflict-apply-all {
                 display: flex;
                 align-items: center;
@@ -2969,6 +2983,16 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
     uploadingIndicator.innerHTML = `Uploading File <span id='file-number'>${index + 1}</span> of <span id='total-files'>${total}</span>`;
     uploadingIndicator.style.display = "block";
+    const cancelButton = $("<button id='cancel-avtt-upload-button' title='Cancel Upload'>X  </button>");
+
+
+    cancelButton.on('click', () => {
+      if (avttUploadController) {
+        avttUploadController.abort('User cancelled upload by clicking the cancel button.');
+      }
+    });
+
+    $(uploadingIndicator).prepend(cancelButton);
   };
 
   const hideUploadingIndicator = () => {
