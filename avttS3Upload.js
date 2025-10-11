@@ -244,6 +244,11 @@ function avttUpdateActionsMenuState() {
   if (pasteButton) {
     pasteButton.disabled = !avttClipboardHasEntries();
   }
+  const importButton = dropdown.querySelector('[data-action="import"]');
+  if (importButton) {
+    const hasAbovevtt = selection.some((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+    importButton.disabled = !hasAbovevtt;
+  }
 }
 
 function avttHideActionsMenu() {
@@ -814,6 +819,14 @@ async function avttHandleToolbarAction(action) {
       }
       break;
     }
+    case "import": {
+      const selection = avttGetSelectedEntries();
+      if (selection.length > 0) {
+        await avttImportSelectedFiles(selection);
+        handled = true;
+      }
+      break;
+    }
     default:
       break;
   }
@@ -842,6 +855,58 @@ async function avttPasteFiles(destinationFolder) {
   );
 }
 
+async function avttImportSelectedFiles(selection) {
+  const entries = Array.isArray(selection) ? selection : avttGetSelectedEntries();
+  const filesToImport = entries.filter((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+  if (!filesToImport.length) return;
+  try {
+    // show global import indicator if available
+    if (typeof build_import_loading_indicator === 'function') {
+      build_import_loading_indicator('Importing Files');
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  window.__IMPORT_SCENES_BUFFER = [];
+
+  for (const entry of filesToImport) {
+    try {
+      const url = await getAvttStorageUrl(`${PATREON_ID}/${entry.key}`);
+      if (!url) continue;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        console.warn('Failed to fetch file for import', entry.key);
+        continue;
+      }
+      const text = await resp.text();
+      // call Settings import processor
+      if (typeof import_process_datafile_text === 'function') {
+        await import_process_datafile_text(text);
+      }
+    } catch (err) {
+      console.error('Import failed for', entry.key, err);
+    }
+  }
+
+  const scenes = window.__IMPORT_SCENES_BUFFER || [];
+  try {
+    if (scenes.length) {
+      await AboveApi.migrateScenes(window.gameId, scenes);
+    }
+    if (typeof window.$ === 'function') {
+      $(".import-loading-indicator .loading-status-indicator__subtext").addClass('complete');
+    }
+    setTimeout(() => {
+      alert("Migration (hopefully) completed. You need to Re-Join AboveVTT");
+      location.reload();
+    }, 2000);
+  } catch (err) {
+    console.error('Migration failed after import', err);
+    showError(err, 'cloud_migration failed');
+  }
+}
+
 window.avttCutSelectedFiles = avttCutSelectedFiles;
 window.avttPasteFiles = avttPasteFiles;
 window.avttClipboardHasEntries = avttClipboardHasEntries;
@@ -858,6 +923,8 @@ function avttEnsureContextMenu() {
     <button type="button" data-action="paste">Paste</button>
     <button type="button" data-action="copyPath">Copy Path</button>
     <button type="button" data-action="rename">Rename</button>
+    <button type="button" data-action="import">Import</button>
+    <hr/>
     <button type="button" data-action="delete">Delete</button>
   `;
   document.body.appendChild(menu);
@@ -945,6 +1012,11 @@ function avttUpdateContextMenuState() {
   }
   if (copyPathButton) {
     copyPathButton.disabled = !hasSelection;
+  }
+  const importButton = menu.querySelector('button[data-action="import"]');
+  if (importButton) {
+    const hasAbovevtt = selection.some((e) => !e.isFolder && /\.abovevtt$/i.test(e.key));
+    importButton.disabled = !hasAbovevtt;
   }
 }
 
@@ -1038,6 +1110,18 @@ async function avttHandleContextAction(action) {
       avttUpdateSelectNonFoldersCheckbox();
       avttUpdateActionsMenuState();
       avttApplyClipboardHighlights();
+      break;
+    }
+    case "import": {
+      if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
+        return;
+      }
+      const selection = avttEnsureSelectionIncludes(
+        avttContextMenuState.targetPath,
+        avttContextMenuState.isFolder,
+      );
+      if (selection.length === 0) return;
+      await avttImportSelectedFiles(selection);
       break;
     }
     default:
@@ -2253,11 +2337,11 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 gap: 6px;
             }
             #avtt-column-headers {
-                display: grid;
-                grid-template-columns: 40px 1fr 90px 120px;
-                padding: 0 16px;
-                font-weight: bold;
-                color: var(--font-color, #000);
+              display: grid;
+              grid-template-columns: 43px 1fr 173px 41px;
+              padding: 0 15px;
+              font-weight: bold;
+              color: var(--font-color, #000);
             }
             #avtt-column-headers span {
                 overflow: hidden;
@@ -2315,6 +2399,10 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 display: none;
                 z-index: 9999;
                 min-width: 140px;
+            }
+            #avtt-actions-dropdown{
+              left:0;
+              right: auto;
             }
             .avtt-toolbar-dropdown-list.visible {
                 display: flex;
@@ -2572,10 +2660,28 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                     <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
                     <div id='patreon-tier'></div>
                 </div>
-                <div style='display: flex; align-items: center; gap: 10px;'>
+                <div style='display: flex; gap: 10px; line-height: 16px; width: 100%; align-items: center; padding-left:20px;'>
+                  <div id="avtt-actions-menu" class="avtt-toolbar-dropdown">
+                    <button type="button" class="avtt-toolbar-link avtt-toolbar-button avtt-actions-toggle">Actions &#9662;</button>
+                    <div id="avtt-actions-dropdown" class="avtt-toolbar-dropdown-list">
+                      <button type="button" data-action="cut">Cut</button>
+                      <button type="button" data-action="paste">Paste</button>
+                      <button type="button" data-action="copy-path">Copy Path</button>
+                      <button type="button" data-action="rename">Rename</button>
+                      <button type="button" data-action="import">Import</button>
+                      <hr/>
+                      <button type="button" data-action="delete">Delete</button>
+                    </div>
+                  </div>
+                  <input id='search-files' type='text' placeholder='Search' />
+                  <div style='flex-grow:1'></div>
+                  <div id='uploading-file-indicator' style='display:none'></div>
+                    <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;line-height: 16px;' for="file-input">Upload File</label>
+                    <input style='display:none;' type="file" multiple id="file-input"
+                        accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt,application/pdf" />
                     <div id='create-folder' class='avtt-toolbar-link'>Create Folder</div>
                     <div id="avtt-export-menu" class="avtt-toolbar-dropdown">
-                        <div id="avtt-export-toggle" class="avtt-toolbar-link avtt-toolbar-button">Export &#9662;</div>
+                        <div id="avtt-export-toggle" class="avtt-toolbar-link avtt-toolbar-button">Take Export &#9662;</div>
                         <div id="avtt-export-dropdown" class="avtt-toolbar-dropdown-list">
                             <button type="button" data-export="campaign">Campaign Export</button>
                             <button type="button" data-export="currentScene">Current Scene</button>
@@ -2585,32 +2691,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                         </div>
                     </div>
                 </div>
-                <div style='display: flex; align-items: center; gap: 10px;'>
-                    <div id='uploading-file-indicator' style='display:none'></div>
-                    <label style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;' for="file-input">Upload File</label>
-                    <input style='display:none;' type="file" multiple id="file-input"
-                        accept="image/*,video/*,audio/*,.uvtt,.json,.dd2vtt,.df2vtt,application/pdf" />
-                    <input id='search-files' type='text' placeholder='Search' />
-                </div>
             </div>
             <div id='upFolder' style='position: absolute; left: 30px; top:10px; text-align: left; cursor: pointer; var(--highlight-color, rgba(131, 185, 255, 1))'>
             </div>
             <div id="avtt-listing-toolbar">
-                <div class="avtt-toolbar-row">
-                    <label for="avtt-select-files"><input type="checkbox" id="avtt-select-files" />Select all files (non-folders)</label>
-                    <div id="avtt-actions-menu" class="avtt-toolbar-dropdown">
-                        <button type="button" class="avtt-toolbar-link avtt-toolbar-button avtt-actions-toggle">Actions &#9662;</button>
-                        <div id="avtt-actions-dropdown" class="avtt-toolbar-dropdown-list">
-                            <button type="button" data-action="cut">Cut</button>
-                            <button type="button" data-action="paste">Paste</button>
-                            <button type="button" data-action="copy-path">Copy Path</button>
-                            <button type="button" data-action="rename">Rename</button>
-                            <button type="button" data-action="delete">Delete</button>
-                        </div>
-                    </div>
-                </div>
                 <div id="avtt-column-headers">
-                    <span></span>
+                    <span><label for="avtt-select-files"><input type="checkbox" id="avtt-select-files" style='width:20px;height:20px'/></label></span>
                     <span class="avtt-sortable-header" data-sort="name" data-label="Name">Name</span>
                     <span class="avtt-sortable-header" data-sort="type" data-label="Type">Type</span>
                     <span class="avtt-sortable-header" data-sort="size" data-label="Size">Size</span>
@@ -2652,7 +2738,6 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   const exportMenu = document.getElementById("avtt-export-menu");
   const exportDropdown = document.getElementById("avtt-export-dropdown");
   const exportToggle = document.getElementById("avtt-export-toggle");
-  const deleteSelectedButton = document.getElementById("delete-selected-files");
   const copyPathButton = document.getElementById("copy-path-to-clipboard");
   const searchInput = document.getElementById("search-files");
   const selectFile = document.getElementById("select-file");
@@ -2736,19 +2821,8 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         typeof filename === "string" && filename.trim()
           ? filename.trim()
           : `${option}-${Date.now()}.abovevtt`;
-      let decoded = data;
-      if (typeof decoded === "string") {
-        try {
-          if (typeof window.b64DecodeUnicode === "function") {
-            decoded = window.b64DecodeUnicode(decoded);
-          } else if (typeof window.atob === "function") {
-            decoded = window.atob(decoded);
-          }
-        } catch (decodeError) {
-          decoded = data;
-        }
-      }
-      const blob = new Blob([decoded], { type: mimeType || "text/plain" });
+
+      const blob = new Blob([data], { type: mimeType || "text/plain" });
       const syntheticFile = new File([blob], fileName, {
         type: mimeType || "text/plain",
       });
@@ -3293,17 +3367,6 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       avttUpdateActionsMenuState();
     });
   }
-
-  deleteSelectedButton.addEventListener("click", async () => {
-    const selections = avttGetSelectedEntries();
-    if (selections.length === 0) {
-      return;
-    }
-    await deleteFilesFromS3Folder(selections, activeFilePickerFilter);
-    avttUpdateActionsMenuState();
-    avttUpdateSelectNonFoldersCheckbox();
-    avttApplyClipboardHighlights();
-  });
 
   function isAllowedExtension(extension) {
     return (
