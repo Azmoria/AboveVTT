@@ -271,7 +271,37 @@ function avttToggleActionsMenu() {
   if (dropdown.classList.contains("visible")) {
     avttHideActionsMenu();
   } else {
+    avttHideExportMenu();
+    avttHideContextMenu();
     avttShowActionsMenu();
+  }
+}
+
+function avttHideExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.remove("visible");
+}
+
+function avttShowExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  dropdown.classList.add("visible");
+}
+
+function avttToggleExportMenu() {
+  const dropdown = document.getElementById("avtt-export-dropdown");
+  if (!dropdown) {
+    return;
+  }
+  if (dropdown.classList.contains("visible")) {
+    avttHideExportMenu();
+  } else {
+    avttShowExportMenu();
   }
 }
 
@@ -634,6 +664,120 @@ async function avttPromptUploadConflict({ fileName }) {
   });
 }
 
+function avttPromptTextDialog({
+  title = "Input Required",
+  message = "",
+  defaultValue = "",
+  placeholder = "",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "avtt-conflict-overlay";
+    const modal = document.createElement("div");
+    modal.className = "avtt-conflict-modal";
+    const safeTitle = avttEscapeHtml(title);
+    const safeMessage = message ? `<p>${avttEscapeHtml(message)}</p>` : "";
+    modal.innerHTML = `
+      <h3>${safeTitle}</h3>
+      ${safeMessage}
+      <input type="text" id="avtt-text-prompt-input" value="${avttEscapeHtml(defaultValue || "")}" placeholder="${avttEscapeHtml(placeholder || "")}" />
+      <div class="avtt-conflict-modal-buttons avtt-modal-buttons">
+        <button type="button" data-action="cancel">${avttEscapeHtml(cancelLabel)}</button>
+        <button type="button" data-action="confirm">${avttEscapeHtml(confirmLabel)}</button>
+      </div>
+    `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const input = modal.querySelector("#avtt-text-prompt-input");
+    const cancelButton = modal.querySelector('button[data-action="cancel"]');
+    const confirmButton = modal.querySelector('button[data-action="confirm"]');
+
+    const cleanup = (value) => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      overlay.remove();
+      resolve(value);
+    };
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        cleanup(null);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        confirmButton.click();
+      }
+    };
+
+    cancelButton.addEventListener("click", () => cleanup(null));
+    confirmButton.addEventListener("click", () => cleanup(input.value));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        cleanup(null);
+      }
+    });
+    document.addEventListener("keydown", onKeyDown, true);
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  });
+}
+
+function avttCaptureDownload(invoker) {
+  return new Promise((resolve, reject) => {
+    const originalDownload = window.download;
+    let timeoutId = null;
+    let settled = false;
+
+    const cleanup = (error) => {
+      if (window.download === intercept) {
+        window.download = originalDownload;
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      if (error && !settled) {
+        reject(error);
+      }
+    };
+
+    const intercept = (data, filename, mimeType) => {
+      settled = true;
+      cleanup();
+      resolve({ data, filename, mimeType });
+    };
+
+    window.download = intercept;
+
+    const handleFailure = (error) => {
+      cleanup(error || new Error("Export failed to produce a file."));
+    };
+
+    try {
+      const result = invoker();
+      if (result && typeof result.then === "function") {
+        result.catch((error) => {
+          if (!settled) {
+            handleFailure(error);
+          }
+        });
+      }
+    } catch (error) {
+      handleFailure(error);
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      if (!settled) {
+        handleFailure(new Error("Export timed out."));
+      }
+    }, 300000);
+  });
+}
+
 async function avttHandleToolbarAction(action) {
   let handled = false;
   switch (action) {
@@ -675,6 +819,7 @@ async function avttHandleToolbarAction(action) {
   }
   if (handled) {
     avttHideActionsMenu();
+    avttHideExportMenu();
   }
   avttUpdateActionsMenuState();
   avttApplyClipboardHighlights();
@@ -873,6 +1018,7 @@ async function avttHandleContextAction(action) {
       if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
         return;
       }
+      avttHideExportMenu();
       await avttRenameTarget();
       break;
     }
@@ -880,6 +1026,7 @@ async function avttHandleContextAction(action) {
       if (!avttContextMenuState.targetPath || avttContextMenuState.isImplicit) {
         return;
       }
+      avttHideExportMenu();
       const selection = avttEnsureSelectionIncludes(
         avttContextMenuState.targetPath,
         avttContextMenuState.isFolder,
@@ -1035,11 +1182,16 @@ async function avttPromptRename(path, isFolder) {
     const idx = normalizedPath.lastIndexOf("/");
     return idx >= 0 ? `${normalizedPath.slice(0, idx + 1)}` : "";
   })();
-  const newName = window.prompt("Enter a new name:", baseName);
-  if (newName === null || newName === undefined) {
+  const promptValue = await avttPromptTextDialog({
+    title: isFolder ? "Rename Folder" : "Rename File",
+    message: `Enter a new name for "${baseName}".`,
+    defaultValue: baseName,
+    confirmLabel: "Rename",
+  });
+  if (promptValue === null || promptValue === undefined) {
     return false;
   }
-  const trimmedName = newName.trim();
+  const trimmedName = String(promptValue).trim();
   if (!trimmedName || trimmedName === baseName) {
     return false;
   }
@@ -2131,7 +2283,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             #avtt-actions-menu {
                 position: relative;
             }
-            #avtt-actions-menu button.avtt-actions-toggle {
+            .avtt-toolbar-link {
+                color: var(--highlight-color, rgba(131, 185, 255, 1));
+                margin: 0;
+                cursor: pointer;
+            }
+            .avtt-toolbar-button {
                 background: var(--background-color, #fff);
                 color: var(--font-color, #000);
                 border: 1px solid gray;
@@ -2139,7 +2296,13 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 padding: 4px 10px;
                 cursor: pointer;
             }
-            #avtt-actions-dropdown {
+            .avtt-toolbar-button:active {
+                transform: translate(1px, 1px);
+            }
+            .avtt-toolbar-dropdown {
+                position: relative;
+            }
+            .avtt-toolbar-dropdown-list {
                 position: absolute;
                 top: 100%;
                 right: 0;
@@ -2153,12 +2316,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 z-index: 9999;
                 min-width: 140px;
             }
-            #avtt-actions-dropdown.visible {
+            .avtt-toolbar-dropdown-list.visible {
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
             }
-            #avtt-actions-dropdown button {
+            .avtt-toolbar-dropdown-list button {
                 background: transparent;
                 color: inherit;
                 border: none;
@@ -2167,10 +2330,10 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 border-radius: 3px;
                 cursor: pointer;
             }
-            #avtt-actions-dropdown button:hover:not(:disabled) {
+            .avtt-toolbar-dropdown-list button:hover:not(:disabled) {
                 background: rgba(131, 185, 255, 0.2);
             }
-            #avtt-actions-dropdown button:disabled {
+            .avtt-toolbar-dropdown-list button:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
             }
@@ -2390,6 +2553,18 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 align-items: center;
                 gap: 6px;
             }
+            .avtt-conflict-modal input[type="text"] {
+                width: 100%;
+                padding: 6px 8px;
+                border: 1px solid #c6c6c6;
+                border-radius: 4px;
+                background: var(--background-color, #fff);
+                color: var(--font-color, #000);
+            }
+            .avtt-conflict-modal input[type="text"]:focus {
+                outline: 2px solid var(--highlight-color, rgba(131, 185, 255, 1));
+                outline-offset: 1px;
+            }
         </style>
         <div id="avtt-file-picker">
             <div id="select-section">
@@ -2398,8 +2573,17 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                     <div id='patreon-tier'></div>
                 </div>
                 <div style='display: flex; align-items: center; gap: 10px;'>
-                    <div id='create-folder' style='color: var(--highlight-color, rgba(131, 185, 255, 1));margin: 0;cursor:pointer;'>Create Folder</div>
-                    <input id='create-folder-input' type='text' placeholder='folder name' />
+                    <div id='create-folder' class='avtt-toolbar-link'>Create Folder</div>
+                    <div id="avtt-export-menu" class="avtt-toolbar-dropdown">
+                        <div id="avtt-export-toggle" class="avtt-toolbar-link avtt-toolbar-button">Export &#9662;</div>
+                        <div id="avtt-export-dropdown" class="avtt-toolbar-dropdown-list">
+                            <button type="button" data-export="campaign">Campaign Export</button>
+                            <button type="button" data-export="currentScene">Current Scene</button>
+                            <button type="button" data-export="tokenCustomization">Token Customization</button>
+                            <button type="button" data-export="journal">Journal</button>
+                            <button type="button" data-export="audio">Audio</button>
+                        </div>
+                    </div>
                 </div>
                 <div style='display: flex; align-items: center; gap: 10px;'>
                     <div id='uploading-file-indicator' style='display:none'></div>
@@ -2414,9 +2598,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             <div id="avtt-listing-toolbar">
                 <div class="avtt-toolbar-row">
                     <label for="avtt-select-files"><input type="checkbox" id="avtt-select-files" />Select all files (non-folders)</label>
-                    <div id="avtt-actions-menu">
-                        <button type="button" class="avtt-actions-toggle">Actions &#9662;</button>
-                        <div id="avtt-actions-dropdown">
+                    <div id="avtt-actions-menu" class="avtt-toolbar-dropdown">
+                        <button type="button" class="avtt-toolbar-link avtt-toolbar-button avtt-actions-toggle">Actions &#9662;</button>
+                        <div id="avtt-actions-dropdown" class="avtt-toolbar-dropdown-list">
                             <button type="button" data-action="cut">Cut</button>
                             <button type="button" data-action="paste">Paste</button>
                             <button type="button" data-action="copy-path">Copy Path</button>
@@ -2465,6 +2649,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
 
   const fileInput = document.getElementById("file-input");
   const createFolder = document.getElementById("create-folder");
+  const exportMenu = document.getElementById("avtt-export-menu");
+  const exportDropdown = document.getElementById("avtt-export-dropdown");
+  const exportToggle = document.getElementById("avtt-export-toggle");
   const deleteSelectedButton = document.getElementById("delete-selected-files");
   const copyPathButton = document.getElementById("copy-path-to-clipboard");
   const searchInput = document.getElementById("search-files");
@@ -2502,6 +2689,84 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     });
   }
 
+  const handleExportOption = async (option) => {
+    avttHideExportMenu();
+    avttHideContextMenu();
+    avttHideActionsMenu();
+    const exportHandlers = {
+      campaign: () => {
+        if (typeof window.export_file !== "function") {
+          throw new Error("Campaign export is not available.");
+        }
+        return window.export_file();
+      },
+      currentScene: () => {
+        if (typeof window.export_current_scene !== "function") {
+          throw new Error("Current scene export is not available.");
+        }
+        return window.export_current_scene();
+      },
+      tokenCustomization: () => {
+        if (typeof window.export_token_customization !== "function") {
+          throw new Error("Token customization export is not available.");
+        }
+        return window.export_token_customization();
+      },
+      journal: () => {
+        if (typeof window.export_journal !== "function") {
+          throw new Error("Journal export is not available.");
+        }
+        return window.export_journal();
+      },
+      audio: () => {
+        if (typeof window.export_audio !== "function") {
+          throw new Error("Audio export is not available.");
+        }
+        return window.export_audio();
+      },
+    };
+    const handler = exportHandlers[option];
+    if (typeof handler !== "function") {
+      alert("Selected export option is not available.");
+      return;
+    }
+    try {
+      const { data, filename, mimeType } = await avttCaptureDownload(handler);
+      const fileName =
+        typeof filename === "string" && filename.trim()
+          ? filename.trim()
+          : `${option}-${Date.now()}.abovevtt`;
+      let decoded = data;
+      if (typeof decoded === "string") {
+        try {
+          if (typeof window.b64DecodeUnicode === "function") {
+            decoded = window.b64DecodeUnicode(decoded);
+          } else if (typeof window.atob === "function") {
+            decoded = window.atob(decoded);
+          }
+        } catch (decodeError) {
+          decoded = data;
+        }
+      }
+      const blob = new Blob([decoded], { type: mimeType || "text/plain" });
+      const syntheticFile = new File([blob], fileName, {
+        type: mimeType || "text/plain",
+      });
+      await uploadSelectedFiles([syntheticFile]);
+    } catch (error) {
+      console.error("Export upload failed", error);
+      alert(error?.message || "Failed to export data.");
+    } finally {
+      if (typeof window.$ === "function") {
+        try {
+          $(".import-loading-indicator").remove();
+        } catch (cleanupError) {
+          // ignore
+        }
+      }
+    }
+  };
+
   if (actionsToggle && actionsDropdown && actionsMenu) {
     const handleActionsOutsideClick = (event) => {
       if (!actionsDropdown.classList.contains("visible")) {
@@ -2509,10 +2774,12 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       }
       if (!actionsMenu.contains(event.target)) {
         avttHideActionsMenu();
+        avttHideExportMenu();
       }
     };
     const handleActionsWindowBlur = () => {
       avttHideActionsMenu();
+      avttHideExportMenu();
     };
     actionsToggle.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2540,12 +2807,62 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       .on("remove.actionsMenu", () => {
         cleanupActionsMenuHandlers();
         avttHideActionsMenu();
+        avttHideExportMenu();
       });
     draggableWindow.find(".title_bar_close_button")
       .off("click.actionsMenu")
       .on("click.actionsMenu", () => {
         cleanupActionsMenuHandlers();
         avttHideActionsMenu();
+        avttHideExportMenu();
+      });
+  }
+
+
+  if (exportToggle && exportDropdown && exportMenu) {
+    const handleExportOutsideClick = (event) => {
+      if (!exportDropdown.classList.contains("visible")) {
+        return;
+      }
+      if (!exportMenu.contains(event.target)) {
+        avttHideExportMenu();
+      }
+    };
+    const handleExportWindowBlur = () => {
+      avttHideExportMenu();
+    };
+    exportToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      avttToggleExportMenu();
+    });
+    exportDropdown
+      .querySelectorAll("button[data-export]")
+      .forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const exportType = button.getAttribute("data-export");
+          await handleExportOption(exportType);
+        });
+      });
+    document.addEventListener("click", handleExportOutsideClick, true);
+    window.addEventListener("blur", handleExportWindowBlur);
+    const cleanupExportMenuHandlers = () => {
+      document.removeEventListener("click", handleExportOutsideClick, true);
+      window.removeEventListener("blur", handleExportWindowBlur);
+    };
+    draggableWindow
+      .off("remove.exportMenu")
+      .on("remove.exportMenu", () => {
+        cleanupExportMenuHandlers();
+        avttHideExportMenu();
+      });
+    draggableWindow.find(".title_bar_close_button")
+      .off("click.exportMenu")
+      .on("click.exportMenu", () => {
+        cleanupExportMenuHandlers();
+        avttHideExportMenu();
       });
   }
 
@@ -2931,14 +3248,41 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
       debounceSearchFiles(searchTerm, fileTypes);
     });
 
-  createFolder.addEventListener("click", async (event) => {
-    const folderName = $("#create-folder-input").val();
+  createFolder.addEventListener("click", async () => {
+    avttHideExportMenu();
+    avttHideActionsMenu();
+    avttHideContextMenu();
+    const userInput = await avttPromptTextDialog({
+      title: "Create Folder",
+      message: "Enter a name for the new folder.",
+      placeholder: "Folder name",
+      confirmLabel: "Create",
+    });
+    if (userInput === null) {
+      return;
+    }
+    const trimmed = String(userInput).trim();
+    if (!trimmed) {
+      alert("Folder name cannot be empty.");
+      return;
+    }
+    if (/[\\/]/.test(trimmed)) {
+      alert("Folder names cannot contain slashes.");
+      return;
+    }
+    const folderName = trimmed.replace(/\/+$/g, "");
+    if (!folderName) {
+      alert("Folder name cannot be empty.");
+      return;
+    }
     try {
       await fetch(
         `${AVTT_S3}?folderName=${encodeURIComponent(`${currentFolder}${folderName}`)}&user=${window.PATREON_ID}`,
       );
+      avttFolderListingCache.clear();
       refreshFiles(currentFolder);
-    } catch {
+    } catch (error) {
+      console.error("Failed to create folder", error);
       alert("Failed to create folder");
     }
   });
@@ -3031,6 +3375,7 @@ function refreshFiles(
     avttFolderListingCache.clear();
     avttLastSelectedIndex = null;
     avttHideActionsMenu();
+    avttHideExportMenu();
     avttUpdateSortIndicators();
     if (recheckSize) {
         getUserUploadedFileSize().then((size) => {
