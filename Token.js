@@ -3609,11 +3609,20 @@ class Token {
 						if (window.ON_SCREEN_TOKENS[this.options.id] == undefined)
 							window.ON_SCREEN_TOKENS[this.options.id] = {};
 						window.ON_SCREEN_TOKENS[this.options.id].onScreenDarknessToken = tokenClone;
-						const copyImage = tokenClone.find('.token-image');
-						
-						updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
-						
-						
+
+						let copyImage = tokenClone.find('.token-image')
+
+						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
+							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
+								getAvttStorageUrl(this.options.imgsrc).then((url) => {
+									updateTokenSrc(url, copyImage, this.options.videoToken);
+								});
+							}
+						}
+						else if (copyImage.attr('src') != parse_img(this.options.imgsrc)) {
+							updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
+						}
 					}	
 			    }
 

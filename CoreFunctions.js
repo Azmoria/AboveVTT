@@ -556,7 +556,6 @@ function openDB() {
    
   promises.push(new Promise((resolve, reject) => {
       const DBOpenRequest2 = indexedDB.open(`AboveVTT-Global`, 3);
-      
       DBOpenRequest2.onsuccess = (e) => {
         resolve(DBOpenRequest2.result);
       };
