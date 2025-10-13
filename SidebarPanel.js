@@ -1107,6 +1107,7 @@ function avttTokenDeriveName(relativePath) {
 
 async function importAvttTokens(links, baseFolderItem) {
   if (!Array.isArray(links) || links.length === 0) {
+    $('body>.import-loading-indicator').remove();
     return;
   }
   if (
@@ -1116,9 +1117,10 @@ async function importAvttTokens(links, baseFolderItem) {
     baseFolderItem.folderType !== ItemType.MyToken
   ) {
     console.warn("importAvttTokens called with invalid base folder", baseFolderItem);
+    $('body>.import-loading-indicator').remove();
     return;
   }
-  build_import_loading_indicator("Importing Tokens...");
+ 
   const baseFullPath = sanitize_folder_path(baseFolderItem.fullPath());
 
   const folderSet = new Set();
@@ -1780,7 +1782,8 @@ function build_sidebar_list_row(listItem) {
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
         
         const avttButton = createCustomAvttChooser('', function (links) { 
-          importAvttTokens(links, listItem);
+          build_import_loading_indicator("Importing Tokens...");
+          setTimeout(function(){importAvttTokens(links, listItem)}, 30);
         }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE, avttFilePickerTypes.FOLDER]);
         avttButton.toggleClass('token-row-button avtt-file-button', true);
         avttButton.attr('title', "Create token from Azmoria's AVTT File Picker"); 
