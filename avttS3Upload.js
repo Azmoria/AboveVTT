@@ -2724,17 +2724,6 @@ const PatreonAuth = (() => {
   let cachedMembership = null;
   let cachedMembershipFetchedAt = 0;
 
-  function resolveConfig() {
-    const external =
-      typeof window.AVTT_PATRON_CONFIG === "object"
-        ? window.AVTT_PATRON_CONFIG
-        : {};
-    const merged = { ...defaultConfig, ...external };
-    merged.campaignSlug = (
-      merged.campaignSlug || defaultConfig.campaignSlug
-    ).toLowerCase();
-    return merged;
-  }
 
   function loadStoredTokens() {
     try {
@@ -3363,7 +3352,7 @@ const PatreonAuth = (() => {
   }
 
   async function ensureMembership() {
-    const config = resolveConfig();
+    const config = defaultConfig;
     if (!config.clientId || !config.redirectUri) {
       console.warn(
         "Patreon configuration is incomplete. Falling back to free tier.",
@@ -3400,7 +3389,7 @@ const PatreonAuth = (() => {
   return {
     ensureMembership,
     logout,
-    resolveConfig,
+    defaultConfig,
   };
 })();
 
@@ -3530,42 +3519,6 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
 
   applyActiveMembership(membership);
 
-  /*if (activeUserTier.level === "free") {
-    const patreonConfig = PatreonAuth.resolveConfig();
-    if (!patreonConfig.clientId || !patreonConfig.redirectUri) {
-      alert("Patreon login is not configured.");
-      return;
-    }
-
-    const shouldAttemptLogin = window.confirm(
-      "Log in with Patreon to verify your Azmoria membership?",
-    );
-    if (!shouldAttemptLogin) {
-      return;
-    }
-
-    PatreonAuth.logout();
-    try {
-      membership = await PatreonAuth.ensureMembership();
-      applyActiveMembership(membership);
-    } catch (reauthError) {
-      console.error(
-        "Patreon verification failed after reauth prompt",
-        reauthError,
-      );
-      alert(
-        "Patreon verification failed. Patreon login is required to open the AVTT File Uploader.",
-      );
-      return;
-    }
-
-    if (activeUserTier.level === "free") {
-      alert(
-        "Unable to detect an active Azmoria Patreon membership. Please check your subscription tier and try again.",
-      );
-      return;
-    }
-  }*/
 
   currentFolder = "";
   const filePicker = $(` 
@@ -5184,9 +5137,7 @@ function refreshFiles(
               currentFolder = entry.relativePath;
             });
         }
-        listItem.addEventListener("click", () => {
-          $("input").blur();
-        });
+
         const checkboxElement = checkboxCell.find("input")[0];
         if (checkboxElement) {
           checkboxElement.setAttribute("data-index", String(index));
@@ -5713,7 +5664,6 @@ async function fetchFileFromS3WithRetry(originalName, cacheKey, sanitizedKey) {
         throw new Error("File not found on S3");
       }
       cacheGetFileFromS3Url(cacheKey, sanitizedKey, fileURL);
-      console.log("File found on S3: ", fileURL);
       return fileURL;
     } catch (error) {
       lastError = error;
@@ -5747,7 +5697,18 @@ async function getFileFromS3(fileName, highPriority=false) {
   }
 
   if (getFileFromS3Pending.has(cacheKey)) {
-    return getFileFromS3Pending.get(cacheKey);
+
+    if (highPriority) {
+      const i = getFileFromS3Queue.findIndex(item => item.cacheKey === cacheKey);
+      if (i > -1) {
+        const [item] = getFileFromS3Queue.splice(i, 1);
+        getFileFromS3Queue.unshift(item);
+        return getFileFromS3Pending.get(cacheKey)
+      }
+    }else{
+      return getFileFromS3Pending.get(cacheKey);
+    }
+
   }
 
   const queuedPromise = new Promise((resolve, reject) => {
@@ -5775,8 +5736,21 @@ async function getFileFromS3(fileName, highPriority=false) {
 
     } else {
       if (getFileFromS3Pending.has(cacheKey)) {
-        const existing = getFileFromS3Pending.get(cacheKey);
-        existing.then(resolve).catch(reject);
+        
+        if(highPriority){
+          const i = getFileFromS3Queue.findIndex(item => item.cacheKey === cacheKey);
+          if (i > -1) {
+            const [item] = getFileFromS3Queue.splice(i, 1);
+            getFileFromS3Queue.unshift(item);
+            const existing = getFileFromS3Pending.get(cacheKey);
+            existing.then(resolve).catch(reject);
+          }
+        }
+        else{
+          const existing = getFileFromS3Pending.get(cacheKey);
+          existing.then(resolve).catch(reject);
+        }
+        
       } else {
         if (highPriority) {
           getFileFromS3Queue.unshift({ originalName, cacheKey, sanitizedKey, resolve, reject });
