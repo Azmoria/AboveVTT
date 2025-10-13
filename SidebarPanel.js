@@ -1790,12 +1790,9 @@ function build_sidebar_list_row(listItem) {
         
        
         let addToken = $(`<button class="token-row-button hover-add-button" title="Create New Token"><span class="material-icons">person_add_alt_1</span></button>`);
-        if (window.testAvttFilePicker === true) { //console testing var
-          addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
-        }
-        else{
-          addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
-        }
+
+        addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
+
 
        
         rowItem.append(addTokenMenu);
