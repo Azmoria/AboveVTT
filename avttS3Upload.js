@@ -1722,11 +1722,13 @@ function avttUpdateContextMenuState() {
   } 
   const openButton = menu.querySelector('button[data-action="open"]');
   if (openButton) {
-    openButton.disabled = !hasExplicitTarget || avttContextMenuState.isFolder;
+    const hasAbovevtt = selection.some((e) => !e.isFolder && (/\.abovevtt$/i.test(e.key) || /\.csv$/i.test(e.key)));
+    openButton.disabled = hasAbovevtt || !hasExplicitTarget || avttContextMenuState.isFolder;
   } 
   const forceOpenButton = menu.querySelector('button[data-action="forceOpen"]');
   if (forceOpenButton) {
-    forceOpenButton.disabled = !hasExplicitTarget || avttContextMenuState.isFolder;
+    const hasAbovevtt = selection.some((e) => !e.isFolder && (/\.abovevtt$/i.test(e.key) || /\.csv$/i.test(e.key)));
+    forceOpenButton.disabled = hasAbovevtt || !hasExplicitTarget || avttContextMenuState.isFolder;
   } 
   const importButton = menu.querySelector('button[data-action="import"]');
   if (importButton) {
