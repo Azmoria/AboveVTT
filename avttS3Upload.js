@@ -3483,6 +3483,7 @@ const PatreonAuth = (() => {
     clearLastAuthorizationCode();
     cachedMembership = null;
     cachedMembershipFetchedAt = 0;
+    window.notFilePickerFirstLoad = undefined;
   }
 
   return {
