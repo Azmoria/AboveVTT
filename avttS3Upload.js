@@ -4543,7 +4543,6 @@ async function avttProcessUploadQueue() {
           userUsedElement.innerHTML = formatFileSize((avttPendingUsageBytes || 0) + S3_Current_Size);
         }
         avttRegisterPendingUploadKey(targetKey, Number(selectedFile.size) || 0);
-        // Update local caches with the newly uploaded file
         try {
           const now = new Date().toISOString();
           const newEntry = {
@@ -4574,8 +4573,7 @@ async function avttProcessUploadQueue() {
               avttFolderListingCache.set(parentFolder, existing);
             }
           }
-          // Schedule persistence of updated caches
-          try { avttSchedulePersist(); } catch {}
+          avttSchedulePersist();
         } catch (cacheError) {
           console.warn('Failed to update local caches after upload', cacheError);
         }
