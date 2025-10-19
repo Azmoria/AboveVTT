@@ -201,7 +201,7 @@ function avttPrimeListingCachesFromFullListing(entries) {
         entry.Key &&
         !avttIsThumbnailRelativeKey(avttExtractRelativeKey(entry.Key)),
     );
-  // Deduplicate global list by Key
+
   if (Array.isArray(avttAllFilesCache)) {
     const dedup = new Map();
     for (const e of avttAllFilesCache) {
@@ -2585,7 +2585,7 @@ async function avttGenerateImageThumbnailBlob(file) {
     );
     ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
     const blob = await avttCanvasToBlob(canvas);
-    // Explicit cleanup
+
     try {
       const ctx2 = canvas.getContext('2d');
       if (ctx2) { ctx2.clearRect(0, 0, canvas.width, canvas.height); }
@@ -2672,7 +2672,7 @@ async function avttGenerateVideoThumbnailBlob(file) {
     );
     ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
     const blob = await avttCanvasToBlob(canvas);
-    // Explicit cleanup
+
     try {
       const ctx2 = canvas.getContext('2d');
       if (ctx2) { ctx2.clearRect(0, 0, canvas.width, canvas.height); }
@@ -4390,7 +4390,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     }
 
     if($(uploadingIndicator).find('#file-number').length == 0){
-      uploadingIndicator.innerHTML = `Uploading File <span id='file-number'>${index + 1}</span> of <span id='total-files'>${total}</span>`;
+      uploadingIndicator.innerHTML = `Uploading File <span id='file-number'>${Math.min(index + 1, total)}</span> of <span id='total-files'>${total}</span>`;
       uploadingIndicator.style.display = "flex";
       const cancelButton = $("<button id='cancel-avtt-upload-button' title='Cancel Upload'>X  </button>");
       cancelButton.on('click', () => {
@@ -4404,7 +4404,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
 
       $(uploadingIndicator).prepend(cancelButton);
     }else{
-      $(uploadingIndicator).find('#file-number').text(`${index + 1}`);
+      $(uploadingIndicator).find('#file-number').text(`${Math.min(index + 1, total) }`);
       $(uploadingIndicator).find('#total-files').text(`${total}`);
     }
 
@@ -5404,15 +5404,16 @@ function refreshFiles(
       fileListing.innerHTML = "";
       const CHUNK_SIZE = 100;
       let renderIndex = 0;
+      let chunkLoading = false;
       const renderChunk = () => {      
-        if (signal?.aborted) return;
+        if (signal?.aborted || chunkLoading) return;
+        chunkLoading = true;
         if ($('#file-listing-section .sidebar-panel-loading-indicator').length == 0) {
           $(fileListingSection).append(build_combat_tracker_loading_indicator('Loading files...'));
         }
         const end = Math.min(renderIndex + CHUNK_SIZE, filesForInsert.length);
-        for (let i = renderIndex; i < end; i++) {
-          const entry = filesForInsert[i];
-          const index = i;
+        for (renderIndex; renderIndex < end; renderIndex++) {
+          const entry = filesForInsert[renderIndex];
           const listItem = document.createElement("tr");
           listItem.classList.add("avtt-file-row");
           listItem.dataset.path = entry.relativePath;
@@ -5459,9 +5460,9 @@ function refreshFiles(
 
           const checkboxElement = checkboxCell.find("input")[0];
           if (checkboxElement) {
-            checkboxElement.setAttribute("data-index", String(index));
+            checkboxElement.setAttribute("data-index", String(renderIndex));
             checkboxElement.addEventListener("click", (clickEvent) => {
-              avttHandleCheckboxClick(clickEvent, index);
+              avttHandleCheckboxClick(clickEvent, renderIndex);
             });
           }
           listItem.addEventListener("dragstart", (dragEvent) => {
@@ -5490,25 +5491,25 @@ function refreshFiles(
 
           fileListing.appendChild(listItem);
         }
-        renderIndex = end;
+        chunkLoading = false;
         avttApplyClipboardHighlights();
         avttUpdateSelectNonFoldersCheckbox();
         avttUpdateActionsMenuState();
         $('#file-listing-section .sidebar-panel-loading-indicator').remove();
       };
 
-      // Initial chunk render
+
       renderChunk();
 
-      // Scroll-triggered incremental render: 100px from bottom
+
       const container = document.getElementById("file-listing-section");
       const onScroll = () => {
         if (!container) return;
         const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
-        if (remaining <= 100 && renderIndex < filesForInsert.length) {
-          setTimeout(renderChunk, 0);
+        if (remaining <= 100 && renderIndex < filesForInsert.length-1 && !chunkLoading) {
+          setTimeout(renderChunk, 1000);
         }
-        if (renderIndex >= filesForInsert.length) {
+        if (renderIndex >= filesForInsert.length-1) {
           container.removeEventListener('scroll', onScroll);
         }
       };
@@ -6220,13 +6221,60 @@ async function getUserUploadedFileSize(forceFullCheck = false, options = {}) {
 }
 
 async function getAllUserFiles(options = {}) {
-  const { signal } = options;
-  const url = await fetch(
-    `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent("")}&list=true&includeSubDirFiles=true`,
-    { signal },
-  );
-  const json = await url.json();
-  const folderContents = json.folderContents;
+  const { signal, batchSize } = options;
+  const aggregated = [];
+  const baseParams = new URLSearchParams({
+    user: window.PATREON_ID,
+    filename: "",
+    list: "true",
+    includeSubDirFiles: "true",
+  });
+  const parsedBatchSize = Number.parseInt(batchSize, 10);
+  if (Number.isFinite(parsedBatchSize) && parsedBatchSize > 0) {
+    baseParams.set("maxKeys", String(parsedBatchSize));
+  }
 
-  return folderContents;
+  let continuationToken = null;
+  let iterationSafeGuard = 0;
+  const MAX_ITERATIONS = 2000;
+
+  while (iterationSafeGuard < MAX_ITERATIONS) {
+    iterationSafeGuard += 1;
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    const params = new URLSearchParams(baseParams);
+    if (continuationToken) {
+      params.set("continuationToken", continuationToken);
+    }
+
+    const response = await fetch(`${AVTT_S3}?${params.toString()}`, { signal });
+    const json = await response.json();
+    const folderContents = Array.isArray(json.folderContents)
+      ? json.folderContents
+      : [];
+    aggregated.push(...folderContents);
+
+    continuationToken =
+      typeof json.nextContinuationToken === "string" &&
+      json.nextContinuationToken
+        ? json.nextContinuationToken
+        : null;
+
+    const isTruncated =
+      json.isTruncated === undefined ? Boolean(continuationToken) : Boolean(json.isTruncated);
+
+    if (!isTruncated || !continuationToken) {
+      break;
+    }
+  }
+
+  if (iterationSafeGuard >= MAX_ITERATIONS) {
+    console.warn(
+      "Reached maximum pagination iterations while fetching all user files.",
+    );
+  }
+
+  return aggregated;
 }
