@@ -7667,7 +7667,7 @@ button span.onedrive-btn-status{
 
 .addTokenMenu:hover,
 .hover-add-button:hover~.addTokenMenu {
-    width: 102px;
+    width: 136px;
     flex-shrink: 0;
 }
 

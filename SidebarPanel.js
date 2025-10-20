@@ -1097,6 +1097,7 @@ function avttTokenDeriveName(relativePath) {
 
 async function importAvttTokens(links, baseFolderItem) {
   if (!Array.isArray(links) || links.length === 0) {
+    $('body>.import-loading-indicator').remove();
     return;
   }
   if (
@@ -1106,9 +1107,10 @@ async function importAvttTokens(links, baseFolderItem) {
     baseFolderItem.folderType !== ItemType.MyToken
   ) {
     console.warn("importAvttTokens called with invalid base folder", baseFolderItem);
+    $('body>.import-loading-indicator').remove();
     return;
   }
-  build_import_loading_indicator("Importing Tokens...");
+ 
   const baseFullPath = sanitize_folder_path(baseFolderItem.fullPath());
 
   const folderSet = new Set();
@@ -1578,7 +1580,6 @@ function build_sidebar_list_row(listItem) {
     } else{
         img = $(`<img src="" loading="lazy" alt="${listItem.name} image" class="token-image" />`);
     }
-
     updateImgSrc(listingImage, img, video, false);
     imgHolder.append(img);
   }
@@ -1771,7 +1772,8 @@ function build_sidebar_list_row(listItem) {
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
         
         const avttButton = createCustomAvttChooser('', function (links) { 
-          importAvttTokens(links, listItem);
+          build_import_loading_indicator("Importing Tokens...");
+          setTimeout(function(){importAvttTokens(links, listItem)}, 30);
         }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE, avttFilePickerTypes.FOLDER]);
         avttButton.toggleClass('token-row-button avtt-file-button', true);
         avttButton.attr('title', "Create token from Azmoria's AVTT File Picker"); 
@@ -1781,12 +1783,9 @@ function build_sidebar_list_row(listItem) {
         
        
         let addToken = $(`<button class="token-row-button hover-add-button" title="Create New Token"><span class="material-icons">person_add_alt_1</span></button>`);
-        if (window.testAvttFilePicker === true) { //console testing var
-          addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
-        }
-        else{
-          addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
-        }
+
+        addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
+
 
        
         rowItem.append(addTokenMenu);
@@ -3207,7 +3206,7 @@ async function list_item_image_flyout(hoverEvent) {
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
     const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
-    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(imgsrc) : imgsrc;
+    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(imgsrc.replace(/^(above-bucket-not-a-url\/.*?\/)(.*)/gi, '$1thumbnails/$2')) : imgsrc;
     const flyout = $(`<img id='list-item-image-flyout' src="${src}" alt="image preview" />`);
     flyout.css({
       "top": hoverEvent.clientY - 75,
