@@ -6693,17 +6693,18 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 
 
 			if (pt) {
+				if (walls[j].terrainWall && closestLight && Vector.sqDist(pt, closestLight) < diffNeedForTerrainWalls) {
+					continue;
+				}
 				let dist = squaredRadius;
 				let pointDistance = Vector.sqDist(window.PARTICLE.pos, pt);
 				if (pointDistance < squaredRadius)
 					dist = pointDistance;
 				
-				const recordLightFurtherThanNeed = Math.abs(secondRecordLight - dist) > diffNeedForTerrainWalls;
-				const recordNoDarknessFurtherThanNeed = Math.abs(secondRecordNoDarkness - dist) > diffNeedForTerrainWalls;
-				const recordMoveFurtherThanNeed = Math.abs(secondRecordMove - dist) > diffNeedForTerrainWalls;
-				if (walls[j].terrainWall && closestLight && Vector.sqDist(pt, closestLight)<diffNeedForTerrainWalls){
-					continue;
-				}
+				const recordLightFurtherThanNeed = Math.abs(recordLight - dist) > diffNeedForTerrainWalls;
+				const recordNoDarknessFurtherThanNeed = Math.abs(recordNoDarkness - dist) > diffNeedForTerrainWalls;
+				const recordMoveFurtherThanNeed = Math.abs(recordMove - dist) > diffNeedForTerrainWalls;
+
 				
 
 				if (dist < recordLight && !notBlockVision.includes(walls[j].c)) {
