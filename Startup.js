@@ -47,26 +47,34 @@ $(function() {
       })
       .then((campaignDmId) => {
         const isDmPage = is_encounters_page();
+        if (isDmPage){
+          inject_dice();
+
+        }
+
         const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;
         
 
+        setTimeout(function(){
+          $(".sidebar__control").click(); // 15/03/2022 .. DDB broke the gamelog button.
+          $(".sidebar__control--lock").closest("button").click(); // lock it open immediately. This is safe to call multiple times
+          if (isDmPage && campaignDmId == userId) {
+            startup_step("Starting AboveVTT for DM");
+            return start_above_vtt_for_dm();
+          }
+          else if (isDmPage) {
+            startup_step("Player joining as DM")
+            return start_player_joining_as_dm();
+          } else if (is_characters_page()) {
+            startup_step("Starting AboveVTT for character");
+            return start_above_vtt_for_players();
+          } else {
+            startup_step("AboveVTT is not supported on this page!");
+            // this should never happen because `is_abovevtt_page` covers all the above cases, but cover all possible cases anyway
+            throw new Error(`Invalid AboveVTT page: ${window.location.href}`)
+          }
+        }, 5000)
 
-        if (isDmPage && campaignDmId == userId) {
-          inject_dice();
-          startup_step("Starting AboveVTT for DM");
-          return start_above_vtt_for_dm();
-        } 
-        else if(isDmPage){
-          startup_step("Player joining as DM")
-          return start_player_joining_as_dm();
-        }else if (is_characters_page()) {
-          startup_step("Starting AboveVTT for character");
-          return start_above_vtt_for_players();
-        } else {
-          startup_step("AboveVTT is not supported on this page!");
-          // this should never happen because `is_abovevtt_page` covers all the above cases, but cover all possible cases anyway
-          throw new Error(`Invalid AboveVTT page: ${window.location.href}`)
-        }
       }).then(()=>{
         addExtensionPathStyles();
         $('body').append(`<script type="text/javascript" src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="h3iaoazdu0wqrfd"></script>`)
