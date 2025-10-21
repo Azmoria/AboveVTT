@@ -4889,7 +4889,7 @@ async function avttProcessUploadQueue() {
             avttQueueConflictPolicy = null;
             avttQueueTotalEnqueued = 0;
             avttQueueCompleted = 0;
-            avttScheduleFlush();
+            avttScheduleFlush(skipPersistCache);
             return;
           }
           debounceFlush(flush);
@@ -4898,10 +4898,9 @@ async function avttProcessUploadQueue() {
 
 
         avttProcessUploadQueue();
+        
       });
   }
-  
-  try { avttSchedulePersist(); } catch { }
   
 }
 
@@ -4910,7 +4909,7 @@ let avttPendingUsageCount = 0;
 let avttPendingUsageKeys = [];
 let avttUsageFlushScheduled = false;
 
-async function avttFlushUsageAndRefresh() {
+async function avttFlushUsageAndRefresh(skipPersist = false) {
   const bytes = avttPendingUsageBytes;
   const count = avttPendingUsageCount;
   const keys = avttPendingUsageKeys.slice();
@@ -4921,6 +4920,9 @@ async function avttFlushUsageAndRefresh() {
   try {
     if (count > 0) {
       await applyUsageDelta(bytes, count);
+      if (!skipPersist){
+        try { avttSchedulePersist(); } catch { }
+      }
     }
   } finally {
     if (document.getElementById("file-listing-section")){
@@ -4939,11 +4941,11 @@ async function avttFlushUsageAndRefresh() {
   }
 }
 
-function avttScheduleFlush() {
+function avttScheduleFlush(skipPersist=false) {
   if (avttUsageFlushScheduled) return;
   avttUsageFlushScheduled = true;
 
-  Promise.resolve().then(avttFlushUsageAndRefresh);
+  Promise.resolve().then(() => { avttFlushUsageAndRefresh(skipPersist)});
 }
 async function uploadSelectedFiles (files, uploadFolder = currentFolder){
   const fileArray = Array.from(files || []).filter(Boolean);
