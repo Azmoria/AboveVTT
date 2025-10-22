@@ -1,6 +1,216 @@
 import { trackLibrary } from './track.js';
-import { Channel } from './mixer.js';
+import { Channel, mixer } from './mixer.js';
 import { log } from './helpers.js';
+
+const AVTT_AUDIO_ALLOWED_EXTENSIONS = new Set([
+    'aac', 'aif', 'aifc', 'aiff', 'au', 'flac', 'm4a', 'mid', 'mp3', 'm4p', 'm4b',
+    'm4r', 'ogg', 'opus', 'ra', 'ram', 'spx', 'wav', 'wm'
+]);
+
+function avttAudioSafeDecode(value) {
+    if (typeof avttScenesSafeDecode === 'function') {
+        return avttScenesSafeDecode(value);
+    }
+    if (typeof value !== 'string') {
+        return value;
+    }
+    try {
+        return decodeURIComponent(value);
+    } catch (error) {
+        return value;
+    }
+}
+
+function avttAudioNormalizeRelativePath(path) {
+    if (typeof path !== 'string') {
+        return '';
+    }
+    const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!normalized) {
+        return '';
+    }
+    return normalized.endsWith('/') ? normalized : `${normalized}/`;
+}
+
+function avttAudioRelativePathFromLink(link) {
+    const prefix = `above-bucket-not-a-url/${window.PATREON_ID}/`;
+    if (typeof link === 'string' && link.startsWith(prefix)) {
+        return link.slice(prefix.length);
+    }
+    return '';
+}
+
+async function avttAudioFetchFolderListing(relativePath) {
+    const targetPath = typeof relativePath === 'string' ? relativePath : '';
+    if (typeof getFolderListingFromS3 === 'function') {
+        return await getFolderListingFromS3(targetPath);
+    }
+    if (typeof AVTT_S3 === 'undefined') {
+        throw new Error('AVTT_S3 endpoint is not available.');
+    }
+    const response = await fetch(
+        `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(targetPath)}&list=true`
+    );
+    const json = await response.json();
+    return Array.isArray(json?.folderContents) ? json.folderContents : [];
+}
+
+async function avttAudioCollectAssets(folderRelativePath) {
+    const normalizedBase = avttAudioNormalizeRelativePath(folderRelativePath);
+    if (!normalizedBase) {
+        return [];
+    }
+    const stack = [normalizedBase];
+    const visited = new Set();
+    const files = [];
+
+    while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || visited.has(current)) {
+            continue;
+        }
+        visited.add(current);
+        let entries;
+        try {
+            entries = await avttAudioFetchFolderListing(current);
+        } catch (error) {
+            console.warn('Failed to load AVTT audio folder listing', current, error);
+            continue;
+        }
+        if (!Array.isArray(entries)) {
+            continue;
+        }
+        for (const entry of entries) {
+            const keyValue = typeof entry === 'string' ? entry : entry?.Key || entry?.key || '';
+            if (!keyValue) {
+                continue;
+            }
+            let relativeKey = keyValue;
+            if (typeof avttExtractRelativeKey === 'function') {
+                relativeKey = avttExtractRelativeKey(keyValue);
+            } else {
+                const prefix = `${window.PATREON_ID}/`;
+                relativeKey = keyValue.startsWith(prefix) ? keyValue.slice(prefix.length) : keyValue;
+            }
+            if (!relativeKey || !relativeKey.startsWith(normalizedBase)) {
+                continue;
+            }
+            if (relativeKey.endsWith('/')) {
+                if (!visited.has(relativeKey)) {
+                    stack.push(relativeKey);
+                }
+                continue;
+            }
+            const extension = typeof getFileExtension === 'function'
+                ? getFileExtension(relativeKey)
+                : (relativeKey.split('.').pop() || '').toLowerCase();
+            if (!AVTT_AUDIO_ALLOWED_EXTENSIONS.has(String(extension).toLowerCase())) {
+                continue;
+            }
+            files.push(relativeKey);
+        }
+    }
+    return files;
+}
+
+function avttAudioDeriveName(value) {
+    const decoded = avttAudioSafeDecode(value || '');
+    return decoded.replace(/\.[^.]+$/, '') || decoded;
+}
+
+async function importAvttAudioSelections(links) {
+    if (!Array.isArray(links) || links.length === 0) {
+        return;
+    }
+    
+    build_import_loading_indicator("Importing Audio...");
+
+    const folderSet = new Set();
+    const audioPlans = [];
+
+    const directFiles = [];
+    const folderEntries = [];
+    for (const link of links) {
+        if (!link) {
+            continue;
+        }
+        if (link.isFolder) {
+            folderEntries.push(link);
+        } else {
+            directFiles.push(link);
+        }
+    }
+
+    for (const link of directFiles) {
+        const relativePathRaw = typeof link.path === 'string' ? link.path : link.name;
+        const normalizedRelative = (relativePathRaw || '').replace(/\\/g, '/');
+        const parts = normalizedRelative.split('/').filter(Boolean);
+        const fileName = parts.pop() || link.name || 'Track';
+        const extension = typeof getFileExtension === 'function'
+            ? getFileExtension(fileName)
+            : (fileName.split('.').pop() || '');
+        if (!AVTT_AUDIO_ALLOWED_EXTENSIONS.has(String(extension).toLowerCase())) {
+            continue;
+        }
+        const tags = parts.map(avttAudioSafeDecode);
+        audioPlans.push({
+            name: avttAudioDeriveName(fileName),
+            link: link.link,
+            tags: Array.from(new Set(tags)),
+        });
+    }
+
+    for (const folderLink of folderEntries) {
+        const folderPathRaw = folderLink.path || avttAudioRelativePathFromLink(folderLink.link);
+        const normalizedRelative = avttAudioNormalizeRelativePath(folderPathRaw);
+        if (!normalizedRelative) {
+            continue;
+        }
+        const rootSegments = normalizedRelative.replace(/\/$/, '').split('/').filter(Boolean);
+        if (!rootSegments.length) {
+            continue;
+        }
+        const rootFullPath = sanitize_folder_path(`${rootSegments.join('/')}`);
+        folderSet.add(rootFullPath);
+
+        let assets;
+        try {
+            assets = await avttAudioCollectAssets(normalizedRelative);
+        } catch (error) {
+            console.warn('Failed to enumerate AVTT audio folder', folderLink, error);
+            assets = [];
+        }
+
+        for (const relativePath of assets) {
+            const extension = typeof getFileExtension === 'function'
+                ? getFileExtension(relativePath)
+                : (relativePath.split('.').pop() || '');
+            if (!AVTT_AUDIO_ALLOWED_EXTENSIONS.has(String(extension).toLowerCase())) {
+                continue;
+            }
+            const segments = relativePath.split('/').filter(Boolean);
+            const fileName = avttAudioDeriveName(segments.pop() || '');
+            const folderSegments = segments;
+            const tags = Array.from(new Set(folderSegments.map(avttAudioSafeDecode)));
+            const linkUrl = `above-bucket-not-a-url/${window.PATREON_ID}/${relativePath}`;
+            audioPlans.push({
+                name: fileName,
+                link: linkUrl,
+                tags,
+            });
+        }
+    }
+
+    for (const plan of audioPlans) {
+        try {
+            trackLibrary.addTrack(plan.name, plan.link, plan.tags);
+        } catch (error) {
+            console.warn('Failed to add track to library', plan, error);
+        }
+    }
+
+    $('body>.import-loading-indicator').remove();
+}
 
 /**
  *
@@ -55,7 +265,7 @@ function init_mixer() {
             playlistInput.append(option);
         });
         mixerChannels.innerHTML = "";
-        let youtube_section= $("<li class='audio-row'></li>");;    
+        let youtube_section= $("<li class='audio-row map-audio-row'></li>");;    
         let channelNameDiv = $(`<div class='channelNameOverflow'><div class='channelName'>Animated Map Audio</div>`)
         let youtube_volume = $(`<input type="range" min="0" max="100" value="${window.MIXER.state()?.animatedMap?.volume != undefined ? window.MIXER.state().animatedMap.volume : window.YTPLAYER ? window.YTPLAYER.volume : 25}" step="1" class="volume-control" id="youtube_volume">`);
         $(youtube_section).append(channelNameDiv, youtube_volume);
@@ -80,7 +290,13 @@ function init_mixer() {
         });
 
         /** @type {Object.<string, Channel>} */
-        Object.entries(channels).forEach(([id, channel]) => {
+        const objectKeys = Object.keys(channels)
+        let channelArray = playlists[window.MIXER.selectedPlaylist()].orderedChannels?.length ? playlists[window.MIXER.selectedPlaylist()].orderedChannels : objectKeys;
+        const leftOverKeys = objectKeys.filter(key => { if(!channelArray.includes(key)) return key });
+        channelArray = channelArray.concat(leftOverKeys);
+        channelArray.forEach((id) => {
+            const channel = channels[id]
+            
             if(!channel?.src){
                 return;
             }
@@ -182,7 +398,7 @@ function init_mixer() {
                     channel.paused = true;
                     window.MIXER.updateChannel(id, channel);
                 }
-            });
+            });``
 
             if(channel.loop) {
                 loop.toggleClass('pressed', true);
@@ -222,11 +438,53 @@ function init_mixer() {
                 $('style#mixer-paused').remove();
             }    
 
+            function waitForPlayer(id, callback = () => {}) {
+                if (typeof window.MIXER._players[id] !== "undefined") {
+                    callback();
+                }
+                else {
+                    setTimeout(function () { waitForPlayer(id, callback)}, 250);
+                }
+            }
 
-            $(item).append(channelNameDiv, window.MIXER.channelVolumeSlider(id), channel_play_pause, loop, remove, window.MIXER.channelProgressBar(id));
-
-            mixerChannels.append(item);
+            waitForPlayer(id, () => {
+                $(item).append(channelNameDiv, window.MIXER.channelVolumeSlider(id), channel_play_pause, loop, remove, window.MIXER.channelProgressBar(id));
+                mixerChannels.append(item);
+                if (channel.paused) {
+                    play_svg.css('display', 'block');
+                    pause_svg.css('display', 'none');
+                    channel_play_pause.toggleClass('playing pressed', false);
+                }
+                else {
+                    play_svg.css('display', 'none');
+                    pause_svg.css('display', 'none');
+                    validIcon.css('display', 'block');
+                    channel_play_pause.toggleClass('audio-error', false);
+                }
+            })
         });
+
+        $(mixerChannels).sortable({
+            cancel:'.map-audio-row, .tokenTrack, input, .channel-progress-bar-progress, .channel-progress-bar-total',
+            distance: 10,
+            axis: 'y',
+            items: '.audio-row:not(.map-audio-row):not(.tokenTrack)',
+            stop: (event, ui) => {
+                const state = window.MIXER.state()
+                try {
+                    const orderedIds = $('.sidebar-panel-header li.audio-row:not(.map-audio-row):not(.tokenTrack)').map((i, item) => {
+                        return $(item).attr('data-id')
+                    })
+                    state.orderedChannels = [...orderedIds];
+                    window.MIXER._write(state);
+                }
+                catch (error) {
+                    console.warn(`Could not get playlist order: ${error.message}`)
+                }
+
+               
+            }
+        })
     }
 
 
@@ -286,8 +544,8 @@ function init_mixer() {
     clear.append(clear_svg);
     clear.on('click', function(){window.MIXER.clear()});
 
-    let sequentialPlay = $('<button class="sequential-button"></button>');
-    let sequential_svg = $(`<span class="material-symbols-outlined">format_list_numbered_rtl</span>`)
+    let sequentialPlay = $(`<button class="sequential-button ${window.MIXER.mixerMode == 'playlist' ? 'pressed' : window.MIXER.mixerMode == 'shuffle' ? 'pressed shuffle' : ''}"></button>`);
+    let sequential_svg = $(`<span class="material-symbols-outlined">${window.MIXER.mixerMode == 'shuffle' ? 'shuffle' : 'format_list_numbered_rtl'}</span>`)
     sequentialPlay.append(sequential_svg);
     sequentialPlay.off().on("click", function() {
         const icon = sequentialPlay.find(".material-symbols-outlined"); // Find the icon span
@@ -300,19 +558,32 @@ function init_mixer() {
             if(currentlyPlaying.length>0){
                 currentlyPlaying.click();
             }
+            window.MIXER.mixerMode = 'playlist';
             // icon.text("repeat"); // Continuous Play icon
         } else if (!sequentialPlay.hasClass("shuffle")) {
             sequentialPlay.addClass("shuffle");
             sequentialPlay.attr("title", "Shuffle Play");
             icon.text("shuffle"); // Shuffle Play icon
+            window.MIXER.mixerMode = 'shuffle';
         } else {
             sequentialPlay.removeClass("shuffle pressed");
-            sequentialPlay.attr("title", "Loop Off");
+            sequentialPlay.attr("title", "Soundboard/Playlist Mode");
             icon.text("format_list_numbered_rtl"); // Default icon
+            window.MIXER.mixerMode = 'soundboard';
         }
     
         console.log("Playback Mode:", sequentialPlay.attr("title"));
     });
+
+    let crossFade = $(`<button class="cross-fade-button ${window.MIXER.state().fade == true ? 'pressed' : ''}"></button>`);
+    let crossFadeSvg = $(`<span class="material-symbols-outlined">edit_audio</span>`)
+    crossFade.append(crossFadeSvg);
+    crossFade.off().on("click", function () {
+        const isPressed = $(this).hasClass('pressed')
+        crossFade.toggleClass('pressed', !isPressed);
+        window.MIXER.fade = !isPressed;
+    });
+
 
     // play/pause button
     let playPause = $('<button class="mixer-play-pause-button" style="font-size:10px;"></button>');
@@ -372,7 +643,7 @@ function init_mixer() {
         });   
     })
     $("#sounds-panel .sidebar-panel-header").append(header, playlistInput, addPlaylistButton, copyPlaylistButton, removePlaylistButton, playlistFields, masterVolumeSlider(), mixerChannels);
-    $('#master-volume').append(clear, sequentialPlay, playPause);
+    $('#master-volume').append(clear, sequentialPlay, crossFade, playPause);
 }
 
 
@@ -422,7 +693,7 @@ function init_trackLibrary() {
     const header = document.createElement("h3");
     header.textContent = "Track Library";
 
-    const searchTrackLibary = $(`<input type='search' placeholder='Search' style='margin-bottom: 5px; width: 100%;'></input>`)
+    const searchTrackLibary = $(`<input type='search' placeholder='Search' style='margin-bottom: 5px; width: 97%;'></input>`)
     searchTrackLibary.off().on('change keyup blur search', (e) => {      
         debounceSearch(e.target.value);
     });
@@ -440,7 +711,10 @@ function init_trackLibrary() {
             trackLibrary.addTrack(links[i].name, links[i].link);  
         }   
     }, 'multiple', audioArray);
-
+   
+    const avttButton = createCustomAvttChooser(' ', function (links) {
+        importAvttAudioSelections(links)  
+    }, [avttFilePickerTypes.AUDIO, avttFilePickerTypes.FOLDER]);
     // import csv button
     const importCSV = document.createElement('button');
     importCSV.textContent = "Import CSV";
@@ -456,6 +730,30 @@ function init_trackLibrary() {
         };
         fileInput.click();
     };
+    importCSV.style.position = 'absolute';
+    importCSV.style.top = '15px';
+    importCSV.style.right = '90px';
+
+    const exportCSV = document.createElement('button');
+    exportCSV.textContent = "Export CSV";
+    exportCSV.onclick = () => {
+        if (typeof window.export_audio_csv === 'function') {
+            window.export_audio_csv();
+            return;
+        }
+        if (!window?.TRACK_LIBRARY || typeof window.TRACK_LIBRARY.exportCSV !== 'function') {
+            alert('Audio CSV export is not available.');
+            return;
+        }
+        const csvContent = window.TRACK_LIBRARY.exportCSV();
+        const currentDate = new Date();
+        const datetime = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1)}-${currentDate.getDate()}`;
+        const campaignName = window?.CAMPAIGN_INFO?.name ? window.CAMPAIGN_INFO.name : 'Campaign';
+        download(csvContent, `${campaignName}-${datetime}-audio.csv`, "text/csv;charset=utf-8;");
+    }
+    exportCSV.style.position = 'absolute';
+    exportCSV.style.top = '15px';
+    exportCSV.style.right = '2px';
 
     const addTrack = $(`<button id='addTrack'>Add Track</button>`)
     const importTrackFields = $("<div id='importTrackFields'></div>")
@@ -465,8 +763,8 @@ function init_trackLibrary() {
     const cancelButton = $('<button class="add-track-cancel-button">X</button>');  
 
     // Mixer/ Track List QOL updates
-    const addTracksToMixer = $(`<button id='addTrack'>Add Tracks to Mixer</button>`);
-    const addShuffledToMixer = $('<button id="addShuffledToMixer">Add Shuffled</button>');
+    const addTracksToMixer = $(`<button id='addTrack'>Add Visible to Mixer</button>`);
+    const addShuffledToMixer = $('<button id="addShuffledToMixer">Add Shuffled to Mixer</button>');
 
     // Click handlers
     addTracksToMixer.on("click", function() {
@@ -652,7 +950,7 @@ function init_trackLibrary() {
                     rowHtml.remove();
                 }
             };
-             menuItems["tags"] = {
+            menuItems["tags"] = {
                 name: "Tags",
                 callback: function() {
                     const setTrackTagsFields = $("<div id='editTagsFields'></div>")
@@ -677,7 +975,6 @@ function init_trackLibrary() {
                     rowHtml.after(setTrackTagsFields);
                 }
             };
-    
             menuItems["border"] = "---";
 
             // not a built in folder or token, add an option to delete
@@ -694,13 +991,18 @@ function init_trackLibrary() {
         }
     });
     trackLibrary.dispatchEvent(new Event('onchange'));
-
-    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br><b>Import</b>:  ", addTrack, dropBoxbutton, importCSV, importTrackFields, trackList);
+    if (window.testAvttFilePicker === true) {
+        $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, avttButton, importCSV, exportCSV, importTrackFields, trackList);
+    }
+    else {
+        $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, oneDriveButton, importCSV, exportCSV, importTrackFields, trackList);
+    }
+    
 }
 
 function init() {
     log(`initializing audio ui for ${window.DM ? 'DM' : 'player'}`);
-    if (window.DM) {
+    if (window.DM) {                
         init_trackLibrary();
         init_mixer();
     } else {

@@ -175,7 +175,9 @@ class TokenCustomization {
     }
 
     setTokenOption(key, value) {
-        let currSrc = $('.sidebar-panel-body .example-token.selected .div-token-image')?.attr('src')
+        let currSrc = $('.sidebar-panel-body .example-token.selected :is(.div-token-image')?.attr('data-src')
+       
+    
         let target = this.tokenOptions;
         if(currSrc != undefined){
             if(this.tokenOptions.alternativeImagesCustomizations == undefined)
@@ -861,8 +863,16 @@ function delete_token_customization_by_parent_id(parentId, callback) {
         console.warn("delete_token_customization_by_parent_id received an invalid parentId", parentId);
         callback(false);
         return;
-    }
-    let tokensToBeDeleted = window.TOKEN_CUSTOMIZATIONS.filter(tc => tc.parentId == parentId);
+    } 
+
+    const path = (parentId == RootFolder.MyTokens.id) 
+        ? RootFolder.MyTokens.path 
+        : (parentId == RootFolder.Players.id) 
+            ? RootFolder.Players.path 
+            : window.TOKEN_CUSTOMIZATIONS.find(d => d.id == parentId)?.fullPath()
+    if(!path)
+        return;
+    let tokensToBeDeleted = window.TOKEN_CUSTOMIZATIONS.filter(tc => tc.fullPath().includes(path));
     for(i = 0; i < tokensToBeDeleted.length; i++){
         let statBlockID = tokensToBeDeleted[i].tokenOptions?.statBlock;
         if(statBlockID){
@@ -872,9 +882,7 @@ function delete_token_customization_by_parent_id(parentId, callback) {
             window.JOURNAL.persist();
         }
     }
-
-
-    window.TOKEN_CUSTOMIZATIONS = window.TOKEN_CUSTOMIZATIONS.filter(tc => tc.parentId !== parentId);
+    window.TOKEN_CUSTOMIZATIONS = window.TOKEN_CUSTOMIZATIONS.filter(tc => !tc.fullPath().includes(path));
 
     persist_all_token_customizations(window.TOKEN_CUSTOMIZATIONS, callback);
 }
@@ -964,7 +972,6 @@ function rebuild_ddb_npcs(redrawList = false) {
         } else if (name.includes("Genasi") || name.includes("Simic")) { // Most names have hyphens, but Simic Hybrid and all the Genasi variants have spaces.
             name = name.replaceAll("-", " ");
         }
-        console.debug("rebuild_ddb_npcs Adding playable race", name, portraitId);
         if (playableRaces[name]) {
             playableRaces[name].push(portraitId);
         } else {
@@ -984,9 +991,7 @@ function rebuild_ddb_npcs(redrawList = false) {
                 name: playableRaceName,
                 alternativeImages: altImages
             }));
-        } else {
-            console.log("rebuild_ddb_npcs DDB doesn't have any images for", playableRaceName);
-        }
+        } 
     }
 
     if (redrawList) {
@@ -1012,7 +1017,7 @@ function fetch_ddb_portraits() {
             success: function (responseData) {
                 console.log("Successfully fetched config/json from DDB API");
                 window.ddbPortraits = responseData.data;
-                rebuild_ddb_npcs(true); // this is the first time we've had enough data to draw the list so do it
+                rebuild_ddb_npcs(false);
             },
             error: function (errorMessage) {
                 console.warn("Failed to fetch config json from DDB API", errorMessage);

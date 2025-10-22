@@ -87,12 +87,10 @@ function close_token_context_menu() {
 
 function select_tokens_in_aoe(aoeTokens, selectPlayerTokens = true){
 	deselect_all_tokens();
-	let canvas = document.createElement('canvas');
-	let ctx = canvas.getContext('2d', { willReadFrequently: true }); //rare case where we can allow cpu do so all the lifting since it is not rendered
 	let rayCast = document.getElementById("raycastingCanvas");
-
-	canvas.width = rayCast.width;
-	canvas.height = rayCast.height;
+	let canvas = new OffscreenCanvas(rayCast.width, rayCast.height);
+	let ctx = canvas.getContext('2d', { willReadFrequently: true }); //rare case where we can allow cpu do so all the lifting since it is not rendered
+	
 
 
 	ctx.globalCompositeOperation='source-over';
@@ -210,7 +208,8 @@ function token_context_menu_expanded(tokenIds, e) {
 					imgsrc: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=`,
 					type: 'door',
 					size: 50,
-					scaleCreated: window.CURRENT_SCENE_DATA.scale_factor
+					scaleCreated: window.CURRENT_SCENE_DATA.scale_factor,
+					auraislight: false
 				};
 				window.ScenesHandler.create_update_token(options)
 			}
@@ -1163,7 +1162,7 @@ function token_context_menu_expanded(tokenIds, e) {
 							window.MB.sendMessage('custom/myVTT/token', options);
 						}, 300);
 						t.place_sync_persist();
-						ct_add_token(window.TOKEN_OBJECTS[group], false, clickEvent.shiftKey, clickEvent.ctrlKey)	
+						ct_add_token(window.TOKEN_OBJECTS[group], false, undefined, clickEvent.shiftKey, clickEvent.ctrlKey)	
 					
 					}
 				}
@@ -1272,7 +1271,7 @@ function token_context_menu_expanded(tokenIds, e) {
 					window.MB.sendMessage('custom/myVTT/token', options);
 				}, 300);
 				t.place_sync_persist();
-				ct_add_token(window.TOKEN_OBJECTS[group], false, clickEvent.shiftKey, clickEvent.ctrlKey)
+				ct_add_token(window.TOKEN_OBJECTS[group], false, undefined, clickEvent.shiftKey, clickEvent.ctrlKey)
 			}
 		debounceCombatReorder();
 		});
@@ -1452,7 +1451,9 @@ function token_context_menu_expanded(tokenIds, e) {
 			    tokenImage.find('img').attr('data-basic-avatar-url', largeAvatar);
 			    tokenImage.find('img').attr('data-current-avatar-url', "largeAvatarUrl");
 			}
-			let tokenImage = $(`<div class="image" style="display: block; max-width:100%;"><${(token.options.videoToken == true || ['.mp4', '.webm','.m4v'].some(d => token.options.imgsrc.includes(d))) ? 'video disableremoteplayback muted' : 'img'} class='magnify' style='max-width:100%;' href='${token.options.imgsrc}' src='${token.options.imgsrc}'/>  </div>`);
+
+			const imageSrc = token.options.imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(token.options.imgsrc) : token.options.imgsrc;
+			let tokenImage = $(`<div class="image" style="display: block; max-width:100%;"><${(token.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => imageSrc.includes(d))) ? 'video disableremoteplayback muted' : 'img'} class='magnify' style='max-width:100%;' href='${imageSrc}' src='${imageSrc}'/>  </div>`);
 			
 			if(typeof token.options.monster == 'number' && token.options.itemType == 'monster' && token.options.alternativeImages == undefined){
 
@@ -3444,10 +3445,6 @@ function build_adjustments_flyout_menu(tokenIds) {
 			return;
 		}
 		tokens.forEach(token => {			
-			// Reset imageScale if new size is larger
-			if(token.options.size < newSize) {
-				token.imageSize(1);
-			}
 			token.size(newSize, linewidth);
 			clampTokenImageSize(token.options.imageSize, token.options.size);
 		});
@@ -3495,8 +3492,8 @@ function build_adjustments_flyout_menu(tokenIds) {
 				token.options.offset = {x: 0, y:0};
 				token.options.offset.x = offsetX;
 				$(`.VTTToken[data-id='${token.options.id}']`).css({
-					"--offsetX": `${parseFloat(offsetX) * token.options.gridSquares}px`,
-					"--offsetY": `${parseFloat(token.options.offset.y) * token.options.gridSquares}px`
+					"--offsetX": `${parseFloat(offsetX) / 90 * token.options.size}px`,
+					"--offsetY": `${parseFloat(token.options.offset.y) / 90 * token.options.size}px`
 				})
 
 				if(persist)
@@ -3516,8 +3513,8 @@ function build_adjustments_flyout_menu(tokenIds) {
 					token.options.offset = {x: 0, y:0};
 				token.options.offset.y = offsetY;
 				$(`.VTTToken[data-id='${token.options.id}']`).css({
-					"--offsetX": `${parseFloat(token.options.offset.x) * token.options.gridSquares}px`,
-					"--offsetY": `${parseFloat(offsetY) * token.options.gridSquares}px`
+					"--offsetX": `${parseFloat(token.options.offset.x) / 90 * token.options.size}px`,
+					"--offsetY": `${parseFloat(offsetY) / 90 * token.options.size}px`
 				})
 				if(persist)
 					token.place_sync_persist();
@@ -4468,6 +4465,14 @@ function open_quick_roll_menu(e){
 			else{
 				$(this).toggleClass('save-success', true)
 			}
+		})
+		const rows = results.find('tr[data-target]');
+		rows.each(function(){
+			const target = $(this).attr('data-target');
+			if (window.all_token_objects[target]?.options.revealname != true){
+				$(this).toggleClass('hideQrmRowFromPlayers')
+			}
+
 		})
 		results.attr('id','qrm-gamelog');
 		let msgdata = {

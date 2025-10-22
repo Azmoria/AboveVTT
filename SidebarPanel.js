@@ -9,29 +9,32 @@ function init_sidebar_tabs() {
     init_journal(find_game_id());
   }
   if (window.DM) {
+    startup_step(`Loading Token Panel`);
     $("#tokens-panel").remove();
     tokensPanel = new SidebarPanel("tokens-panel", false);
     sidebarContent.append(tokensPanel.build());
     init_tokens_panel();
-
+    startup_step(`Loading Scenes Panel`);
     $("#scenes-panel").remove();
     scenesPanel = new SidebarPanel("scenes-panel", false);
     sidebarContent.append(scenesPanel.build());
     init_scenes_panel();
 
   } else {
+    startup_step(`Loading Players Panel`);
     $("#players-panel").remove();
     playersPanel = new SidebarPanel("players-panel", false);
     sidebarContent.append(playersPanel.build());
     update_pclist();
   }
 
-  
+  startup_step(`Loading Sounds Panel`);
   $("#sounds-panel").remove();
   soundsPanel = new SidebarPanel("sounds-panel", false);
   sidebarContent.append(soundsPanel.build());
   window.draw_audio_sidepanel();
 
+  startup_step(`Loading Journal Panel`);
   $("#journal-panel").remove();
   journalPanel = new SidebarPanel("journal-panel", false);
   sidebarContent.append(journalPanel.build());
@@ -40,7 +43,7 @@ function init_sidebar_tabs() {
   } else if(window.JOURNAL.chapters?.length > 0){
     window.JOURNAL.build_journal()
   }
-
+  startup_step(`Loading Settings Panel`);
   $("#settings-panel").remove();
   settingsPanel = new SidebarPanel("settings-panel", false);
   sidebarContent.append(settingsPanel.build());
@@ -645,7 +648,6 @@ class SidebarListItem {
    * @returns {SidebarListItem} the list item this creates
    */
   static Folder(id, folderPath, name, collapsed, parentId, folderType, color = '#F4B459') {
-    console.debug(`SidebarListItem.Folder folderPath: ${folderPath}, name: ${name}, collapsed: ${collapsed}, id: ${id}, parentId: ${parentId}, folderType: ${folderType}`);
     if(parentId == undefined && folderPath == RootFolder.Scenes.path){
         parentId = RootFolder.Scenes.id
     }
@@ -667,7 +669,6 @@ class SidebarListItem {
    * @constructor
    */
   static MyToken(tokenCustomization) {
-    console.debug("SidebarListItem.MyToken", tokenCustomization);
     let image = "";
     if (typeof tokenCustomization.tokenOptions?.alternativeImages === "object" && tokenCustomization.tokenOptions.alternativeImages.length > 0) {
       image = tokenCustomization.tokenOptions.alternativeImages[0];
@@ -690,14 +691,12 @@ class SidebarListItem {
    * @constructor
    */
   static BuiltinToken(tokenData) {
-    console.debug("SidebarListItem.BuiltinToken", tokenData);
     let folderPath = sanitize_folder_path(`${RootFolder.AboveVTT.path}/${tokenData.folderPath}`);
     let item = new SidebarListItem(path_to_html_id(folderPath, tokenData.name), tokenData.name, tokenData.image, ItemType.BuiltinToken, folderPath, path_to_html_id(folderPath));
     item.tokenOptions = tokenData;
     return item
   }
   static DDBToken(tokenData) {
-    console.debug("SidebarListItem.DDBToken", tokenData);
     let folderPath = sanitize_folder_path(`${RootFolder.DDB.path}/${tokenData.folderPath}`);
     let item = new SidebarListItem(path_to_html_id(folderPath, tokenData.name), tokenData.name, tokenData.alternativeImages[0], ItemType.DDBToken, folderPath, path_to_html_id(folderPath));
     item.tokenOptions = tokenData;
@@ -711,7 +710,6 @@ class SidebarListItem {
    * @constructor
    */
   static Monster(monsterData) {
-    console.debug("SidebarListItem.Monster", monsterData);
     let item = new SidebarListItem(monsterData.id, monsterData.name, monsterData.avatarUrl, ItemType.Monster, RootFolder.Monsters.path, RootFolder.Monsters.id);
     item.monsterData = monsterData;
     return item;
@@ -723,7 +721,6 @@ class SidebarListItem {
    * @constructor
    */
   static open5eMonster(monsterData) {
-    console.debug("SidebarListItem.Monster", monsterData);
     if(monsterData.img_main == null || monsterData.img_main == "http://api.open5e.com/"){
       monsterData.img_main = 'https://www.dndbeyond.com/avatars/4675/675/636747837794884984.jpeg'
     }
@@ -741,7 +738,6 @@ class SidebarListItem {
    * @constructor
    */
   static PC(sheet, name, image, folderPath=RootFolder.Players.path, parentId=RootFolder.Players.id) {
-    console.debug("SidebarListItem.PC", sheet, name, image, folderPath, parentId);
     let item = new SidebarListItem(sheet, name, image, ItemType.PC, folderPath, parentId);
     item.sheet = sheet;
     return item;
@@ -759,7 +755,6 @@ class SidebarListItem {
     if ((typeof encounter.name == 'string') && encounter.name.length > 0) {
       name = encounter.name;
     }
-    console.debug(`SidebarListItem.Encounter ${RootFolder.Encounters.path}/${name}, collapsed: ${collapsed}`);
     let item = new SidebarListItem(encounter.id, name, `${window.EXTENSION_PATH}assets/folder.svg`, ItemType.Encounter, RootFolder.Encounters.path, RootFolder.Encounters.id);
     if ((typeof encounter.flavorText == 'string') && encounter.flavorText.length > 0) {
       item.description = encounter.flavorText;
@@ -777,7 +772,6 @@ class SidebarListItem {
     let folderPath = folder_path_of_scene(sceneData);
     let parentId = sceneData.parentId || RootFolder.Scenes.id;
     let item = new SidebarListItem(sceneData.id, name, sceneData.player_map, ItemType.Scene, folderPath, parentId);
-    console.debug(`SidebarListItem.Scene ${item.fullPath()}`);
     item.isVideo = sceneData.player_map_is_video == "1"; // explicity using `==` instead of `===` in case it's ever `1` or `"1"`
     item.noteData = sceneData.noteData || undefined;
     return item;
@@ -790,7 +784,6 @@ class SidebarListItem {
     }
     const image = `class=aoe-token-tileable aoe-style-${style} aoe-shape-${shape} ${name ? set_spell_override_style(name) : ""}`
     let item = new SidebarListItem(path_to_html_id(RootFolder.Aoe.path, name), name, image, ItemType.Aoe, RootFolder.Aoe.path, RootFolder.Aoe.id);
-    console.debug(`SidebarListItem.Aoe`, item);
     item.shape = shape;
     let parsedSize = parseInt(size);
     if (isNaN(parsedSize)) {
@@ -983,6 +976,323 @@ function sanitize_folder_path(dirtyPath) {
   return cleanPath;
 }
 
+const AVTT_TOKEN_ALLOWED_EXTENSIONS = new Set(["jpeg", "jpg", "png", "gif", "bmp", "webp", "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm"]);
+
+function avttTokenSafeDecode(value) {
+  if (typeof avttScenesSafeDecode === "function") {
+    return avttScenesSafeDecode(value);
+  }
+  if (typeof value !== "string") {
+    return value;
+  }
+  try {
+    return decodeURIComponent(value);
+  } catch (error) {
+    return value;
+  }
+}
+
+function avttTokenNormalizeRelativePath(path) {
+  if (typeof path !== "string") {
+    return "";
+  }
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized) {
+    return "";
+  }
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
+
+function avttTokenRelativePathFromLink(link) {
+  const prefix = `above-bucket-not-a-url/${window.PATREON_ID}/`;
+  if (typeof link === "string" && link.startsWith(prefix)) {
+    return link.slice(prefix.length);
+  }
+  return "";
+}
+
+async function avttTokenFetchFolderListing(relativePath) {
+  const targetPath = typeof relativePath === "string" ? relativePath : "";
+  if (typeof avttGetFolderListingCached === "function") {
+    return await avttGetFolderListingCached(targetPath);
+  }
+  if (typeof AVTT_S3 === "undefined") {
+    throw new Error("AVTT_S3 endpoint is not available.");
+  }
+  const response = await fetch(
+    `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(targetPath)}&list=true`,
+  );
+  const json = await response.json();
+  return Array.isArray(json?.folderContents) ? json.folderContents : [];
+}
+
+async function avttTokenCollectAssets(folderRelativePath) {
+  const normalizedBase = avttTokenNormalizeRelativePath(folderRelativePath);
+  if (!normalizedBase) {
+    return { files: [], folders: [] };
+  }
+  const stack = [normalizedBase];
+  const visited = new Set();
+  const files = [];
+  const folderPaths = new Set();
+  folderPaths.add("");
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    let entries;
+    try {
+      entries = await avttTokenFetchFolderListing(current);
+    } catch (error) {
+      console.warn("Failed to load AVTT folder listing", current, error);
+      continue;
+    }
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    for (const entry of entries) {
+      const keyValue = typeof entry === "string" ? entry : entry?.Key || entry?.key || "";
+      if (!keyValue) {
+        continue;
+      }
+      let relativeKey = keyValue;
+      if (typeof avttExtractRelativeKey === "function") {
+        relativeKey = avttExtractRelativeKey(keyValue);
+      } else {
+        const prefix = `${window.PATREON_ID}/`;
+        relativeKey = keyValue.startsWith(prefix) ? keyValue.slice(prefix.length) : keyValue;
+      }
+      if (!relativeKey || !relativeKey.startsWith(normalizedBase)) {
+        continue;
+      }
+      if (relativeKey.endsWith("/")) {
+        if (relativeKey.length > normalizedBase.length) {
+          const relativeWithin = relativeKey.slice(normalizedBase.length).replace(/\/+$/, "");
+          if (relativeWithin) {
+            folderPaths.add(relativeWithin);
+          }
+        }
+        if (!visited.has(relativeKey)) {
+          stack.push(relativeKey);
+        }
+        continue;
+      }
+      const extension = typeof getFileExtension === "function"
+        ? getFileExtension(relativeKey)
+        : (relativeKey.split(".").pop() || "").toLowerCase();
+      if (!AVTT_TOKEN_ALLOWED_EXTENSIONS.has(String(extension).toLowerCase())) {
+        continue;
+      }
+      files.push({ relativePath: relativeKey });
+    }
+  }
+  return { files, folders: Array.from(folderPaths) };
+}
+
+function avttTokenDeriveName(relativePath) {
+  const fileName = (relativePath || "").split("/").filter(Boolean).pop() || relativePath || "Token";
+  const decoded = avttTokenSafeDecode(fileName);
+  return decoded.replace(/\.[^.]+$/, "") || decoded;
+}
+
+async function importAvttTokens(links, baseFolderItem) {
+  if (!Array.isArray(links) || links.length === 0) {
+    return;
+  }
+  if (
+    !baseFolderItem ||
+    typeof baseFolderItem.isTypeFolder !== "function" ||
+    !baseFolderItem.isTypeFolder() ||
+    baseFolderItem.folderType !== ItemType.MyToken
+  ) {
+    console.warn("importAvttTokens called with invalid base folder", baseFolderItem);
+    return;
+  }
+  build_import_loading_indicator("Importing Tokens...");
+  const baseFullPath = sanitize_folder_path(baseFolderItem.fullPath());
+
+  const folderSet = new Set();
+  const folderPathRemap = new Map();
+  const tokenPlans = [];
+
+  const registerTokenPlan = (folderPath, name, link, extension) => {
+    if (!link) {
+      return;
+    }
+    const safeName = avttTokenDeriveName(name);
+    let tokenType = "";
+    if (typeof extension === "string" && extension.length > 0) {
+      tokenType = extension.startsWith(".") ? extension : `.${extension}`;
+    }
+    tokenPlans.push({
+      folderPath: sanitize_folder_path(folderPath),
+      name: safeName,
+      link,
+      type: tokenType,
+    });
+  };
+
+  const addFolderPath = (fullPath) => {
+    const sanitized = sanitize_folder_path(fullPath);
+    if (!sanitized || sanitized === baseFullPath) {
+      return;
+    }
+    const relativePart = sanitized.startsWith(`${baseFullPath}/`)
+      ? sanitized.slice(baseFullPath.length + 1)
+      : sanitized;
+    const segments = relativePart.split("/").filter(Boolean);
+    let currentPath = baseFullPath;
+    for (const segment of segments) {
+      currentPath = sanitize_folder_path(`${currentPath}/${segment}`);
+      if (currentPath !== baseFullPath) {
+        folderSet.add(currentPath);
+      }
+    }
+  };
+
+  const directFiles = [];
+  const folderEntries = [];
+  for (const link of links) {
+    if (!link) {
+      continue;
+    }
+    if (link.isFolder) {
+      folderEntries.push(link);
+    } else {
+      directFiles.push(link);
+    }
+  }
+
+  for (const link of directFiles) {
+    const relativePathRaw = typeof link.path === "string" ? link.path : link.name;
+    const normalizedRelative = (relativePathRaw || "").replace(/\\/g, "/");
+    const parts = normalizedRelative.split("/").filter(Boolean);
+    const fileName = parts.pop() || link.name;
+    const extension = (typeof getFileExtension === "function"
+      ? getFileExtension(relativePathRaw || fileName)
+      : (fileName.split(".").pop() || "")) || link.extension || "";
+    registerTokenPlan(baseFullPath, fileName, link.link, extension);
+  }
+
+  for (const folderLink of folderEntries) {
+    const folderPathRaw = folderLink.path || avttTokenRelativePathFromLink(folderLink.link);
+    const normalizedRelative = avttTokenNormalizeRelativePath(folderPathRaw);
+    if (!normalizedRelative) {
+      continue;
+    }
+    const rootSegments = normalizedRelative.replace(/\/$/, "").split("/").filter(Boolean);
+    const removeBeforeIndex = rootSegments.indexOf(folderLink.name)
+    rootSegments.splice(0, removeBeforeIndex)
+    if (!rootSegments.length) {
+      continue;
+    }
+    const rootFullPath = sanitize_folder_path(`${baseFullPath}/${rootSegments.join("/")}`);
+    addFolderPath(rootFullPath);
+
+    let assets;
+    try {
+      assets = await avttTokenCollectAssets(normalizedRelative);
+    } catch (error) {
+      console.warn("Failed to enumerate AVTT token folder", folderLink, error);
+      assets = { files: [], folders: [] };
+    }
+
+    for (const folderRelative of assets.folders || []) {
+      if (!folderRelative) {
+        continue;
+      }
+      const subSegments = folderRelative.split("/").filter(Boolean);
+      const fullSegments = [...rootSegments, ...subSegments];
+      if (!fullSegments.length) {
+        continue;
+      }
+      const folderFullPath = sanitize_folder_path(`${baseFullPath}/${fullSegments.join("/")}`);
+      addFolderPath(folderFullPath);
+    }
+
+    for (const asset of assets.files || []) {
+      const relativePath = asset.relativePath;
+      if (!relativePath) {
+        continue;
+      }
+      const relativeWithinFolder = relativePath.slice(normalizedRelative.length);
+      const subSegments = relativeWithinFolder.split("/").filter(Boolean);
+      const fileName = avttTokenDeriveName(relativePath);
+      const folderSegments = [...rootSegments, ...subSegments.slice(0, -1)];
+      const targetFolderPath = folderSegments.length
+        ? sanitize_folder_path(`${baseFullPath}/${folderSegments.join("/")}`)
+        : baseFullPath;
+      addFolderPath(targetFolderPath);
+      const linkUrl = `above-bucket-not-a-url/${window.PATREON_ID}/${relativePath}`;
+      const extension = typeof getFileExtension === "function" ? getFileExtension(relativePath) : (relativePath.split(".").pop() || "");
+      registerTokenPlan(targetFolderPath, fileName, linkUrl, extension);
+    }
+  }
+
+  const folderCache = new Map();
+  folderCache.set(baseFullPath, baseFolderItem);
+
+  const orderedFolders = Array.from(folderSet).sort((a, b) => {
+    const depthDiff = a.split("/").length - b.split("/").length;
+    if (depthDiff !== 0) {
+      return depthDiff;
+    }
+    return a.localeCompare(b);
+  });
+
+  for (const folderPath of orderedFolders) {
+    const resolvedFolderPath = folderPathRemap.get(folderPath) || folderPath;
+    const segments = resolvedFolderPath.replace(`${baseFullPath}/`, "").split("/").filter(Boolean);
+    if (!segments.length) {
+      continue;
+    }
+    const folderName = avttTokenSafeDecode(segments[segments.length - 1]);
+    const parentPathOriginal = segments.length > 1
+      ? sanitize_folder_path(`${baseFullPath}/${segments.slice(0, -1).join("/")}`)
+      : baseFullPath;
+    const parentPath = folderPathRemap.get(parentPathOriginal) || parentPathOriginal;
+    const parentItem = folderCache.get(parentPath) || find_sidebar_list_item_from_path(parentPath);
+    if (!parentItem) {
+      console.warn("Unable to locate parent folder for AVTT import", parentPath);
+      continue;
+    }
+    let existingFolderItem = find_sidebar_list_item_from_path(resolvedFolderPath);
+    if (!existingFolderItem) {
+      const created = create_mytoken_folder_inside(parentItem, { name: folderName, skipModal: true, skipDidChange: true, skipPersist: true });
+      const newFolder = SidebarListItem.Folder(created.id, created.folderPath(), created.name(), created.tokenOptions.collapsed, created.parentId, ItemType.Encounter, created.color)
+      window.tokenListItems.push(newFolder);
+      const expectedPath = sanitize_folder_path(`${parentItem.fullPath()}/${created?.tokenOptions?.name || folderName}`);
+      existingFolderItem = find_sidebar_list_item_from_path(expectedPath);
+    }
+    if (existingFolderItem) {
+      const effectivePath = typeof existingFolderItem.fullPath === "function"
+        ? existingFolderItem.fullPath()
+        : folderPathRemap.get(folderPath) || folderPath;
+      folderCache.set(effectivePath, existingFolderItem);
+      folderPathRemap.set(folderPath, effectivePath);
+    }
+  }
+
+  for (const plan of tokenPlans) {
+    const resolvedFolderPath = folderPathRemap.get(plan.folderPath) || plan.folderPath;
+    const parentItem = folderCache.get(resolvedFolderPath) || find_sidebar_list_item_from_path(resolvedFolderPath);
+    if (!parentItem) {
+      console.warn("Unable to locate target folder for token import", plan.folderPath);
+      continue;
+    }
+    create_token_inside(parentItem, plan.name, plan.link, plan.type, undefined, undefined, true, true);
+  }
+  persist_all_token_customizations(window.TOKEN_CUSTOMIZATIONS, function () {
+    if (tokenPlans.length > 0) {
+      did_change_mytokens_items();
+      $('body>.import-loading-indicator').remove();
+    }
+  })
+
+}
 /**
  * @param html {*|jQuery|HTMLElement} the html representation of the item
  * @returns {SidebarListItem|undefined} SidebarListItem.Aoe if found, else undefined
@@ -1033,7 +1343,7 @@ function find_sidebar_list_item(html) {
     }
   }
 
-  let htmlId = html.attr("data-id") || html.attr("id");
+  let htmlId = html.attr("data-id") || html.attr("id") || html.attr("data-token-id");
   if (typeof htmlId === "string" && htmlId.length > 0) {
     foundItem = window.tokenListItems.find(li => li.id === htmlId);
     if (foundItem !== undefined) {
@@ -1170,7 +1480,6 @@ function set_list_item_identifier(html, listItem) {
   }
   html.attr("data-id", listItem.id).addClass("list-item-identifier");
   html.attr("data-full-path", encode_full_path(listItem.fullPath())).addClass("list-item-identifier");
-  console.log(`set_list_item_identifier`, html, listItem.fullPath(), listItem.id);
 }
 
 function path_to_html_id(path, name) {
@@ -1235,7 +1544,6 @@ function matches_full_path(html, fullPath) {
  * @returns {*|jQuery|HTMLElement} that represents a row in the list of items in the sidebar
  */
 function build_sidebar_list_row(listItem) {
-  console.log('build_sidebar_list_row', listItem.name);
 
   let row = $(`<div id="${listItem.id}" class="sidebar-list-item-row" title="${listItem.name}"></div>`);
   set_list_item_identifier(row, listItem);
@@ -1254,6 +1562,10 @@ function build_sidebar_list_row(listItem) {
     let listingImage = (tokenCustomizations?.tokenOptions?.alternativeImages && tokenCustomizations.tokenOptions?.alternativeImages[0] != undefined) ? tokenCustomizations.tokenOptions?.alternativeImages[0] : listItem.image; 
     let img;
     let video = false;
+    let isAvttBucketFile = listingImage.startsWith('above-bucket-not-a-url');
+    if (isAvttBucketFile) {
+      listingImage = listingImage.replace(/^(above-bucket-not-a-url\/.*?\/)(.*)/gi, '$1thumbnails/$2')
+    }
     if(listingImage?.includes != undefined && listingImage.includes('folder.svg')){
     img = $(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 309.267 309.267" style="enable-background:new 0 0 309.267 309.267;" xml:space="preserve">
         <g>
@@ -1263,14 +1575,14 @@ function build_sidebar_list_row(listItem) {
         </g>
     </svg>`)
     }
-    else if(tokenCustomizations?.tokenOptions?.videoToken == true || ['.mp4', '.webm','.mkv'].some(d => listingImage?.includes(d))){
+    else if (!isAvttBucketFile && (tokenCustomizations?.tokenOptions?.videoToken == true || ['.mp4', '.webm','.mkv'].some(d => listingImage?.includes(d)))){
         img = $(`<video disableRemotePlayback muted src="" loading="lazy" alt="${listItem.name} image" class="token-image video-listing" />`);   
         video = true;
     } else{
         img = $(`<img src="" loading="lazy" alt="${listItem.name} image" class="token-image" />`);
     }
-  
-    updateImgSrc(listingImage, img, video);
+
+    updateImgSrc(listingImage, img, video, false);
     imgHolder.append(img);
   }
   else{
@@ -1313,7 +1625,6 @@ function build_sidebar_list_row(listItem) {
       subtitle.hide();
       row.append(`<div class="folder-item-list"></div>`);
       row.addClass("folder");
-      console.log(`folder.collapsed: ${listItem.collapsed}`, listItem);
       if (listItem.collapsed === true) {
         row.addClass("collapsed");
       }
@@ -1444,8 +1755,9 @@ function build_sidebar_list_row(listItem) {
         //import dropbox
         const dropboxOptions = dropBoxOptions(function(links){
             for(let i = 0; i<links.length; i++){
-              create_token_inside(listItem, links[i].name, links[i].link);
-            }       
+              create_token_inside(listItem, links[i].name, links[i].link, undefined, undefined, undefined, true);
+            }   
+            did_change_mytokens_items();       
         }, true);
         const dropboxButton = createCustomDropboxChooser('', dropboxOptions);
 
@@ -1454,19 +1766,32 @@ function build_sidebar_list_row(listItem) {
 
         const oneDriveButton = createCustomOnedriveChooser('', function(links){
             for(let i = 0; i<links.length; i++){
-              create_token_inside(listItem, links[i].name, links[i].link, links[i].type);
-            }       
+              create_token_inside(listItem, links[i].name, links[i].link, links[i].type, undefined, undefined, undefined, true);
+            }   
+            did_change_mytokens_items();       
         }, 'multiple')
         oneDriveButton.toggleClass('token-row-button one-drive-button', true);
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
-     
+        
+        const avttButton = createCustomAvttChooser('', function (links) { 
+          importAvttTokens(links, listItem);
+        }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE, avttFilePickerTypes.FOLDER]);
+        avttButton.toggleClass('token-row-button avtt-file-button', true);
+        avttButton.attr('title', "Create token from Azmoria's AVTT File Picker"); 
 
         let addTokenMenu = $(`<div class='addTokenMenu'></div>`)
 
         
        
         let addToken = $(`<button class="token-row-button hover-add-button" title="Create New Token"><span class="material-icons">person_add_alt_1</span></button>`);
-        addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
+        if (window.testAvttFilePicker === true) { //console testing var
+          addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
+        }
+        else{
+          addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
+        }
+
+       
         rowItem.append(addTokenMenu);
         addToken.on("click", function (clickEvent) {
           clickEvent.stopPropagation();
@@ -1796,11 +2121,14 @@ function did_click_row(clickEvent) {
       }
       else if(clickedItem.type == ItemType.Scene){
         // show the preview
-        build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
+        build_and_display_sidebar_flyout(clickEvent.clientY, async function (flyout) {
           if (clickedItem.isVideo) {
             flyout.append(`<div style="background:lightgray;padding:10px;">This map is a video. We don't currently support previewing videos.</div>`);
           } else {
-            flyout.append(`<img class='list-item-image-flyout' src="${clickedItem.image}" alt="scene map preview" />`);
+            const src = clickedItem.image.startsWith('above-bucket-not-a-url') 
+              ? await getAvttStorageUrl(clickedItem.image, true) 
+              : clickedItem.image;
+            flyout.append(`<img class='list-item-image-flyout' src="${src}" alt="scene map preview" />`);
           }
           flyout.css("right", "340px");
         });
@@ -2877,12 +3205,13 @@ function remove_sidebar_flyout(removeHoverNote) {
     flyouts.remove();
 }
 
-function list_item_image_flyout(hoverEvent) {
+async function list_item_image_flyout(hoverEvent) {
   console.log("list_item_image_flyout", hoverEvent);
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
-    let imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
-    let flyout = $(`<img id='list-item-image-flyout' src="${imgsrc}" alt="image preview" />`);
+    const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
+    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(imgsrc) : imgsrc;
+    const flyout = $(`<img id='list-item-image-flyout' src="${src}" alt="image preview" />`);
     flyout.css({
       "top": hoverEvent.clientY - 75,
     });

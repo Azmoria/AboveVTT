@@ -98,7 +98,6 @@ class JournalManager{
 		    if(window.DM && !is_gamelog_popout()){
 			  	// also sync the journal
 			    window.JOURNAL?.sync();
-				did_update_scenes();
 			}
 		});
 	}
@@ -178,14 +177,26 @@ class JournalManager{
 	
 	sync(){
 		let self=this;
-
+		const isAnyParentShared = function(chapter){
+			let parentShared = false;
+			while (parentShared == false && chapter?.parentID != undefined){
+				const parentId = chapter.parentID;
+				chapter = self.chapters.find(d => d.id == parentId);
+				if (chapter?.shareWithPlayer)
+					parentShared = true;
+			}
+			return parentShared;
+		}
 		if(window.DM){
 			window.MB.sendMessage('custom/myVTT/JournalChapters',{
 				chapters: self.chapters
 			});
 			let sendNotes = [];
+			
+
 			for(let i in self.notes){
-				if(self.notes[i].player){
+				const parentFolder = self.chapters.find(d => d.notes.includes(i));
+				if (self.notes[i].player || parentFolder?.shareWithPlayer || isAnyParentShared(parentFolder)){
 					self.notes[i].id = i;
 					sendNotes.push(self.notes[i])
 				}
@@ -219,12 +230,43 @@ class JournalManager{
 	 * @param {Array|Boolean} shareWithPlayer - Array of player userIds to share with, or true to share with all players
 	 */
 	share_chapter(chapterIndex, shareWithPlayer){
-		this.chapters[chapterIndex].shareWithPlayer = shareWithPlayer || false;
-		this.persist();
-		this.build_journal();
+		const self = this;
+		self.chapters[chapterIndex].shareWithPlayer = shareWithPlayer || false;
+		self.persist();
+		self.build_journal();
 		window.MB.sendMessage('custom/myVTT/JournalChapters',{
-			chapters: this.chapters
+			chapters: self.chapters
 		});
+		
+		if(shareWithPlayer){
+			const anyParentIsChapter = function (id, chapter) {
+				
+				let noteChapter = self.chapters.find(d => d.notes.includes(id));
+				let anyParentIsChapter = noteChapter?.id == chapter.id;
+				while (anyParentIsChapter == false && noteChapter?.parentID != undefined) {
+					const parentId = noteChapter.parentID;
+					noteChapter = self.chapters.find(d => d.id == parentId);
+					if (noteChapter?.id == chapter?.id)
+						anyParentIsChapter = true;
+				}
+				return anyParentIsChapter;
+			}
+			const chapter = self.chapters[chapterIndex]
+			
+			let sendNotes = [];
+
+
+			for (let i in self.notes) {	
+				if (anyParentIsChapter(i, chapter)) {
+					self.notes[i].id = i;
+					sendNotes.push(self.notes[i])
+				}
+			}
+			self.sendNotes(sendNotes)
+		}
+		
+		
+
 	}
 	build_journal(searchText){
 		console.log('build_journal');
@@ -436,7 +478,6 @@ class JournalManager{
 				traverseChaptersDown(chapter);
 			});
 
-			console.log()
 			
 			filteredChapters.forEach(chapter => {
 				chapter.notes.forEach(note_id => {
@@ -654,14 +695,14 @@ class JournalManager{
 					});
 
 
-					for(let i =0; i<window.playerUsers.length; i++){
-						if(toggle_container.find(`input[name='${window.playerUsers[i].userId}']`).length == 0){
-							let visibility_toggle=$(`<input type='checkbox' name='${window.playerUsers[i].userId}'/>`);
-							let visibility_row = $(`<div class='visibility_toggle_row'><label for='${window.playerUsers[i].userId}'>${window.playerUsers[i].userName}</label></div>`)
+					for(let j =0; j<window.playerUsers.length; j++){
+						if(toggle_container.find(`input[name='${window.playerUsers[j].userId}']`).length == 0){
+							let visibility_toggle=$(`<input type='checkbox' name='${window.playerUsers[j].userId}'/>`);
+							let visibility_row = $(`<div class='visibility_toggle_row'><label for='${window.playerUsers[j].userId}'>${window.playerUsers[j].userName}</label></div>`)
 							
 							visibility_row.append(visibility_toggle)
 
-							visibility_toggle.prop("checked",(self.chapters[i]?.shareWithPlayer instanceof Array && self.chapters[i]?.shareWithPlayer.includes(`${window.playerUsers[i].userId}`)));
+							visibility_toggle.prop("checked",(self.chapters[i]?.shareWithPlayer instanceof Array && self.chapters[i]?.shareWithPlayer.includes(`${window.playerUsers[j].userId}`)));
 							
 							visibility_toggle.change(function(){
 								let sharedUsers = toggle_container.find(`input:checked:not([name='allPlayers'])`).toArray().map(d => d.name);
@@ -762,7 +803,7 @@ class JournalManager{
 					if(! (note_id in self.notes && note_id in relevantNotes ))
 						continue;
 						
-					if( (! window.DM) && (!sharedParentFolder) && (self.notes[note_id]?.player == false || (self.notes[note_id]?.player instanceof Array && !self.notes[note_id]?.player.includes(`${window.myUser}`))) && (self.chapters[i]?.shareWithPlayer == false || self.chapters[i]?.shareWithPlayer instanceof Array && !self.chapters[i]?.shareWithPlayer.includes(`${window.myUser}`)))
+					if( (! window.DM) && (!sharedParentFolder) && (self.notes[note_id]?.player == false || (self.notes[note_id]?.player instanceof Array && !self.notes[note_id]?.player.includes(`${window.myUser}`))) && !(self.chapters[i]?.shareWithPlayer == true || (self.chapters[i]?.shareWithPlayer instanceof Array && self.chapters[i]?.shareWithPlayer.includes(`${window.myUser}`))))
 						continue;
 					
 					let prependIcon = (self.notes[note_id].player && window.DM) ? $(`<span class="material-symbols-outlined" style='font-size:12px'>share</span>`) : '';
@@ -876,7 +917,7 @@ class JournalManager{
 										let sharedUsers = toggle_container.find(`input:checked:not([name='allPlayers'])`).toArray().map(d => d.name);
 										if(sharedUsers.length == 0)
 											sharedUsers = false;
-										window.JOURNAL.note_visibility(note_id,visibility_toggle.is(":checked"));
+										window.JOURNAL.note_visibility(note_id, sharedUsers);
 										window.JOURNAL.build_journal();
 									});
 									
@@ -945,7 +986,7 @@ class JournalManager{
 			chapterImport.append($(`<option value='/magic-items'>Magic Items</option>`));
 			chapterImport.append($(`<option value='/feats'>Feats</option>`));
 			chapterImport.append($(`<option value='/spells'>Spells</option>`));
-			const sortedSources = window.ddbConfigJson.sources.sort((a, b) => a.description.localeCompare(b.description));
+			const sortedSources = window.ddbConfigJson.sources.sort((a, b) => a.description.localeCompare(b.description, 'en'));
 			for(let source=0; source<sortedSources.length; source++){
 				const currentSource = sortedSources[source]
 				if(currentSource.sourceURL == '' || currentSource.name == 'HotDQ' || currentSource.name == 'RoT')
@@ -972,7 +1013,7 @@ class JournalManager{
 							text: "",
 							player: false,
 							plain: "",
-							ddbsource: `https://dndbeyond.com${source}`
+							ddbsource: `https://www.dndbeyond.com${source}`
 						};
 						let chapter = self.chapters.find(x => x.title == 'Compendium')
 						if(!chapter){
@@ -987,6 +1028,7 @@ class JournalManager{
 						chapter.notes.push(new_noteid);
 						self.persist();
 						self.build_journal(searchText);
+						journalPanel.remove_sidebar_loading_indicator();
 					}
 					else{
 						self.chapters.push({
@@ -1607,6 +1649,11 @@ class JournalManager{
 		    $(this).find('p').remove();
 		    $(this).after(input)
 	    })
+		$(note_text).find('img[data-src*="above-bucket-not-a-url"]').each(async (index, image) => {
+			const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
+			image.src = src;
+			image.href = src;
+		})
 		if(!noteAlreadyOpen){
 			note.append(note_text);
 		}
@@ -1672,6 +1719,7 @@ class JournalManager{
 				event.preventDefault();
 				render_source_chapter_in_iframe(event.target.href);
 			});
+			note.parent().css('height', '600px');
 		}
 		this.positionNotePins(id, note_text);
 	}
@@ -1976,7 +2024,7 @@ class JournalManager{
 
 
 
-    translateHtmlAndBlocks(target, displayNoteId) {
+    async translateHtmlAndBlocks(target, displayNoteId) {
     	let pastedButtons = target.find('.avtt-roll-button, [data-rolltype="recharge"], .integrated-dice__container, span[data-dicenotation]');
     	target.find('>style:first-of-type, >style#contentStyles').remove();
 		
@@ -1994,22 +2042,19 @@ class JournalManager{
 		for(let i=0; i<trackerSpans.length; i++){
 			$(trackerSpans[i]).replaceWith(`[track]${$(trackerSpans[i]).text()}[/track]`);
 		}
-		const iframes = target.find('.journal-site-embed')
-		for(let i=0; i<iframes.length; i++){
-			let url = $(iframes[i]).text();
-			if(url.includes('dropbox.com')){
-				url = url.replace('dl=0', 'raw=1')
-			}
-			else if(url.match(/drive\.google\.com.*\/view\?usp=/gi)){
-				url = url.replace(/view\?usp=/gi, 'preview?usp=')
-			}else if(url.match(/youtube.com/gi)){
-				url = url.replace("youtube.com", "youtube-nocookie.com")
-			}
-			encodeURI(url);
-			const newFrame = $(`<iframe class='journal-site-embed' src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(url)}'></iframe>`)			
-			$(iframes[i]).replaceWith(newFrame);
+		const embededIframes = target.find('iframe');
+		for(let i=0; i<embededIframes.length; i++){
+			embededIframes[i].setAttribute('allowfullscreen', '');
+			embededIframes[i].setAttribute('webkitallowfullscreen', '');
+			embededIframes[i].setAttribute('mozallowfullscreen', '');
+			embededIframes[i].src = `${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(embededIframes[i].src)}`;
 		}
 
+
+
+
+
+		
 
     	let data = $(target).clone().html();
 
@@ -2054,7 +2099,7 @@ class JournalManager{
                 	if(m.startsWith('#') || m.startsWith('>'))
                 		return m;
                 	
-                	let rulesId = window.ddbConfigJson.rules.filter((d) => d.name.localeCompare(m, undefined, { sensitivity: 'base' }) == 0)[0].id;
+					let rulesId = window.ddbConfigJson.rules.filter((d) => d.name.localeCompare(m, "en", { sensitivity: 'base' }) == 0)[0].id;
                		return `<a class="tooltip-hover condition-tooltip" href="/compendium/rules/basic-rules/combat#${m}" aria-haspopup="true" data-tooltip-href="//www.dndbeyond.com/rules/${rulesId}-tooltip" data-tooltip-json-href="//www.dndbeyond.com/conditions/${rulesId}/tooltip-json" target="_blank">${m}</a>`
                 }
             );
@@ -2065,7 +2110,7 @@ class JournalManager{
                 	if(m.startsWith('#') || m.startsWith('>'))
                 		return m;
                 	
-                	let conditionId = window.ddbConfigJson.conditions.filter((d) => d.definition.name.localeCompare(m, undefined, { sensitivity: 'base' }) == 0)[0].definition.id;
+					let conditionId = window.ddbConfigJson.conditions.filter((d) => d.definition.name.localeCompare(m, "en", { sensitivity: 'base' }) == 0)[0].definition.id;
                		return `<a class="tooltip-hover condition-tooltip" href="/compendium/rules/free-rules/rules-glossary${m}Condition" aria-haspopup="true" data-tooltip-href="//www.dndbeyond.com/conditions/${conditionId}-tooltip" data-tooltip-json-href="//www.dndbeyond.com/conditions/${conditionId}/tooltip-json" target="_blank">${m}</a>`
                 }
             );
@@ -2075,7 +2120,7 @@ class JournalManager{
                 function(m){
 
                 	
-                	let skillId = window.ddbConfigJson.abilitySkills.filter((d) => d.name.localeCompare(m, undefined, { sensitivity: 'base' }) == 0)[0].id;
+					let skillId = window.ddbConfigJson.abilitySkills.filter((d) => d.name.localeCompare(m, "en", { sensitivity: 'base' }) == 0)[0].id;
                		return `<a class="tooltip-hover skill-tooltip" href="/compendium/rules/basic-rules/using-ability-scores#${m}" aria-haspopup="true" data-tooltip-href="//www.dndbeyond.com/skills/${skillId}-tooltip" data-tooltip-json-href="//www.dndbeyond.com/skills/${skillId}/tooltip-json" target="_blank">${m}</a>`
                 }
 
@@ -2093,7 +2138,7 @@ class JournalManager{
                 /(?<!]|;|#|\w|\-|<[^>]+)(truesight|blindsight|darkvision|tremorsense)(?![^<]+>|\-|\w|\[)/gi,
                  function(m){
                 	
-                	let senseId = window.ddbConfigJson.senses.filter((d) => d.name.localeCompare(m, undefined, { sensitivity: 'base' }) == 0)[0].id;
+					 let senseId = window.ddbConfigJson.senses.filter((d) => d.name.localeCompare(m, "en", { sensitivity: 'base' }) == 0)[0].id;
                		return `<a class="tooltip-hover skill-tooltip" href="" aria-haspopup="true" data-tooltip-href="//www.dndbeyond.com/senses/${senseId}-tooltip" data-tooltip-json-href="//www.dndbeyond.com/skills/${senseId}/tooltip-json" target="_blank">${m}</a>`
                 }
             );
@@ -2106,7 +2151,7 @@ class JournalManager{
      				if(m.toLowerCase().includes(' action'))
      					compare = m.toLowerCase().replace(' action', '');
                 	
-                	let actionId = window.ddbConfigJson.basicActions.filter((d) => d.name.localeCompare(compare, undefined, { sensitivity: 'base' }) == 0)[0].id;
+					let actionId = window.ddbConfigJson.basicActions.filter((d) => d.name.localeCompare(compare, "en", { sensitivity: 'base' }) == 0)[0].id;
                		return `<a class="tooltip-hover skill-tooltip" href="" aria-haspopup="true" data-tooltip-href="//www.dndbeyond.com/actions/${actionId}-tooltip" data-tooltip-json-href="//www.dndbeyond.com/skills/${actionId}/tooltip-json" target="_blank">${m}</a>`
                 }
             );
@@ -2245,9 +2290,8 @@ class JournalManager{
 
             input = input.replace(/\[track\]([a-zA-Z\s]+)([\d]+)\[\/track\]/g, function(m, m1, m2){
                 return `<span>${m1}</span><span class="add-input each" data-number="${m2}" data-spell="${m1}"></span>`
-            })
-
-           
+            })		
+			
  
             input = input.replace(/\&nbsp\;/g, ' ');
             // Replace quotes to entity
@@ -2255,10 +2299,54 @@ class JournalManager{
             return input;
         });
 
+
 	    let newHtml = lines.join('');
+			
 	    let ignoreFormatting = $(data).find('.ignore-abovevtt-formating');
 	
 		let $newHTML = $(newHtml);
+		
+		
+		const aboveSrc = $newHTML.find(`[src*='above-bucket'], [href*='above-bucket']`);
+		for (let i = 0; i < aboveSrc.length; i++) {
+			const currTarget = aboveSrc[i];
+			const src = currTarget.src;
+			const href = currTarget.href;
+
+			if (src?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
+				let url = src.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
+				url = await getAvttStorageUrl(url);
+				$(currTarget).attr('src', url);
+			}
+			else if (href?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
+				let url = href.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
+				url = await getAvttStorageUrl(url);
+				$(currTarget).attr('href', url);
+			}
+		}
+
+		const iframes = $newHTML.find('.journal-site-embed')
+		for (let i = 0; i < iframes.length; i++) {
+			let url = $(iframes[i]).text();
+			if (url?.includes('dropbox.com')) {
+				url = url.replace('dl=0', 'raw=1')
+			}
+			else if (url?.match(/drive\.google\.com.*\/view\?usp=/gi)) {
+				url = url.replace(/view\?usp=/gi, 'preview?usp=')
+			} else if (url?.match(/youtube.com/gi)) {
+				url = url.replace("youtube.com", "youtube-nocookie.com");
+				url = url.replace(/watch\?v=(.*)/gi, 'embed/$1');
+			} else if (url?.startsWith('above-bucket-not-a-url')) {
+				url = await getAvttStorageUrl(url);
+			}
+			encodeURI(url);
+			const newFrame = $(`<iframe class='journal-site-embed'
+						src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(url)}'
+						allowfullscreen
+						webkitallowfullscreen
+						mozallowfullscreen></iframe>`)
+			$(iframes[i]).replaceWith(newFrame);
+		}
 	    $newHTML.find('.ignore-abovevtt-formating').each(function(index){
 			$(this).empty().append(ignoreFormatting[index].innerHTML);
 	    })
@@ -2269,6 +2357,7 @@ class JournalManager{
 	
 	note_visibility(id,visibility){
 		this.notes[id].player=visibility;
+
 		window.MB.sendMessage("custom/myVTT/note", {
 			note: this.notes[id],
 			id: id
@@ -2359,7 +2448,11 @@ class JournalManager{
 		    if(editor.isDirty()){
 				let parser = new DOMParser()
 				let html = parser.parseFromString(editor.getContent(), 'text/html');
-				self.notes[id].text = $(html).find('body').html();
+				const body = $(html).find('body')// we do this to get rid of style tags used in templates that aren't needed to be stored - it was causing notes to be too large from message size limits
+				const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]');
+				avttImages.attr('src', '');
+				avttImages.attr('href', '');
+				self.notes[id].text = body.html(); 
 		    	self.notes[id].plain = editor.getContent({ format: 'text' });
 		    	self.notes[id].statBlock = statBlock;
 		    	self.persist();
@@ -3259,6 +3352,7 @@ class JournalManager{
 		tinyMCE.init({
 			selector: '#' + tmp,
 			menubar: false,
+			end_container_on_empty_block: true,
 			style_formats:  [
 				 { title: 'Headers', items: [
 			      { title: 'h1', block: 'h1' },
@@ -3474,28 +3568,58 @@ class JournalManager{
 				        ],
 				      onclick: (e) => {e.preventDefault(); e.stopPropagation(); editor.insertContent(`<img class="mon-stat-block__separator-img" alt="" src="https://www.dndbeyond.com/file-attachments/0/579/stat-block-header-bar.svg"/>`)},
 				    });
+				editor.on('init', function (e) {
+					const body = $(e.target.contentDocument.body);
+					const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]');
+					const backgroundColor = $(':root').css('--background-color'); // support azmoria's dark mode without requiring inverse filters
+					const fontColor = $(':root').css('--font-color');
+					body.css({
+						background: backgroundColor,
+						color: fontColor
+					});
+					avttImages.each(async (index, image) => {
+						const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
+						image.src = src;
+					})
+				});
+
 				editor.on('NodeChange', async function (e) {
 					// When an image is inserted into the editor
 				    if (e.element.tagName === "IMG") { 
 				    	let url = e.element.getAttribute('src');
 				    	if (url.startsWith("https://drive.google.com") && url.indexOf("uc?id=") < 0) {
 		                    const parsed = 'https://drive.google.com/uc?id=' + url.split('/')[5];
-		                    console.log("parse drive audio is converting", url, "to", parsed);
 		                    url = parsed;
 		                }
 		                else if(url.includes('dropbox.com')){       
 		                    const splitUrl = url.split('dropbox.com');
 		                    const parsed = `https://dl.dropboxusercontent.com${splitUrl[splitUrl.length-1]}`
-		                    console.log("parse dropbox audio is converting", url, "to", parsed);
 		                    url = parsed;
 		                }
-
+						else if (url.includes('above-bucket-not-a-url')) {
+							const splitUrl = url.match(/above-bucket-not-a-url.*$/gi)?.[0];
+							e.element.setAttribute("data-src", splitUrl);
+							url = await getAvttStorageUrl(splitUrl, true);	
+						}
 				        e.element.setAttribute("src", await getGoogleDriveAPILink(url));
 				        return; 
 				    }
 				    return;
 				});
 				editor.on('change keyup', async function(e){
+					const body = $(e.target);
+					const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]:not([src])');
+					avttImages.each(async (index, image) => {
+						const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
+						image.src = src;
+					})
+					const avttImages2 = body.find('img[src^="above-bucket-not-a-url"]');
+					avttImages2.each(async (index, image) => {
+						const origSrc = image.getAttribute('src');
+						const src = await getAvttStorageUrl(origSrc, true);
+						image.setAttribute('data-src', origSrc)
+						image.src = src;
+					})
 				    if(editor.isDirty()){
 				    	debounceNoteSave(e, editor);
 				    }
@@ -3513,7 +3637,11 @@ class JournalManager{
 				let note_id = $(this.getElement()).attr('data-note-id');
 				let parser = new DOMParser();
 				let html = parser.parseFromString(tinymce.activeEditor.getContent(), 'text/html');
-				self.notes[note_id].text = $(html).find('body').html(); // we do this to get rid of style tags used in templates that aren't needed to be stored - it was causing notes to be too large from message size limits
+				const body = $(html).find('body')// we do this to get rid of style tags used in templates that aren't needed to be stored - it was causing notes to be too large from message size limits
+				const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]');
+				avttImages.attr('src', '');
+				avttImages.attr('href', '');
+				self.notes[note_id].text = body.html(); 
 				self.notes[note_id].plain = tinymce.activeEditor.getContent({ format: 'text' });
 				self.notes[note_id].statBlock = statBlock;
 				self.persist();
@@ -3529,7 +3657,7 @@ class JournalManager{
 				
 			}
 		});
-				
+		note.parent().css('height', '600px');		
 	}
 }
 
@@ -3560,10 +3688,11 @@ function init_journal(gameid){
 }
 
 function render_source_chapter_in_iframe(url) {
+	url = url.replace('https://dndbeyond', 'https://www.dndbeyond');
 	const sourceChapter = url.startsWith('https://www.dndbeyond.com/sources/') || url.startsWith('/sources/');
 	const compendiumChapter = url.startsWith('https://www.dndbeyond.com/compendium/') || url.startsWith('/compendium/');
 	const attachmentChapter = url.startsWith('https://www.dndbeyond.com/attachments/') || url.startsWith('/attachments/');
-	const rulesChapter = url.startsWith('https://dndbeyond.com/magic-items') || url.startsWith('https://dndbeyond.com/feats') || url.startsWith('https://dndbeyond.com/spells')
+	const rulesChapter = url.startsWith('https://www.dndbeyond.com/magic-items') || url.startsWith('https://www.dndbeyond.com/feats') || url.startsWith('https://www.dndbeyond.com/spells')
 	if (typeof url !== "string" ||  (!sourceChapter && !compendiumChapter && !attachmentChapter && !rulesChapter)) {
 		console.error(`render_source_chapter_in_iframe was given an invalid url`, url);
 		showError(new Error(`Unable to render a DDB chapter. This url does not appear to be a valid DDB chapter ${url}`));
@@ -3576,6 +3705,7 @@ function render_source_chapter_in_iframe(url) {
 			url = `${url}?filter-partnered-content=t`
 		}
 	}
+	
 	const chapterHash = url.split("#")?.[1];
 	const iframeId = 'sourceChapterIframe';
 	const containerId = `${iframeId}_resizeDrag`;

@@ -2,7 +2,7 @@
 	"manifest_version": 3,
 	"name": "AboveVTT",
 	"description": "Integrated VTT for D&DBeyond",
-	"version": "1.42",
+	"version": "1.45",
 	"content_scripts": [
 		{
 			"matches": [
@@ -102,6 +102,7 @@
 			"onedrive/*",
 			"WeatherOverlay.js",
 			"iframe.html",
+			"avttS3Upload.js",
 			"loadFrame.js"
 			],
 			"matches": [ "*://*.dndbeyond.com/*" ]	

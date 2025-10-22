@@ -16,6 +16,8 @@ if (isPlainCharacterPage) {
 	l.setAttribute("style", "display:none;");
 	l.setAttribute("id", "extensionpath");
 	l.setAttribute("data-path", getExtURL("/"));
+	
+
 	(document.body || document.documentElement).appendChild(l);
 	loadStyle = [
 		"DiceContextMenu/DiceContextMenu.css",
@@ -52,6 +54,7 @@ if (isPlainCharacterPage) {
 		} else if (isPlayerPage) {
 			loadingBg.setAttribute("class", "player");
 		}
+
 	}
 
 	let l = document.createElement('div');
@@ -99,6 +102,7 @@ if (isPlainCharacterPage) {
 		// AboveVTT Files
 		{ src: "environment.js" },
 		{ src: "CoreFunctions.js" }, // Make sure CoreFunctions executes before anything else
+		{ src: "avttS3Upload.js" },
 		{ src: "AboveApi.js" },
 		{ src: "DDBApi.js" },
 		{ src: "AOETemplates.js" },
@@ -132,10 +136,10 @@ if (isPlainCharacterPage) {
 		{ src: "Main.js" },
 		{ src: "MonsterStatBlock.js" },
 		// AboveVTT files that execute when loaded	
-		{ src: "audio/index.js", type: "module" },
 		{ src: "onedrive/onedrivemsal.js" },
 		{ src: "onedrive/onedrivepicker.js" },
-		{ src: "WeatherOverlay.js" },
+		{ src: "audio/index.js", type: "module" },
+		{ src: "WeatherOverlay.js" }
 	]
 	//Do not load characterPage.js for DM or on campaign page
 	if(isPlayerPage && !isDM){ 
@@ -148,13 +152,17 @@ if (isPlainCharacterPage) {
 			{ src: "jquery.magnific-popup.min.js" },
 			{ src: "purify.min.js" },
 			{ src: "environment.js" },
-			{ src: "CoreFunctions.js" }, 		
+			{ src: "CoreFunctions.js" }, 	
+			{ src: "rpg-dice-roller.bundle.min.js" },
+			{ src: "DiceContextMenu/DiceContextMenu.js" },
+			{ src: "DiceRoller.js" },	
 			{ src: "DDBApi.js" }, 
 			{ src: "Settings.js" },
 			{ src: "MessageBroker.js" },
 			{ src: "Journal.js" },
 			{ src: "ChatObserver.js" },
 			{ src: "MonsterStatBlock.js" },
+			{ src: "MonsterDice.js" },
 			{ src: "CampaignPage.js" }
 		]
 	}
@@ -171,7 +179,7 @@ if (isPlainCharacterPage) {
 	}
 	else{//dm
   		window.scripts.push(
-	  		{ src: "SceneData.js" },
+	  		{ src: "SceneData.js" }
 		)
 	}
 	if(isVttGamePage) {

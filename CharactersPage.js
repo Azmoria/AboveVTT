@@ -305,6 +305,15 @@ const buffsDebuffs = {
       "check": "0",
       "type": "spell"
   },
+  "Foresight": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "newRoll": '2d20kh1',
+    "type": "spell"
+  },
   "Hexblade's Curse": {
       "tohit": "0",
       "dmg": "+PB",
@@ -970,7 +979,7 @@ async function init_character_sheet_page() {
         .then(store_campaign_info)      // store gameId and campaign secret in localStorage for use on other pages     
         .then(async () => {
           window.CAMPAIGN_INFO = await DDBApi.fetchCampaignInfo(window.gameId);
-          window.myUser = $('#message-broker-client').attr('data-userid');
+          window.myUser = $('#message-broker-client').attr('data-userid') || Cobalt?.User?.ID;
         })
     }, 5000)
   }
@@ -1003,6 +1012,7 @@ function init_character_list_page_without_avtt() {
             'visibility':'',
             'display': ''
           });
+          $('#combat_carousel_container').remove();
           setTimeout(function(){
             $(".builder-sections-sheet-icon").off().on("click", function(){
               window.location.href = `https://www.dndbeyond.com${$(".builder-sections-sheet-icon").attr("href")}?abovevtt=true`;
@@ -1043,7 +1053,7 @@ function inject_dice_roll(element, clear=true) {
     if (slashCommands.length === 0) return;
 
     console.debug("inject_dice_roll slashCommands", slashCommands);
-    let updatedInnerHtml = element.text();
+    let updatedInnerHtml = element.text().replace(/\/</gi, '<');
     for (const command of slashCommands) {
       let originalCommand = command[0];
       try {
@@ -1523,8 +1533,8 @@ function observe_character_sheet_changes(documentToObserve) {
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) p:not(.above-vtt-visited),
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div[class*='ct-item-detail__customize']:nth-child(4) p:not(.above-vtt-visited),
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) tr:not(.above-vtt-visited),
-      .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) div[class*='--damage']:not([class*='__modifier']):not(.above-vtt-visited),
-      .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) span:not([class*='button']):not([class*='casting']):not([class*='__modifier']):not(.above-vtt-visited),
+      .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) div[class*='--damage']:not([class*='__modifier']):not(.ct-customize-data-editor__property--damagetypeid):not(.above-vtt-visited),
+      .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):not([class*='ct-preferences-pane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) span:not([class*='button']):not([class*='casting']):not([class*='__modifier']):not([class*='Checkbox_inputContainer']):not(.above-vtt-visited),
       [class*='spell-damage-group'] span[class*='__value']:not(.above-vtt-visited)
     `);
   
@@ -1532,20 +1542,23 @@ function observe_character_sheet_changes(documentToObserve) {
 
       snippets.addClass("above-vtt-visited");
       snippets.find('.ddbc-snippet__tag, .ddbc-tooltip[data-origintal-tile]').each(function(){   
-        $(this).parent().replaceWith($(this).text());
+        const curr = $(this);
+        curr.parent().replaceWith(curr.text());
       })
       snippets.find('td').each(function(){
-        let text = $(this).text();
+        const curr = $(this);
+        let text = curr.text();
         text = text.replace("–", "-");
-        $(this).text(text);
+        curr.text(text);
       })
       snippets.each(function(){
-        if($(this).closest(`[class*='styles_maxHeight']>div:not(.sidebar-panel-content)`).has('input[type="search"]').length>0)
+        const curr = $(this);
+        if (curr.has('>button').length > 0 || curr.closest(`[class*='styles_sidebar'] [class*='styles_pane']>[class*='styles_content']>div:not(.sidebar-panel-content), [class*='styles_content']>div>div:not(.sidebar-panel-content)`).has('input[type="search"], .ct-preferences-pane').length > 0 || curr.closest('.ct-spell-manage-pane').length>0)
           return; // do not adjust side bar when it includes a search such as adding extras as it causes crashing
-        add_journal_roll_buttons($(this));
-        add_aoe_statblock_click($(this), `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
+        add_journal_roll_buttons(curr);
+        add_aoe_statblock_click(curr, `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
       })
-    }
+    } 
  
     // for buttons text that changes based on input, such as damage change from adjusting spell level in the sidebar
     const manualSetRollbuttons = documentToObserve.find(`.ct-spell-caster__modifier-amount:not(.above-vtt-visited)`) 
@@ -1692,7 +1705,7 @@ function observe_character_sheet_changes(documentToObserve) {
     }
 
 
-    const spellDamageButtons = documentToObserve.find(`.ddbc-spell-damage-effect .integrated-dice__container:not('.above-vtt-visited-spell-damage')`)
+    const spellDamageButtons = documentToObserve.find(`.ddbc-spell-damage-effect .integrated-dice__container:not('.above-vtt-visited-spell-damage'),  [class*='styles_attack']:has([class*='__save-value']) [class*='attack__damage'] .integrated-dice__container:not('.above-vtt-visited-spell-damage')`)
     if(spellDamageButtons.length > 0){
       $(spellDamageButtons).addClass("above-vtt-visited-spell-damage");
       spellDamageButtons.off('click.spellSave').on('click.spellSave', function(e){
@@ -2524,7 +2537,7 @@ function observe_character_sheet_changes(documentToObserve) {
                 } catch (error) {
                   console.log("inject_dice_roll failed to process element", error);
                 }
-              } else if (mutation.target.parentElement.classList.contains("ddb-character-app-sn0l9p") || (mutationParent.attr('class').includes('ddb-character-app') && mutationParent.parent().hasClass('ddbc-character-tidbits__heading'))) {
+              } else if (mutationParent.is("[class*='styles_characterName']") || mutation.target.parentElement.classList.contains("ddb-character-app-sn0l9p") || (mutationParent.attr('class').includes('ddb-character-app') && mutationParent.parent().hasClass('ddbc-character-tidbits__heading'))) {
                 window.PLAYER_NAME = mutation.target.data;
                 character_sheet_changed({name: mutation.target.data});
               }
@@ -2607,8 +2620,10 @@ function set_window_name_and_image(callback) {
   }
 
   console.debug("set_window_name_and_image");
-
-  window.PLAYER_NAME = $(".ddbc-character-tidbits__heading [class*=ddb-character-app]").text();
+  if (!is_characters_builder_page()){
+    window.document.title = `AVTT ${window.document.title.replace(/^AVTT /, '')}`;
+  }
+  window.PLAYER_NAME = $(".ddbc-character-tidbits__heading [class*=ddb-character-app], [class*='styles_characterName']").first().text();
   try {
     // This should be just fine, but catch any parsing errors just in case
     window.PLAYER_IMG = get_higher_res_url($(".ddbc-character-avatar__portrait").css("background-image").slice(4, -1).replace(/"/g, "")) || get_higher_res_url($(".ddbc-character-avatar__portrait").attr('src')) || defaultAvatarUrl;
@@ -2831,7 +2846,7 @@ function read_pc_object_from_character_sheet(playerId, container = $(document)) 
     // TODO: immunities?
     // TODO: initiativeBonus?
     pc.inspiration = read_inspiration(container);
-    pc.name = container.find(".ct-character-header-info__content [class*='ddb-character-app']").text();
+    pc.name = container.find(".ct-character-header-info__content [class*='ddb-character-app'], [class*='styles_characterName']").first().text();
     const pb = parseInt(container.find(".ct-proficiency-bonus-box__value").text());
     if (pb) {
       pc.proficiencyBonus = pb;

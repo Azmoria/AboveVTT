@@ -11,7 +11,8 @@ function token_setting_options() {
 				{ value: "virtualMiniSquare", label: "Virtual Mini w/ Square Base", description: `The token looks like a physical mini with a round base. The image will show up as it is naturally with The largest side being equal to the token size, we set "Ignore Aspect Ratio" to false and "Square" to true. We also add a virtual token base to this Style with Borders and Health Aura on the base of the token. Great for tokens with a top-down art style!` },
 				{ value: "noConstraint", label: "No Constraint", description: `The token will show up as it is naturally largest side being equal to token size, we set "Ignore Aspect Ratio" to false and "Square to true. Borders and Health Aura are drawn as a drop shadow to fit the shape of the token.` },
 				{ value: "definitelyNotAToken", label: "Definitely Not a Token", description: `This token will have the shape of no contraints and be made to appear as a object tile` },
-				{ value: "labelToken", label: "Map Pin Token", description: `This token will have the settings of Definitely Not a Token and have it's name always displayed` }
+				{ value: "labelToken", label: "Map Pin Token", description: `This token will have the settings of Definitely Not a Token and have it's name always displayed` },
+				{ value: "inPersonMini", label: "TV Table Mini - Hidden from Players", description: `This token will not be displayed to players on the scene but they will still see it in the combat tracker.` }
 				
 			],
 			defaultValue: "circle",
@@ -39,8 +40,10 @@ function token_setting_options() {
 			type: 'dropdown',
 			options: [
 				{ value: "aura", label: "Aura", description: "Tokens will have a colored aura" },
-				{ value: "aura-bloodied-50", label: "Bloodied 50", description: "Tokens will have a red aura when bloodied" },				
+				{ value: "aura-bloodied-50", label: "Aura Bloodied 50", description: "Tokens will have a red aura when bloodied" },			
+				{ value: "condition-bloodied-50", label: "Condition Bloodied 50", description: "Tokens will have the bloodied condition automatically applied." },	
 				{ value: "bar", label: "HP Meter", description: "How this meter is displayed depends on token type. Color blind alternative to auras." },
+				
 				{ value: "none", label: "None", description: "Tokens will not have a health visual" }
 			],
 			defaultValue: "aura",
@@ -322,6 +325,17 @@ function avtt_settings() {
 			class: 'ui'
 		},	
 		{
+			name: "disableCombatText",
+			label: "Disable DM Damage Button Text",
+			type: "toggle",
+			options: [
+				{ value: true, label: "Enable", description: `If enabled removes the scrolling text on tokens displayed to DM when using gamelog damage buttons.` },
+				{ value: false, label: "Disable", description: `If enabled removes the scrolling text on tokens displayed to DM when using gamelog damage buttons.` }
+			],
+			defaultValue: false,
+			class: 'ui'
+		},
+		{
 			name: 'streamDiceRolls',
 			label: 'Stream Dice Rolls',
 			type: 'toggle',
@@ -334,7 +348,7 @@ function avtt_settings() {
 		},
 		{
 			name: 'iframeStatBlocks',
-			label: 'Fetch Monster Stat Blocks',
+			label: 'Fallback Monster Statblocks',
 			type: 'toggle',
 			options: [
 				{ value: true, label: "Load from DDB", description: `Monster details pages are being fetched and shown as Stat Blocks. Disabling this will build monster stat blocks locally instead. Disabling this will improve performance and reduce network data usage. Enabling this is not recommended unless you are experiencing issues with the default stat blocks.` },
@@ -415,17 +429,6 @@ function avtt_settings() {
 				],
 				defaultValue: false,
 				class: 'stream'
-			},
-			{
-				name: "disableCombatText",
-				label: "Disable DM Damage Button Text",
-				type: "toggle",
-				options: [
-					{ value: true, label: "Enable", description: `If enabled removes the scrolling text on tokens displayed to DM when using gamelog damage buttons.` },
-					{ value: false, label: "Disable", description: `If enabled removes the scrolling text on tokens displayed to DM when using gamelog damage buttons.` }
-				],
-				defaultValue: false,
-				class: 'ui'
 			},
 			{	
 				name: "tokenDefaults",
@@ -549,6 +552,17 @@ function avtt_settings() {
 		defaultValue: false,
 		class: 'performance'
 	})
+	settings.push({
+		name: "colorBlindText",
+		label: "Red/Green Colorblind Text",
+		type: "toggle",
+		options: [
+			{ value: true, label: "Enable", description: `If enabled adjusts green text to yellow` },
+			{ value: false, label: "Disable", description: `If enabled adjusts green text to yellow` }
+		],
+		defaultValue: false,
+		class: 'ui'
+	})
 	settings.push(
 	{
 		name: "disableSendToTab",
@@ -628,7 +642,7 @@ function avtt_settings() {
 			{ name: "centerPing", label: "Center Player View on Ping", defaultValue: true, dmOnly: true, type: 'toggle',options: [
 				{ value: true, label: "Enabled", description: `` },
 				{ value: false, label: "Disabled", description: `` }
-			], },,
+			], },
 			{ name: "selectLocked", label: "Locked Tokens Selectable", defaultValue: true, dmOnly: true, type: 'toggle',options: [
 				{ value: true, label: "Enabled", description: `` },
 				{ value: false, label: "Disabled", description: `` }
@@ -920,6 +934,9 @@ function set_avtt_setting_value(name, newValue) {
 		 case "iconUi":
 		 	$('body').toggleClass('mobileAVTTUI', newValue)
 		 	break;
+		case "colorBlindText":
+			$('body').toggleClass('color-blind-avtt', newValue)
+			break;
 		case "alwaysHideScrollbar":
 			hide_or_unhide_scrollbar();
 			break;
@@ -1013,7 +1030,7 @@ function init_settings() {
 				<div class="sidebar-panel-footer-horizontal-wrapper">
 				<button onclick='import_openfile();' class="sidebar-panel-footer-button sidebar-hover-text" data-hover="Upload a file containing scenes, custom tokens, journal, audio library and mixer state. This will not overwrite your existing scenes. Any scenes found in the uploaded file will be added to your current list scenes">IMPORT</button>
 				<button onclick='export_file();' class="sidebar-panel-footer-button sidebar-hover-text" data-hover="Download a file containing all of your scenes, custom tokens, and soundpads">EXPORT</button>
-					<input accept='.abovevtt' id='input_file' type='file' style='display: none' />
+					<input accept='.abovevtt' id='input_file' type='file' multiple style='display: none' />
 				</div>
 				<div id='export_current_scene_container'>
 					<button id='export_current_scene' onclick='export_current_scene();' class="sidebar-panel-footer-button sidebar-hover-text" data-hover="Download a file containing the current scene data including token notes">EXPORT CURRENT SCENE ONLY</button>
@@ -1208,8 +1225,20 @@ function build_example_token(options, size=90) {
 	let token = new Token(mergedOptions);
 	token.place(0);
 	let html = $(`#tokens div[data-id='${mergedOptions.id}']`).clone();
-	html.find('.token-image').attr('src', mergedOptions.imgsrc);
-	html.find('div.token-image').attr('background-image', `url(${mergedOptions.imgsrc})`);
+
+	if (mergedOptions.imgsrc.startsWith('above-bucket-not-a-url')){
+		getAvttStorageUrl(mergedOptions.imgsrc).then((url) => {
+			html.find('.token-image').attr('src', url);
+			html.find('div.token-image').css('background-image', `url(${url})`);
+		})
+	}
+	else{
+		html.find('.token-image').attr('src', mergedOptions.imgsrc);
+		html.find('div.token-image').css('background-image', `url(${mergedOptions.imgsrc})`);
+	}
+
+	html.find('.token-image').attr('data-src', mergedOptions.imgsrc);
+
 	token.delete(false);
 
 	html.addClass("example-token");
@@ -1259,7 +1288,7 @@ function build_sidebar_token_options_flyout(availableOptions, setValues, updateV
 			return;
 		if(option.dmOnly == true && !window.DM)
 			return;
-		const currentValue = setValues[option.name] != undefined ? setValues[option.name] : option.defaultValue;
+		const currentValue = setValues?.[option.name] != undefined ? setValues[option.name] : option.defaultValue;
 
 		switch (option.type) {
 			case "dropdown":
@@ -1300,7 +1329,7 @@ function build_sidebar_token_options_flyout(availableOptions, setValues, updateV
 		}
 	});
 	if(!genericFlyout){
-		container.append(build_age_inputs([setValues['age']], [setValues['maxAge']],
+		container.append(build_age_inputs([setValues?.['age']], [setValues?.['maxAge']],
 		function(age){
 			updateValue("age", age)
 			didChange();
@@ -1897,6 +1926,17 @@ function export_audio() {
 	$(".import-loading-indicator").remove();		
 }
 
+function export_audio_csv() {
+	if (!window?.TRACK_LIBRARY || typeof window.TRACK_LIBRARY.exportCSV !== 'function') {
+		throw new Error('Audio CSV export is not available.');
+	}
+	const csvContent = window.TRACK_LIBRARY.exportCSV();
+	const currentDate = new Date();
+	const datetime = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1)}-${currentDate.getDate()}`;
+	const campaignName = window?.CAMPAIGN_INFO?.name ? window.CAMPAIGN_INFO.name : 'Campaign';
+	download(csvContent, `${campaignName}-${datetime}-audio.csv`, "text/csv;charset=utf-8;");
+}
+
 
 
 function export_file() {
@@ -1963,142 +2003,167 @@ function import_openfile(){
 	$("#input_file").trigger("click");
 }
 
-function import_readfile() {
-	build_import_loading_indicator();
-	let reader = new FileReader();
-	reader.onload = function() {
-		// DECODE
-		let DataFile=null;
-		try{
-			DataFile=$.parseJSON(b64DecodeUnicode(reader.result));
+function import_process_datafile_text(fileText) {
+	// replicate previous onload behaviour but allow repeated calls for multiple files
+	let DataFile = null;
+	try {
+		DataFile = $.parseJSON(b64DecodeUnicode(fileText));
+	} catch (e) {
+		try {
+			DataFile = $.parseJSON(atob(fileText));
+		} catch (err) {
+			console.error('Failed to parse import file', err);
+			return null;
 		}
-		catch{
+	}
+	if (!DataFile) {
+		return null;
+	}
 
-		}
-		if(!DataFile){ // pre version 2
-			DataFile=$.parseJSON(atob(reader.result));
-		}
+	if (window.SOUNDPADS == undefined) {
+		window.SOUNDPADS = {};
+	}
+	for (let k in DataFile.soundpads) {
+		window.SOUNDPADS[k] = DataFile.soundpads[k];
+	}
+	localStorage.setItem("Soundpads", JSON.stringify(window.SOUNDPADS));
 
-		if(window.SOUNDPADS == undefined){
-			window.SOUNDPADS = {};
-		}
-		for(let k in DataFile.soundpads){
-			window.SOUNDPADS[k]=DataFile.soundpads[k]; // leaving this as soundpad data until we decide if we are using the folder/dropdown data
-		}
-        localStorage.setItem("Soundpads", JSON.stringify(window.SOUNDPADS));
+	if (DataFile.mixerstate != undefined && window.MIXER) {
+		try { window.MIXER._write(DataFile.mixerstate, true); } catch (e) { console.warn(e); }
+	}
+	if (DataFile.tracklibrary != undefined && window.TRACK_LIBRARY) {
+		try { let trackMap = new Map(DataFile.tracklibrary); window.TRACK_LIBRARY._write(trackMap); } catch (e) { console.warn(e); }
+	}
 
-
-		if(DataFile.mixerstate != undefined){
-			window.MIXER._write(DataFile.mixerstate, true);
-		}
-		if(DataFile.tracklibrary != undefined){
-			let trackMap = new Map(DataFile.tracklibrary);
-			window.TRACK_LIBRARY._write(trackMap);
-		}
-
-
-		let customizations = window.TOKEN_CUSTOMIZATIONS;
-		if (DataFile.tokencustomizations !== undefined) {
-			DataFile.tokencustomizations.forEach(json => {
-				try {
-					if(json != null){
-						let importedCustomization = TokenCustomization.fromJson(json);
-						let existing = customizations.find(tc => tc.tokenType === importedCustomization.tokenType && tc.id === importedCustomization.id);
-						if (existing) {
-							customizations[customizations.indexOf(existing)] = importedCustomization
-						} else {
-							customizations.push(importedCustomization);
-						}
-					}
-				} catch (error) {
-					console.error("Failed to parse TokenCustomization from json", json);
-				}
-			});
-		}
-
-		if (DataFile.mytokens !== undefined) {
-			let importedFolders = [];
-			if (DataFile.mytokensfolders !== undefined) {
-				importedFolders = DataFile.mytokensfolders;
-			}
-			const importedMytokens = DataFile.mytokens;
-			let migratedCustomizations = migrate_convert_mytokens_to_customizations(importedFolders, importedMytokens);
-			migratedCustomizations.forEach(migratedTC => {
-				let existing = customizations.find(existingTC => existingTC.tokenType === migratedTC.tokenType && existingTC.id === migratedTC.id);
-				if (!existing) {
-					customizations.push(migratedTC);
-				}
-			});
-		}
-
-		if (DataFile.tokendata) {
-			if (!tokendata) {
-				tokendata = {folders: {}, tokens: {}};
-			}
-			if (!tokendata.folders) {
-				tokendata.folders = {};
-			}
-			if(!tokendata.tokens){
-				tokendata.tokens={};
-			}
-			if (DataFile.tokendata.folders) {
-				for(let k in DataFile.tokendata.folders){
-					tokendata.folders[k]=DataFile.tokendata.folders[k];
-				}
-			}
-			if (DataFile.tokendata.tokens) {
-				for(let k in DataFile.tokendata.tokens){
-					tokendata.tokens[k]=DataFile.tokendata.tokens[k];
-				}
-			}
-			let migratedFromTokenData = migrate_tokendata();
-			migratedFromTokenData.forEach(migratedTC => {
-				let existing = customizations.find(existingTC => existingTC.tokenType === migratedTC.tokenType && existingTC.id === migratedTC.id);
-				if (!existing) {
-					console.log("adding migrated from tokendata", migratedTC);
-					customizations.push(migratedTC);
-				} else {
-					console.log("NOT adding migrated from tokendata", migratedTC, existing);
-				}
-			});
-		}
-
-		persist_all_token_customizations(customizations, function () {
-			if(DataFile.notes){
-				for(let id in DataFile.notes){				
-					window.JOURNAL.notes[id] = DataFile.notes[id];
-				}
-				window.JOURNAL.statBlocks = undefined;
-				for(let i=0; i < DataFile.journalchapters.length; i++){
-					let chapterIndex = window.JOURNAL.chapters.findIndex(d => d.id == DataFile.journalchapters[i].id)
-					if(chapterIndex != -1){
-						for(let j = 0; j < DataFile.journalchapters[i].notes.length; j++){
-							if(!window.JOURNAL.chapters[chapterIndex].notes.includes(DataFile.journalchapters[i].notes[j]))
-								window.JOURNAL.chapters[chapterIndex].notes.push(DataFile.journalchapters[i].notes[j]);
-						}						
-					}	
-					else{
-						window.JOURNAL.chapters.push(DataFile.journalchapters[i])
+	let customizations = window.TOKEN_CUSTOMIZATIONS || [];
+	if (DataFile.tokencustomizations !== undefined) {
+		DataFile.tokencustomizations.forEach(json => {
+			try {
+				if (json != null) {
+					let importedCustomization = TokenCustomization.fromJson(json);
+					let existing = customizations.find(tc => tc.tokenType === importedCustomization.tokenType && tc.id === importedCustomization.id);
+					if (existing) {
+						customizations[customizations.indexOf(existing)] = importedCustomization
+					} else {
+						customizations.push(importedCustomization);
 					}
 				}
-				window.JOURNAL.persist();
-				window.JOURNAL.build_journal();
-			} else {
-				alert('Loading completed. Data merged');
+			} catch (error) {
+				console.error("Failed to parse TokenCustomization from json", json);
 			}
-			AboveApi.migrateScenes(window.gameId, DataFile.scenes)
-				.then(() => {
-					$(".import-loading-indicator .loading-status-indicator__subtext").addClass("complete");
-					setTimeout(function(){
-						alert("Migration (hopefully) completed. You need to Re-Join AboveVTT");
-						location.reload();
-					}, 2000) // allow time for journal/token customization persist via indexedDB onsuccess.
-
-				})
-				.catch(error => {
-					showError(error, "cloud_migration failed");
-				});
 		});
-	};
-	reader.readAsText($("#input_file").get(0).files[0]);
+	}
+
+	if (DataFile.mytokens !== undefined) {
+		let importedFolders = [];
+		if (DataFile.mytokensfolders !== undefined) {
+			importedFolders = DataFile.mytokensfolders;
+		}
+		const importedMytokens = DataFile.mytokens;
+		let migratedCustomizations = migrate_convert_mytokens_to_customizations(importedFolders, importedMytokens);
+		migratedCustomizations.forEach(migratedTC => {
+			let existing = customizations.find(existingTC => existingTC.tokenType === migratedTC.tokenType && existingTC.id === migratedTC.id);
+			if (!existing) {
+				customizations.push(migratedTC);
+			}
+		});
+	}
+
+	if (DataFile.tokendata) {
+		if (!tokendata) {
+			tokendata = { folders: {}, tokens: {} };
+		}
+		if (!tokendata.folders) {
+			tokendata.folders = {};
+		}
+		if (!tokendata.tokens) {
+			tokendata.tokens = {};
+		}
+		if (DataFile.tokendata.folders) {
+			for (let k in DataFile.tokendata.folders) {
+				tokendata.folders[k] = DataFile.tokendata.folders[k];
+			}
+		}
+		if (DataFile.tokendata.tokens) {
+			for (let k in DataFile.tokendata.tokens) {
+				tokendata.tokens[k] = DataFile.tokendata.tokens[k];
+			}
+		}
+		let migratedFromTokenData = migrate_tokendata();
+		migratedFromTokenData.forEach(migratedTC => {
+			let existing = customizations.find(existingTC => existingTC.tokenType === migratedTC.tokenType && existingTC.id === migratedTC.id);
+			if (!existing) {
+				customizations.push(migratedTC);
+			}
+		});
+	}
+
+	// persist customizations immediately
+	persist_all_token_customizations(customizations, function () {
+		window.TOKEN_CUSTOMIZATIONS = customizations;
+	});
+
+	// merge notes
+	if (DataFile.notes) {
+		for (let id in DataFile.notes) {
+			window.JOURNAL.notes[id] = DataFile.notes[id];
+		}
+		window.JOURNAL.statBlocks = undefined;
+		for (let i = 0; i < (DataFile.journalchapters || []).length; i++) {
+			let chapter = DataFile.journalchapters[i];
+			let chapterIndex = window.JOURNAL.chapters.findIndex(d => d.id == chapter.id)
+			if (chapterIndex != -1) {
+				for (let j = 0; j < chapter.notes.length; j++) {
+					if (!window.JOURNAL.chapters[chapterIndex].notes.includes(chapter.notes[j]))
+						window.JOURNAL.chapters[chapterIndex].notes.push(chapter.notes[j]);
+				}
+			} else {
+				window.JOURNAL.chapters.push(chapter)
+			}
+		}
+		try { window.JOURNAL.persist(); window.JOURNAL.build_journal(); } catch (e) { console.warn(e); }
+	}
+
+	// Scenes: buffer for later migration
+	if (!window.__IMPORT_SCENES_BUFFER) window.__IMPORT_SCENES_BUFFER = [];
+	if (Array.isArray(DataFile.scenes)) {
+		window.__IMPORT_SCENES_BUFFER.push(...DataFile.scenes);
+	}
+
+	return DataFile;
+}
+
+function import_readfile() {
+	const files = Array.from($("#input_file").get(0).files || []);
+	if (!files.length) return;
+	build_import_loading_indicator('Preparing Import');
+	window.__IMPORT_SCENES_BUFFER = [];
+	let processed = 0;
+	files.forEach((file) => {
+		const reader = new FileReader();
+		reader.onload = function () {
+			try {
+				import_process_datafile_text(reader.result);
+			} catch (e) {
+				console.error('Failed to import file', file.name, e);
+			}
+			processed += 1;
+			if (processed === files.length) {
+				// after all files processed, run migration if scenes found
+				const scenes = window.__IMPORT_SCENES_BUFFER || [];
+				AboveApi.migrateScenes(window.gameId, scenes)
+					.then(() => {
+						$(".import-loading-indicator .loading-status-indicator__subtext").addClass("complete");
+						setTimeout(() => {
+							alert("Migration (hopefully) completed. You need to Re-Join AboveVTT");
+							location.reload();
+						}, 2000);
+					})
+					.catch(error => {
+						showError(error, "cloud_migration failed");
+					});
+			}
+		};
+		reader.readAsText(file);
+	});
 }

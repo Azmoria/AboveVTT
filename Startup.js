@@ -46,10 +46,9 @@ $(function() {
         return window.CAMPAIGN_INFO.dmId;
       })
       .then((campaignDmId) => {
-
-
-        const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid');
         const isDmPage = is_encounters_page();
+        const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;
+        
 
 
         if (isDmPage && campaignDmId == userId) {
@@ -83,6 +82,7 @@ $(function() {
         }
         $('body').toggleClass('reduceMovement', (window.EXPERIMENTAL_SETTINGS['reduceMovement'] == true));
         $('body').toggleClass('mobileAVTTUI', (window.EXPERIMENTAL_SETTINGS['iconUi'] == true));
+        $('body').toggleClass('color-blind-avtt', (window.EXPERIMENTAL_SETTINGS['colorBlindText'] == true));
           // STREAMING STUFF
 
         window.STREAMPEERS = {};
@@ -306,6 +306,7 @@ function addExtensionPathStyles(){ // some above server images moved out of exte
     body{
       --onedrive-svg: url('${window.EXTENSION_PATH}images/Onedrive_icon.svg');
       --onedrive-mask: url('${window.EXTENSION_PATH}images/Onedrive_icon.png');
+      --avtt-mask: url('${window.EXTENSION_PATH}assets/avtt-logo.png');
     }
   </style>`
 
@@ -403,6 +404,7 @@ function start_player_joining_as_dm(){
         border-radius:5px;
     ">
       <span style="
+      color: #ddd;
       font-size: 25px;
       text-shadow: 1px 0px #000, 0px 1px #000, -1px 0px #000, 0px -1px #000, 1px 1px #000, -1px -1px #000, -1px 1px #000, 1px -1px #000; 
       ">It is not currently possible to join as DM from a player account.</span>
@@ -441,10 +443,7 @@ async function start_above_vtt_for_dm() {
   await start_above_vtt_common();
   window.CONNECTED_PLAYERS['0'] = window.AVTT_VERSION; // ID==0 is DM
 
-  startup_step("Fetching scenes from cloud");
   window.ScenesHandler = new ScenesHandler();
-  window.ScenesHandler.scenes = await AboveApi.getSceneList();
-  await migrate_to_cloud_if_necessary();
 
   startup_step("Fetching Encounters from DDB");
   const avttId = window.location.pathname.split("/").pop();
@@ -465,9 +464,11 @@ async function start_above_vtt_for_dm() {
 
   startup_step("Fetching scenes from AboveVTT servers");
   let activeScene = await fetch_sceneList_and_scenes();
-
+  await migrate_to_cloud_if_necessary();
+  startup_step("Loading scenes");
+  did_update_scenes();
   startup_step("Migrating scene folders");
-  await migrate_scene_folders();
+  migrate_scene_folders();
 
   if (activeScene) {
     if(activeScene.data.playlist != undefined && activeScene.data.playlist != 0 && window.MIXER.state().playlists[activeScene.data.playlist] != undefined){
@@ -475,7 +476,11 @@ async function start_above_vtt_for_dm() {
     }
   }
 
-  did_update_scenes();
+
+  startup_step("Loading Tokens");
+  await rebuild_token_items_list()
+  filter_token_list("");
+
 
   startup_step("Start up complete");
   window.MB.sendMessage("custom/myVTT/DMAvatar", {
@@ -976,6 +981,18 @@ async function start_above_vtt_for_players() {
     if(!window.CURRENT_SCENE_DATA.is_video || !window.CURRENT_SCENE_DATA.player_map.includes('youtu')){
       $("#youtube_controls_button").css('visibility', 'hidden');
     }
+    if ($('.stream-dice-button').length == 0){
+      $(".glc-game-log>[class*='Container-Flex']").append($(`<div id="stream_dice"><div class='stream-dice-button ${window.JOINTHEDICESTREAM ? `enabled` : ``}'>Dice Stream ${window.JOINTHEDICESTREAM ? `Enabled` : `Disabled`}</div></div>`));
+      $(".stream-dice-button").off().on("click", function () {
+        if (window.JOINTHEDICESTREAM) {
+          update_dice_streaming_feature(false);
+        }
+        else {
+          update_dice_streaming_feature(true);
+        }
+      })
+    }
+     
   });
 
   /*prevents repainting due to ddb adjusting player sheet classes and throttling it*/
@@ -1005,10 +1022,6 @@ async function start_above_vtt_for_players() {
   }
 }
 
-function startup_step(stepDescription) {
-  console.log(`startup_step ${stepDescription}`);
-  $("#loading-overlay-beholder > .sidebar-panel-loading-indicator > .loading-status-indicator__subtext").text(stepDescription);
-}
 
 async function lock_character_gamelog_open() {
   if ($(".ct-sidebar__portal").length == 0) {

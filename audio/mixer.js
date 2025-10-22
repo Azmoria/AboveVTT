@@ -162,7 +162,7 @@ class Mixer extends EventTarget {
     syncPlayers(play = true, skipTime=false) {
         const state = this.state();
  
-        Object.entries(state.channels).forEach(([id, channel]) => {
+        Object.entries(state.channels).forEach(async ([id, channel]) => {
             if(!channel?.src){
                 delete this._players[id];
                 return;
@@ -188,7 +188,6 @@ class Mixer extends EventTarget {
                 else if(url.includes('dropbox.com')){       
                     const splitUrl = url.split('dropbox.com');
                     const parsed = `https://dl.dropboxusercontent.com${splitUrl[splitUrl.length-1]}`
-                    console.log("parse dropbox audio is converting", url, "to", parsed);
                     url = parsed;
                 }
                 else if(url.startsWith("https://onedrive.live.com/embed?")){
@@ -203,15 +202,30 @@ class Mixer extends EventTarget {
                     url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
                   }
                 }
+                else if(url.startsWith('above-bucket-not-a-url')){
+                    url = await getAvttStorageUrl(url, true);
+                }
                 player = new Audio(url);
-                player.preload = "none";
-                this._players[id] = player;
+                player.preload = "metadata";
+                this._players[id] = player; 
             }
 
             if(player.paused)
                 player.load();
-            if (state.paused || channel.paused) {
-                player.pause();
+            if (player && (state.paused || channel.paused)) {
+                if (state.fade == true && !player.paused) {
+                    $(player).stop();
+                    $(player).animate({ volume: 0 }, { 
+                        duration: 5000, 
+                        complete: function () {
+                            player.pause();
+                        }
+                    });
+                }
+                else{
+                    player.pause();
+                }
+                
             } else if (play) {        
      
                 if(channel.token){
@@ -222,15 +236,33 @@ class Mixer extends EventTarget {
                         window.TokenAudioLevels[id] = 0;
                     }
                 }
-                player.volume = (window.TokenAudioLevels != undefined) ? window.TokenAudioLevels[id] != undefined ? state.volume * channel.volume * window.TokenAudioLevels[id] : state.volume * channel.volume : state.volume * channel.volume;
+
+                const currVolume = (window.TokenAudioLevels != undefined) ? window.TokenAudioLevels[id] != undefined ? state.volume * channel.volume * window.TokenAudioLevels[id] : state.volume * channel.volume : state.volume * channel.volume;;
+                player.volume = currVolume;
                 player.loop = channel.loop;
                 if(channel.currentTime != undefined && !skipTime){
                     player.currentTime = channel.currentTime;
                 }
                    
-                const currentState = window.MIXER.state();    
-                if(this._players[id] && !(currentState.paused || currentState.channels[id].paused))
-                    this.playaudio(id);          
+                const currentState = window.MIXER.state();  
+                if (this._players[id] && !(currentState.paused || currentState.channels[id].paused)){
+                    
+                    if (this._players[id].paused && currentState.fade == true){
+                        $(this._players[id]).stop();
+                        this._players[id].volume = 0;
+                        this.playaudio(id);
+                        $(this._players[id]).animate({ volume: currVolume }, {
+                            duration: 5000
+                        });
+                        this.playaudio(id);
+                        
+                    }
+                    else {
+                        $(this._players[id]).stop();
+                        this.playaudio(id);
+                    }
+                   
+                }
             }
         });
 
@@ -245,7 +277,7 @@ class Mixer extends EventTarget {
 
     async playaudio(id) {
       
-      try {
+      try { 
         await this._players[id].play();
         $(`#mixer-channels .audio-row[data-id='${id}'] .channel-play-pause-button`).toggleClass('playing pressed', true)
         $(`#mixer-channels .audio-row[data-id='${id}'] svg.play-svg`).css('display', 'none');
@@ -279,6 +311,7 @@ class Mixer extends EventTarget {
                 state.playlists[selectedPlaylistID].channels = state.channels;
                 state.playlists[selectedPlaylistID].volume = state.volume;
                 state.playlists[selectedPlaylistID].paused = state.paused;
+                state.playlists[selectedPlaylistID].orderedChannels = state.orderedChannels;
             }
         }
         localStorage.setItem(this._localStorageKey, JSON.stringify(state));
@@ -332,7 +365,25 @@ class Mixer extends EventTarget {
     get volume() {
         return this.state().volume;
     }
+    set fade(shouldFade = false){
+        const state = this.state();
+        state.fade = shouldFade;
+        const noSync = true;
+        this._write(state, undefined, noSync);
+    }
+    get fade(){
+        return this.state().fade;
+    }
 
+    set mixerMode(mode = 'soundboard') {
+        const state = this.state();
+        state.mixerMode = mode;
+        const noSync = true;
+        this._write(state, undefined, noSync);
+    }
+    get mixerMode() {
+        return this.state().mixerMode;
+    }
     // play / pause
 
     /**
@@ -414,6 +465,7 @@ class Mixer extends EventTarget {
         state.channels = state.playlists[id].channels;
         state.volume = state.playlists[id].volume;
         state.paused = state.playlists[id].paused;
+        state.orderedChannels = state.playlists[id].orderedChannels;
         this._write(state, true);
         this.dispatchEvent(new Event(mixerEvents.ON_CHANNEL_LIST_CHANGE));
     }
@@ -467,9 +519,13 @@ class Mixer extends EventTarget {
             window.TOKEN_OBJECTS[channel.token].options.audioChannel.audioId = audioId;
         }
         else{
-            state.channels[uuid()] = channel;
+            const id = uuid();
+            state.channels[id] = channel;
+            if (!state.orderedChannels)
+                state.orderedChannels = [];
+            state.orderedChannels.push(id);
         }
-
+        
         this._write(state);  
         this.dispatchEvent(new Event(mixerEvents.ON_CHANNEL_LIST_CHANGE));
     }
@@ -480,7 +536,12 @@ class Mixer extends EventTarget {
     addMultiChannels(channelData = []) {
         const state = this.state();
         for(let i=0; i<channelData.length; i++){
-            state.channels[uuid()] = channelData[i];
+            const id = uuid();
+            state.channels[id] = channelData[i];
+            if (!state.orderedChannels) 
+                state.orderedChannels = [];
+            state.orderedChannels.push(id);
+            
         }
 
         this._write(state);
@@ -525,6 +586,9 @@ class Mixer extends EventTarget {
     deleteChannel(id) {
         const state = this.state();
         delete state.channels[id];
+        if(state.orderedChannels){
+            state.orderedChannels.filter(d=> d != id);
+        }
         this._write(state);
         this.dispatchEvent(new Event(mixerEvents.ON_CHANNEL_LIST_CHANGE));
     }
@@ -643,26 +707,44 @@ class Mixer extends EventTarget {
         const progress = document.createElement("div");
         progress.className = "channel-progress-bar-progress";
         progress.setAttribute('data-id', id)
-
+       
         const total = document.createElement("div");
         total.setAttribute('data-id', id);
         total.className = "channel-progress-bar-total";
         total.append(progress);
-
+       
+        const state = this.state();
+        const channel = state.channels[id];
         const player = this._players[id];
         if (!player) {
             throw `failed to player for channel ${id}`
         }
+        $(player).off('loadedmetadata.progress').one('loadedmetadata.progress', function(){
+            if (channel.currentTime != undefined && !isNaN(player.duration) && player.duration != 0){
+                progress.style.width = channel.currentTime / player.duration * 100 + "%";
+            }
+        })
+       
         player.ontimeupdate = (e) => {
-            progress.style.width = e.target.currentTime / e.target.duration * 100 + "%";
-
-            if (e.target.currentTime == e.target.duration && e.target.loop == false && $(`.audio-row[data-id='${id}'] .channel-play-pause-button.playing`).length > 0) {
-                const id = progress.getAttribute('data-id');
+            const id = progress.getAttribute('data-id');
+            if (window.draggingAudioBar !== id){
+                progress.style.width = e.target.currentTime / e.target.duration * 100 + "%";
+            }
+            const fade = window.MIXER.state().fade;
+            const fadeTime = e.target.currentTime >= e.target.duration - 5 && fade;
+            const endTime = e.target.currentTime == e.target.duration;
+            if (endTime && e.target.loop == false){   
+                const channel = window.MIXER.readChannel(id);
                 e.target.currentTime = 0;
                 $(progress).css('width', '');
-                let channel = window.MIXER.readChannel(id);
                 channel.currentTime = 0;
                 window.MIXER.updateChannel(id, channel);
+                window.MIXER._players[id].pause();
+            }
+
+            if ((fadeTime || endTime) && e.target.loop == false && $(`.audio-row[data-id='${id}'] .channel-play-pause-button.playing`).length > 0) {
+              
+                
                 $(`.audio-row[data-id='${id}'] .channel-play-pause-button.playing`).click();
 
                 if ($(`.sequential-button`).hasClass('pressed')) {
@@ -691,8 +773,7 @@ class Mixer extends EventTarget {
                     }
                     
                     const nextTrackId= nextTrack.attr('data-id');
-                    channel = window.MIXER.readChannel(nextTrackId);    
-                    this._players[id].currentTime = 0;
+                    const channel = window.MIXER.readChannel(nextTrackId);    
                     channel.currentTime = 0;
                     window.MIXER.updateChannel(nextTrackId, channel);
                 
@@ -701,17 +782,32 @@ class Mixer extends EventTarget {
             }
         }
 
-        $(total).off().on('click', function(e){
+        $(total).off().on('mousedown', function(e){
             let progressRect = this.getBoundingClientRect();
-            let percentClick = (e.clientX - progressRect.left) / $(this).width();
-            const channel = window.MIXER.readChannel(id);
-            if(!isNaN(player.duration)){
+            const totalWidth = $(this).width();
+            window.draggingAudioBar = id;
+            $(document).off('mousemove.draggingAudio').on('mousemove.draggingAudio', function(e){
+                let percentClick = Math.min(1, Math.max(0, (e.clientX - progressRect.left) / totalWidth));
 
-                player.currentTime = player.duration * percentClick;
-                channel.currentTime = player.currentTime;
-                progress.style.width = player.currentTime / player.duration * 100 + "%";
-                window.MIXER.updateChannel(id, channel);
-            }
+                if (!isNaN(player.duration)) {
+                    progress.style.width = percentClick*100 + "%";
+                }
+            })
+            $(document).off('mouseup.progressBar').one('mouseup.progressbar', function(e){
+                
+                let percentClick = Math.min(1, Math.max(0, (e.clientX - progressRect.left) / totalWidth));
+                const channel = window.MIXER.readChannel(id);
+                if (!isNaN(player.duration)) {
+
+                    player.currentTime = player.duration * percentClick;
+                    channel.currentTime = player.currentTime;
+                    progress.style.width = player.currentTime / player.duration * 100 + "%";
+                    window.MIXER.updateChannel(id, channel);
+                }
+                $(document).off('mousemove.draggingAudio');
+                window.draggingAudioBar = null;
+            })
+            
        
         });
         return total

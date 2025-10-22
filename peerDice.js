@@ -25,15 +25,21 @@ function setDiceRemoteStream(stream, peerId) {
     let dicecanvas=$(`<canvas width='${video[0].videoWidth}' height='${video[0].videoHeight}' class='streamer-canvas' />`);
     dicecanvas.attr("id","streamer-canvas-"+peerId);
     //dicecanvas.css("opacity",0.5);
-    dicecanvas.css("position","fixed");
-    dicecanvas.css("top","50%");
-    dicecanvas.css("left","50%");
-    dicecanvas.css("transform","translate(-50%, -50%)");
-    dicecanvas.css("z-index",60000);
-    dicecanvas.css("touch-action","none");
-    dicecanvas.css("pointer-events","none");
-    dicecanvas.css("filter", "drop-shadow(-16px 18px 15px black)");
-    dicecanvas.css("clip-path", "inset(2px 2px 2px 2px)");
+    let sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : 340;
+ 
+    dicecanvas.css({
+        "position": "fixed",
+        "max-width": "calc(100% - var(--sidebar-width, 340px))",
+        "top" : "50%",
+        "left": "calc(50% - calc(var(--sidebar-width, 340px) / 2))",
+        "transform": "translate(-50%,-50%)",
+        "z-index": 60000,
+        "touch-action": "none",
+        "pointer-events": "none",
+        "filter": "drop-shadow(-16px 18px 15px black)",
+        "clip-path": "inset(2px 2px 2px 2px)"
+    });
+
     $("#site").append(dicecanvas);
     
     
@@ -44,14 +50,17 @@ function setDiceRemoteStream(stream, peerId) {
     
     let canvas=dicecanvas.get(0);
     let ctx=canvas.getContext('2d');
-    let tmpcanvas = document.createElement("canvas");
+    let tmpcanvas = new OffscreenCanvas(0, 0);
     let tmpctx = tmpcanvas.getContext("2d");
+    
     video.off('resize.dice').on("resize.dice", function(){
         let videoAspectRatio = video[0].videoWidth / video[0].videoHeight
+        sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : 340;
+
         if (video[0].videoWidth > video[0].videoHeight)
         {
-            tmpcanvas.width = Math.min(video[0].videoWidth, window.innerWidth);
-            tmpcanvas.height = Math.min(video[0].videoHeight, window.innerWidth / videoAspectRatio);       
+            tmpcanvas.width = Math.min(video[0].videoWidth, window.innerWidth - sidebarWidth);
+            tmpcanvas.height = Math.min(video[0].videoHeight, (window.innerWidth - sidebarWidth) / videoAspectRatio);       
         }
         else {
             tmpcanvas.width = Math.min(video[0].videoWidth, window.innerHeight / (1 / videoAspectRatio));
@@ -62,36 +71,39 @@ function setDiceRemoteStream(stream, peerId) {
         dicecanvas.css("height",tmpcanvas.height);
         dicecanvas.css("width",tmpcanvas.width );
     });
-    let stop = false;
-    let frameCount = 0;
-    let fpsInterval = 1000/16;
-    let then = Date.now();
 
-    let startTime = then;
-    let now, elapsed;
+    let lastTime = 0
+    let sameFrameCount = 0;
     let updateCanvas=function(){
         if(tmpcanvas.width<=0){
             diceStreamThrottle(updateCanvas);
             return;
         }
-        tmpctx.drawImage(video[0], 0, 0, tmpcanvas.width, tmpcanvas.height);
+        if (video[0].currentTime == lastTime) 
+            sameFrameCount++;
+        else 
+            sameFrameCount = 0;
         
-        const frame = tmpctx.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
-
-        for (let i = 0; i < frame.data.length; i += 4) {
-            const red = frame.data[i + 0];
-            const green = frame.data[i + 1];
-            const blue = frame.data[i + 2];
-            if ((red < 24) && (green < 24) && (blue < 24))
-                frame.data[i + 3] = 128;
-            if ((red < 8) && (green < 8) && (blue < 8))
-                frame.data[i + 3] = 0;
-            
-            
+        if (sameFrameCount > 10) {
+            ctx.clearRect(0, 0, tmpcanvas.width, tmpcanvas.height);
         }
-        ctx.putImageData(frame,0,0);    
-       
-       
+        else {
+            lastTime = video[0].currentTime;
+            tmpctx.drawImage(video[0], 0, 0, tmpcanvas.width, tmpcanvas.height);
+
+            const frame = tmpctx.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+
+            for (let i = 0; i < frame.data.length; i += 4) {
+                const red = frame.data[i + 0];
+                const green = frame.data[i + 1];
+                const blue = frame.data[i + 2];
+                if ((red < 24) && (green < 24) && (blue < 24))
+                    frame.data[i + 3] = 128;
+                if ((red < 8) && (green < 8) && (blue < 8))
+                    frame.data[i + 3] = 0;
+            }
+            ctx.putImageData(frame, 0, 0);
+        }
         diceStreamThrottle(updateCanvas);
     }
 
@@ -139,9 +151,15 @@ function joinDiceRoom(room = window.gameId) {
         window.diceCurrentPeers.push(call);
     })
 
-
-
-    
+    window.diceVideoPeer.off('error').on('error', (event) => {
+        console.error(`Dice Peer Error event caught: ${event.message}`);
+        if(event.message.match(/ID.*is taken/gi)){
+            alert("AboveVTT P2P Dice Stream Error: Your Player ID is already connected to the dice stream. You may have another window open logged into the same player or DM view. Please close the other window and try again.");
+        }
+        $('.stream-dice-button').html("Dice Stream Disabled");
+        $('.stream-dice-button').toggleClass("enabled", false);
+        window.JOINTHEDICESTREAM = false;
+    })    
 }
 function getDiceMedia(){
     let diceRollPanel = $(".dice-rolling-panel__container");

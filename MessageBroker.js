@@ -7,36 +7,34 @@ function clearFrame(){
 }
 const debounceHandleInjected = mydebounce(() => {	
 	const self = window.MB
-	console.log("deciphering");
+
 	let pend_length = self.chat_pending_messages.length;
 	for(let i=0;i<pend_length;i++){	
 		let current=self.chat_pending_messages.shift();
 		
 		let injection_id=current.data?.rolls[0]?.rollType;
 		let injection_data=current.data?.injected_data;
-		console.log(`injection_id = ${injection_id}`);
-		console.log(`injection_data = ${injection_data}`);
-		
+
 		let found=false;
 		$(self.diceMessageSelector).each(function(){
 			if($(this).text()==injection_id){
 				found=true;
 				let li = $(this).closest("li");
-				console.log("TROVATOOOOOOOOOOOOOOOOO");
 				let oldheight=li.height();
 				let newlihtml=self.convertChat(injection_data, current.data.player_name==window.PLAYER_NAME ).html();
 
 				if(newlihtml=="") {
 					li.css("display","none"); // THIS IS TO HIDE DMONLY STUFF
 				} 
-					
 				
 			 	li.html(newlihtml);
-			 	window.JOURNAL.translateHtmlAndBlocks(li);	
-				add_journal_roll_buttons(li);
-				window.JOURNAL.add_journal_tooltip_targets(li);
-				add_stat_block_hover(li)
-				add_aoe_statblock_click(li);
+				if(window.JOURNAL){
+					window.JOURNAL.translateHtmlAndBlocks(li);
+					add_journal_roll_buttons(li);
+					window.JOURNAL.add_journal_tooltip_targets(li);
+					add_stat_block_hover(li)
+					add_aoe_statblock_click(li);
+				}
 				let rollType = current.data.injected_data?.rollType?.toLowerCase();
 				let rollAction = current.data.injected_data?.rollTitle?.toLowerCase();
 				if(rollType != undefined && rollAction != 'initiative' && rollType != "tohit" && rollType != "attack" && rollType != "to hit" && rollType != "save" && rollType != "skill" && rollType != "check" && window.DM){
@@ -65,10 +63,10 @@ const debounceHandleInjected = mydebounce(() => {
 						
 						if(is_gamelog_popout()){
 							tabCommunicationChannel.postMessage({
-		           msgType: 'gamelogDamageButtons',
-		           damage: damage
-		          });
-		          return;
+								msgType: 'gamelogDamageButtons',
+								damage: damage
+							});
+							return;
 						}
 						if($(`.tokenselected:not([data-id*='profile'])`).length == 0){
 							showTempMessage('No non-player tokens selected');
@@ -160,17 +158,26 @@ const debounceHandleInjected = mydebounce(() => {
 	        	});		
 					}
 					else if($(img[i]).is('video')){
-						$(img[i]).magnificPopup({type: 'iframe', closeOnContentClick: true});
-							img[i].addEventListener('loadeddata', function() {
-						    	if(img[i].videoWidth > 0) {
-											$(img[i]).css({
-												'display': 'block',
-												'width': '100%'
-											});
-											li.find('.chat-link').css('display', 'none');
-										}
-										newheight = li.find('>[class*="MessageContainer-Flex"]').height();
-										li.height(newheight);
+						const src = img[i].src;
+						$(img[i]).magnificPopup({
+							type: 'iframe', 
+							closeOnContentClick: true,
+							callbacks: {
+								elementParse: function (item) {
+									item.src = `${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(item.src)}`;
+								}
+							}
+						});
+						img[i].addEventListener('loadeddata', function() {
+							if(img[i].videoWidth > 0) {
+										$(img[i]).css({
+											'display': 'block',
+											'width': '100%'
+										});
+										li.find('.chat-link').css('display', 'none');
+									}
+									newheight = li.find('>[class*="MessageContainer-Flex"]').height();
+									li.height(newheight);
 						}, false);
 					}
 				}
@@ -246,7 +253,7 @@ class MessageBroker {
 		if (callback)
 			this.callbackAboveQueue.push(callback);
 		
-		if (this.loadingAboveWS) {
+		if (this.loadingAboveWS || this.abovews?.readyState == 1) {
 			return;
 		}
 		this.loadingAboveWS=true;
@@ -330,7 +337,7 @@ class MessageBroker {
 			this.callbackQueue.push(callback);
 
 		console.log("LOADING WS: There Are " + this.callbackQueue.length + " elements in the queue");
-		if (this.loadingWS) {
+		if (this.loadingWS || this.ws?.readyState == 1) {
 			console.log("ALREADY LOADING A WS");
 			return;
 		}
@@ -638,7 +645,10 @@ class MessageBroker {
 					});
 				}
 			}
-
+			if (msg.eventType == "custom/myVTT/open-url-embed"){
+				const url = msg.data;
+				display_url_embeded(url);
+			}
 			if (msg.eventType === "custom/myVTT/fetchscene") {
 
 				if(msg.data.sceneid.players){
@@ -1492,7 +1502,7 @@ class MessageBroker {
 						if(combatSettingData['tie_breaker'] !='1'){
 							total = parseInt(total);
 						}
-						console.log("cerco " + entityid);
+
 						
 						$("#tokens .VTTToken").each(
 							function(){
@@ -1549,26 +1559,35 @@ class MessageBroker {
 			if (msg.eventType === "custom/myVTT/diceVideoPeerConnect") {
 				if(msg.data.id != diceplayer_id){
 					let call = window.diceVideoPeer.call(msg.data.id, window.MYMEDIASTREAM)
-          call.on('stream', (stream) => {
-              window.diceVideoConnectedPeers.push(msg.data.id);
-              setDiceRemoteStream(stream, call.peer);   
-              call.on('close', () => {
-                $(`video.remote-dice-video#${call.peer}, #streamer-canvas-${call.peer}`).remove();
-            	})   
-          })
-          window.diceCurrentPeers = window.diceCurrentPeers.filter(d=> d.peer != call.peer)
-          window.diceCurrentPeers.push(call);
+					call.on('stream', (stream) => {
+						window.diceVideoConnectedPeers.push(msg.data.id);
+						setDiceRemoteStream(stream, call.peer);   
+						call.on('close', () => {
+							$(`video.remote-dice-video#${call.peer}, #streamer-canvas-${call.peer}`).remove();
+						})   
+					})
+					window.diceCurrentPeers = window.diceCurrentPeers.filter(d=> d.peer != call.peer)
+					window.diceCurrentPeers.push(call);
 				}
 			}
 
 
 		};
+		if(is_campaign_page()){
+			get_cobalt_token(function (token) {
+				self.loadWS(token);
+			});
 
-		get_cobalt_token(function(token) {
+			self.loadAboveWS();
+			return;
+		}
+
+		get_cobalt_token(function (token) {
 			self.loadWS(token, report_connection);
 		});
 
 		self.loadAboveWS(notify_player_join);
+
 	}
 
 	async handleScene (msg, forceRefresh=false) {
@@ -1601,6 +1620,7 @@ class MessageBroker {
 					conversion: conversion,
 					scale_factor: scaleFactor
 				};
+				check_darkness_value();
 				window.CURRENT_SCENE_DATA.daylight = window.CURRENT_SCENE_DATA.daylight ? window.CURRENT_SCENE_DATA.daylight : `rgba(255, 255, 255, 1)`
 		 		$('#VTT').css('--daylight-color', window.CURRENT_SCENE_DATA.daylight);
 
@@ -1673,6 +1693,7 @@ class MessageBroker {
 				}
 				msg.data.tokens = Object.fromEntries(Object.entries(msg.data.tokens).filter(([_, v]) => v != null));
 				window.CURRENT_SCENE_DATA = msg.data;
+				check_darkness_value();
 				window.CURRENT_SCENE_DATA.daylight = window.CURRENT_SCENE_DATA.daylight ? window.CURRENT_SCENE_DATA.daylight : `rgba(255, 255, 255, 1)`
 		 		$('#VTT').css('--daylight-color', window.CURRENT_SCENE_DATA.daylight);
 				if(window.DM){
@@ -1866,8 +1887,8 @@ class MessageBroker {
 							try{
 								const teleporterTokenId = window.TELEPORTER_PASTE_BUFFER.targetToken
 								const targetPortal = window.TOKEN_OBJECTS[teleporterTokenId];
-								const top = parseInt(targetPortal.options.top)+25;
-								const left = parseInt(targetPortal.options.left)+25;
+								const top = (parseInt(targetPortal.options.top) + 25) * (window.CURRENT_SCENE_DATA.scale_factor / targetPortal.options.scaleCreated);
+								const left = (parseInt(targetPortal.options.left) + 25) * (window.CURRENT_SCENE_DATA.scale_factor / targetPortal.options.scaleCreated);
 								const isTeleporter = true;
 								await paste_selected_tokens(left, top, isTeleporter);
 								window.TOKEN_OBJECTS[teleporterTokenId].highlight();
@@ -1902,7 +1923,7 @@ class MessageBroker {
 						if (window.EncounterHandler !== undefined) {
 							fetch_and_cache_scene_monster_items();
 						}
-						did_update_scenes();
+
 						if (window.reorderState === ItemType.Scene) {
 							enable_draggable_change_folder(ItemType.Scene);
 						}
