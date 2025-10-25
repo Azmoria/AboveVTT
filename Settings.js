@@ -1734,6 +1734,9 @@ async function export_import_scenes_folder_context(folderId){
 			"fpsq": "5",
 			"upsq": "ft",
 			"gridStrokeNumberInput": "0.5",
+			"scale_factor": "",
+			"offsetx": "0",
+			"offsety": "0",
 		}
 		if(currentSceneData['reveals']?.length == 1){
 			const checkerArray = [0,0,0,0,2,0,1];
