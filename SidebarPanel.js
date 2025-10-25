@@ -3242,9 +3242,7 @@ async function list_item_image_flyout(hoverEvent) {
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
     const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
-    const src = imgsrc.startsWith('above-bucket-not-a-url')
-      ? await getAvttStorageUrl(avttSidebarApplyThumbnailPrefix(imgsrc))
-      : imgsrc;
+    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(avttSidebarApplyThumbnailPrefix(imgsrc)) : imgsrc;
     const flyout = $(`<img id='list-item-image-flyout' src="${src}" alt="image preview" />`);
     flyout.css({
       "top": hoverEvent.clientY - 75,
