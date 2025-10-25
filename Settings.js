@@ -1713,9 +1713,49 @@ async function export_import_scenes_folder_context(folderId){
 		let currentSceneData = {
 			...scene.data
 		} 
-		let removeArray = ['scale_check', 'daylightColor', 'undefined', 'isnewscene', 'disableSceneVision', 'snap', 'fog_of_war', 'folderPath', 'id', 'itemType', 'order', 'parentId', 'playlist', 'uuid', 'visionTrail', 'height', 'width']
+		let removeArray = ['scale_check', 'scale', 'darkness_filter_number', 'daylightColor', 'undefined', 'isnewscene', 'disableSceneVision', 'snap', 'fog_of_war', 'folderPath', 'id', 'itemType', 'order', 'parentId', 'playlist', 'uuid', 'visionTrail', 'height', 'width']
 		let removeDdbArray = ['dm_map', 'player_map', 'map', 'thumb', 'dm_map_is_video', 'map', 'player_map_is_video']
 		
+		let removeValues = {
+			'scale': '100',
+			"scaleX": 1,
+			"scaleY": 1,
+			"initial_x": "",
+			"initial_y": "",
+			"weather": "0",
+			"grid_subdivided": "0",
+			"grid_line_width": "0.5",
+			"initial_zoom": "",
+			"daylight": "white",
+			"grid": "0",
+			"grid_color": "rgba(0, 0, 0, 0.5)",
+			"scale_factor": 1,
+			"gridType": "1",	
+			"fpsq": "5",
+			"upsq": "ft",
+			"gridStrokeNumberInput": "0.5",
+		}
+		if(currentSceneData['reveals']?.length == 1){
+			const checkerArray = [0,0,0,0,2,0,1];
+			let isEqual = true;
+			for(let i = 0; i<currentSceneData['reveals'][0].length; i++){
+				if (currentSceneData['reveals'][0][i] != checkerArray[i]){
+					isEqual = false;
+					break;
+				}
+			}
+			if(isEqual){
+				delete currentSceneData['reveals'];
+			}
+
+		}
+
+		for(let i in removeValues){
+			if (currentSceneData[i] == removeValues[i]){
+				delete currentSceneData[i];
+			}
+		}
+
 		for(let i in removeArray){
 			delete currentSceneData[removeArray[i]];
 		}
@@ -1754,7 +1794,9 @@ async function export_import_scenes_folder_context(folderId){
 		else{
 			DataFile[scene.data.uuid] = currentSceneData
 		}
-		
+		if (Object.values(currentSceneData.notes).length == 0){
+			delete currentSceneData.notes
+		}
 	}
 	
 	let folder = window.ScenesHandler.scenes.filter(d => d.id == folderId)[0].title;
