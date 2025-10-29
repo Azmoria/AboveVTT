@@ -2405,7 +2405,8 @@ function init_ui() {
 		if (curDown) {
 			let scrollOptions = {
 				left: window.scrollX + curXPos - m.pageX,
-				top: window.scrollY + curYPos - m.pageY
+				top: window.scrollY + curYPos - m.pageY,
+				behavior: "instant"
 			}
 			requestAnimationFrame(function(){
 				window.scrollTo(scrollOptions)
@@ -2923,7 +2924,7 @@ function init_zoom_buttons() {
 	zoom_section.append(hide_interface);
 
 	$(".avtt-sidebar-controls").append(zoom_section);
-	if (window.DM) {
+	if (window.DM || is_spectator_page()) {
 		zoom_section.css("right","371px");
 	} else {
 		zoom_section.css("right","420px");
