@@ -105,12 +105,12 @@ const debounceHandleInjected = mydebounce(() => {
 				const toSelf = ((current.data.injected_data.whisper == window.PLAYER_NAME || current.data.injected_data.whisper == window.myUser) && current.data.player_name == window.PLAYER_NAME)
 				let output = $(`${current.data.injected_data.whisper == '' ? '' : `<div class='above-vtt-roll-whisper'>To: ${toSelf ? `Self` : current.data.injected_data.whisper}</div>`}<div class='above-vtt-container-roll-output'>${li.find('.abovevtt-roll-container').attr('title')}</div>`);
 				li.find('.abovevtt-roll-container [class*="Result"]').append(output);
+				const aboveSrc = li.find(`[src*='above-bucket'], [href*='above-bucket']`);				
 				
-
 				let img = li.find(".magnify");
-				for(let i=0; i<img.length; i++){
-					if($(img[i]).is('img')){
-						$(img[i]).magnificPopup({type: 'image', closeOnContentClick: true });
+				for (let i = 0; i < img.length; i++) {
+					if ($(img[i]).is('img')) {
+						$(img[i]).magnificPopup({ type: 'image', closeOnContentClick: true });
 						img[i].onload = () => {
 							if (img[i].naturalWidth > 0) {
 								$(img[i]).css({
@@ -124,43 +124,43 @@ const debounceHandleInjected = mydebounce(() => {
 							li.height(newheight);
 						}
 						$(img[i]).off('error').on("error", function (e) {
-	            let el = $(e.target)
-	            let cur = el.attr("data-current-avatar-url");
-	            if(cur != undefined){
-	            	let nextUrl;
-		            if (cur === "largeAvatarUrl") {
-		                nextUrl = el.attr("data-large-avatar-url");
-		                try {
-		                    let parts = nextUrl.split("/");
-		                    parts[parts.length - 2] = "1000";
-		                    parts[parts.length - 3] = "1000";
-		                    nextUrl = parts.join("/");
-		                    el.attr("data-current-avatar-url", "hacky");
-		                } catch (error) {
-		                    console.warn("imageHtml failed to hack the largeAvatarUrl", el, e);
-		                    nextUrl = el.attr("data-avatar-url");
-		                    el.attr("data-current-avatar-url", "avatarUrl");
-		                }
-		            } else if (cur === "hacky") {
-		                nextUrl = el.attr("data-avatar-url");
-		                el.attr("data-current-avatar-url", "avatarUrl");
-		            } else if (cur === "avatarUrl") {
-		                nextUrl = el.attr("data-basic-avatar-url");
-		                el.attr("data-current-avatar-url", "basicAvatarUrl");
-		            } else {
-		                console.warn("imageHtml failed to load image", el, e);
-		                return;
-		            }
-		            console.log("imageHtml failed to load image. Trying nextUrl", nextUrl, el, e);
-		            el.attr("src", nextUrl);
-		            el.attr("href", nextUrl);
-		          }            
-	        	});		
+							let el = $(e.target)
+							let cur = el.attr("data-current-avatar-url");
+							if (cur != undefined) {
+								let nextUrl;
+								if (cur === "largeAvatarUrl") {
+									nextUrl = el.attr("data-large-avatar-url");
+									try {
+										let parts = nextUrl.split("/");
+										parts[parts.length - 2] = "1000";
+										parts[parts.length - 3] = "1000";
+										nextUrl = parts.join("/");
+										el.attr("data-current-avatar-url", "hacky");
+									} catch (error) {
+										console.warn("imageHtml failed to hack the largeAvatarUrl", el, e);
+										nextUrl = el.attr("data-avatar-url");
+										el.attr("data-current-avatar-url", "avatarUrl");
+									}
+								} else if (cur === "hacky") {
+									nextUrl = el.attr("data-avatar-url");
+									el.attr("data-current-avatar-url", "avatarUrl");
+								} else if (cur === "avatarUrl") {
+									nextUrl = el.attr("data-basic-avatar-url");
+									el.attr("data-current-avatar-url", "basicAvatarUrl");
+								} else {
+									console.warn("imageHtml failed to load image", el, e);
+									return;
+								}
+								console.log("imageHtml failed to load image. Trying nextUrl", nextUrl, el, e);
+								el.attr("src", nextUrl);
+								el.attr("href", nextUrl);
+							}
+						});
 					}
-					else if($(img[i]).is('video')){
+					else if ($(img[i]).is('video')) {
 						const src = img[i].src;
 						$(img[i]).magnificPopup({
-							type: 'iframe', 
+							type: 'iframe',
 							closeOnContentClick: true,
 							callbacks: {
 								elementParse: function (item) {
@@ -168,26 +168,26 @@ const debounceHandleInjected = mydebounce(() => {
 								}
 							}
 						});
-						img[i].addEventListener('loadeddata', function() {
-							if(img[i].videoWidth > 0) {
-										$(img[i]).css({
-											'display': 'block',
-											'width': '100%'
-										});
-										li.find('.chat-link').css('display', 'none');
-									}
-									newheight = li.find('>[class*="MessageContainer-Flex"]').height();
-									li.height(newheight);
+						img[i].addEventListener('loadeddata', function () {
+							if (img[i].videoWidth > 0) {
+								$(img[i]).css({
+									'display': 'block',
+									'width': '100%'
+								});
+								li.find('.chat-link').css('display', 'none');
+							}
+							newheight = li.find('>[class*="MessageContainer-Flex"]').height();
+							li.height(newheight);
 						}, false);
 					}
 				}
 				let newheight = li.find('>[class*="MessageContainer-Flex"]').height();
 				li.height(newheight);
-				
+
 
 				// CHECK FOR SELF ROLLS ADD SEND TO EVERYONE BUTTON
 				if ((injection_data.dmonly && window.DM) || toSelf) {
-					
+
 					if (li.find(".gamelog-to-everyone-button").length === 0) {
 						const sendToEveryone = $(`<button class="gamelog-to-everyone-button">Send To Everyone</button>`);
 						sendToEveryone.click(function (clickEvent) {
@@ -197,8 +197,11 @@ const debounceHandleInjected = mydebounce(() => {
 							self.inject_chat(injection_data); // RESEND THE MESSAGE REMOVING THE "injection only"
 						});
 						li.find("time").before(sendToEveryone);
-					 }
+					}
 				}
+				
+
+
 			}
 		});
 		if(!found && $('.ct-game-log-pane, [class*="styles_gameLogPane"]').length>0){
@@ -1856,9 +1859,9 @@ class MessageBroker {
 							$("#scene_map").attr('src', await getGoogleDriveAPILink(data.player_map));
 							$('.import-loading-indicator .percentageLoaded').css('width', `20%`);		
 						}
-						reset_canvas();
-		        		set_default_vttwrapper_size();
-						
+						await reset_canvas();
+		        		await set_default_vttwrapper_size();
+						remove_loading_overlay();
 						console.log("LOADING TOKENS!");
 						
 
@@ -1945,13 +1948,12 @@ class MessageBroker {
 						
 						
 					});
-					
-					remove_loading_overlay();
 				}
 			}
 		}
 		catch (e) {
 			window.MB.loadNextScene();
+			remove_loading_overlay();
 			showError(e);
 		}
 		
@@ -2179,6 +2181,7 @@ class MessageBroker {
 				if(window.TOKEN_OBJECTS[data.id].isCurrentPlayer() || 
 					window.TOKEN_OBJECTS[data.id].options.share_vision == true || 
 					window.TOKEN_OBJECTS[data.id].options.share_vision == window.myUser || 
+					(window.TOKEN_OBJECTS[data.id].options.share_vision && is_spectator_page()) ||
 					window.TOKEN_OBJECTS[data.id].options.player_owned ||
 					(playerTokenId == undefined && window.TOKEN_OBJECTS[data.id].options.itemType == 'pc')){
 						window.TOKEN_OBJECTS[data.id].highlight();
@@ -2202,20 +2205,13 @@ class MessageBroker {
 				window.MB.sendMessage('custom/myVTT/token', options);
 			}, 300);
 			if(t.isPlayer()){
-				const pc = find_pc_by_player_id(data.id, false);
-		    let token = window.TOKEN_OBJECTS[data.id]     
-		    if (token && pc) {
-			      let currentImage = token.options.imgsrc;
-			      token.hp = pc.hitPointInfo.current;
-			      token.options = {
-			        ...token.options,
-			        ...pc,
-			        imgsrc: (token.options.alternativeImages?.length == 0) ? pc.image : currentImage,
-			        id: pc.sheet // pc.id is DDB characterId, but we use the sheet as an id for tokens
-			      };
-				}
+				if (!window.PC_TOKENS_NEEDING_UPDATES.includes(data.id)) {
+					window.PC_TOKENS_NEEDING_UPDATES.push(data.id);
+				}	
+				debounce_pc_token_update();
 			}
 			t.place();
+
 
 			let playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
 			let playerTokenAuraIsLight = (playerTokenId == undefined) ? true : window.TOKEN_OBJECTS[playerTokenId].options.auraislight;
@@ -2280,7 +2276,7 @@ class MessageBroker {
 		}
 	}
 
-	inject_chat(injected_data) {
+	async inject_chat(injected_data) {
 		let msgid = this.chat_id + this.chat_counter++;
 		let data = {
 			player_name: window.PLAYER_NAME,
@@ -2321,7 +2317,9 @@ class MessageBroker {
 			entityId: this.userid, //proviamo a non metterla
 			entityType: injected_data.entityType ? injected_data.entityType : "user", // MOLTO INTERESSANTE. PENSO VENGA USATO PER CAPIRE CHE IMMAGINE METTERCI.
 		};
-
+		if (message.data.injected_data?.img?.startsWith('above-bucket-not-a-url')) {
+			message.data.injected_data.img = await getAvttStorageUrl(message.data.injected_data.img);
+		}
 		if (this.ws.readyState == this.ws.OPEN) {
 			this.ws.send(JSON.stringify(message));
 		}

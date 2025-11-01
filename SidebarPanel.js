@@ -1013,17 +1013,7 @@ function avttTokenRelativePathFromLink(link) {
 
 async function avttTokenFetchFolderListing(relativePath) {
   const targetPath = typeof relativePath === "string" ? relativePath : "";
-  if (typeof avttGetFolderListingCached === "function") {
-    return await avttGetFolderListingCached(targetPath);
-  }
-  if (typeof AVTT_S3 === "undefined") {
-    throw new Error("AVTT_S3 endpoint is not available.");
-  }
-  const response = await fetch(
-    `${AVTT_S3}?user=${window.PATREON_ID}&filename=${encodeURIComponent(targetPath)}&list=true`,
-  );
-  const json = await response.json();
-  return Array.isArray(json?.folderContents) ? json.folderContents : [];
+  return await avttGetFolderListingCached(targetPath);
 }
 
 async function avttTokenCollectAssets(folderRelativePath) {
@@ -1539,6 +1529,49 @@ function matches_full_path(html, fullPath) {
   return html.attr("data-full-path") === encode_full_path(fullPath);
 }
 
+function avttSidebarGetThumbnailPrefix() {
+  if (typeof avttGetThumbnailPrefix === "function") {
+    return avttGetThumbnailPrefix();
+  }
+  const rawId =
+    typeof window !== "undefined" && window && typeof window.PATREON_ID === "string" && window.PATREON_ID
+      ? window.PATREON_ID
+      : "anonymous";
+  const sanitizedId = String(rawId).replace(/[\\/]/g, "_");
+  return `thumbnails_${sanitizedId}/`;
+}
+
+function avttSidebarApplyThumbnailPrefix(path) {
+  if (typeof avttApplyThumbnailPrefixToAboveBucket === "function") {
+    return avttApplyThumbnailPrefixToAboveBucket(path);
+  }
+  if (typeof path !== "string") {
+    return path;
+  }
+  const rewritten = path.replace(/^(above-bucket-not-a-url\/([^/]+)\/)(.*)$/i, (match, bucketPrefix, userSegment, rest) => {
+    const sanitizedUser = String(userSegment || "anonymous").replace(/[\\\/]/g, "_") || "anonymous";
+    const thumbnailFolder = `thumbnails_${sanitizedUser}`;
+    const remaining = rest
+      .replace(/^thumbnails_[^/]*\//i, "")
+      .replace(/^thumbnails\//i, "")
+      .replace(/^\/+/, "");
+    const base = `${bucketPrefix}${thumbnailFolder}`;
+    return remaining ? `${base}/${remaining}` : `${base}/`;
+  });
+  if (rewritten !== path) {
+    return rewritten;
+  }
+  const thumbnailPrefix = avttSidebarGetThumbnailPrefix();
+  return path.replace(/^(above-bucket-not-a-url\/.*?\/)(.*)$/i, (match, bucketPrefix, rest) => {
+    const remaining = rest
+      .replace(/^thumbnails_[^/]*\//i, "")
+      .replace(/^thumbnails\//i, "")
+      .replace(/^\/+/, "");
+    const base = `${bucketPrefix}${thumbnailPrefix}`.replace(/\/+$/, "");
+    return remaining ? `${base}/${remaining}` : `${base}/`;
+  });
+}
+
 /**
  * @param listItem {SidebarListItem} the list item that this row will represent
  * @returns {*|jQuery|HTMLElement} that represents a row in the list of items in the sidebar
@@ -1564,7 +1597,7 @@ function build_sidebar_list_row(listItem) {
     let video = false;
     let isAvttBucketFile = listingImage.startsWith('above-bucket-not-a-url');
     if (isAvttBucketFile) {
-      listingImage = listingImage.replace(/^(above-bucket-not-a-url\/.*?\/)(.*)/gi, '$1thumbnails/$2')
+      listingImage = avttSidebarApplyThumbnailPrefix(listingImage);
     }
     if(listingImage?.includes != undefined && listingImage.includes('folder.svg')){
     img = $(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 309.267 309.267" style="enable-background:new 0 0 309.267 309.267;" xml:space="preserve">
@@ -3210,7 +3243,7 @@ async function list_item_image_flyout(hoverEvent) {
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
     const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
-    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(imgsrc) : imgsrc;
+    const src = imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(avttSidebarApplyThumbnailPrefix(imgsrc)) : imgsrc;
     const flyout = $(`<img id='list-item-image-flyout' src="${src}" alt="image preview" />`);
     flyout.css({
       "top": hoverEvent.clientY - 75,
@@ -3286,11 +3319,19 @@ function add_expand_collapse_buttons_to_header(sidebarPanel, addHideButton=false
 
   let expandAll = $(`<button class="token-row-button expand-collapse-button" title="Expand All Folders" style=""><span class="material-icons">expand</span></button>`);
   expandAll.on("click", function (clickEvent) {
-    $(clickEvent.target).closest(".sidebar-panel-content").find(".sidebar-panel-body .folder:not(.not-collapsible)").removeClass("collapsed");
+    const panel = $(clickEvent.target).closest(".sidebar-panel-content")
+    panel.find(".sidebar-panel-body .folder:not(.not-collapsible)").removeClass("collapsed");
+    const panelId = panel.attr('id'); 
+    const options = panelId.includes('tokens') ? { token: false } : panelId.includes('scenes') ? { scene: false } : {};
+    persist_folders_remembered_state(options);
   });
   let collapseAll = $(`<button class="token-row-button expand-collapse-button" title="Collapse All Folders" style=""><span class="material-icons">vertical_align_center</span></button>`);
   collapseAll.on("click", function (clickEvent) {
-    $(clickEvent.target).closest(".sidebar-panel-content").find(".sidebar-panel-body .folder:not(.not-collapsible)").addClass("collapsed");
+    const panel = $(clickEvent.target).closest(".sidebar-panel-content")
+    panel.find(".sidebar-panel-body .folder:not(.not-collapsible)").addClass("collapsed");
+    const panelId = panel.attr('id');
+    const options = panelId.includes('tokens') ? { token: true } : panelId.includes('scenes') ? { scene: true } : {};
+    persist_folders_remembered_state(options);
   });
   let buttonWrapper = $("<div class='expand-collapse-wrapper'></div>");
   sidebarPanel.header.find(".sidebar-panel-header-title").append(buttonWrapper);

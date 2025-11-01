@@ -80,7 +80,7 @@ async function openCampaignDB(startUp = function () { }) {
   };
 
 
-  const DBOpenRequest2 = indexedDB.open(`AboveVTT-Global`, 3);
+  const DBOpenRequest2 = indexedDB.open(`AboveVTT-Global`, 5);
 
   DBOpenRequest2.onsuccess = (e) => {
     window.globalIndexedDB = DBOpenRequest2.result;
@@ -97,8 +97,8 @@ async function openCampaignDB(startUp = function () { }) {
     if (!db.objectStoreNames?.contains('journalData')) {
       const objectStore2 = db.createObjectStore("journalData", { keyPath: "journalId" });
     }
-    if (!db.objectStoreNames?.contains('avttFilePicker')) {
-      const objectStore3 = db.createObjectStore("avttFilePicker", { keyPath: "fileEntry" });
+    if (db.objectStoreNames?.contains('avttFilePicker')){
+      db.deleteObjectStore('avttFilePicker');
     }
   };
 }
@@ -117,12 +117,35 @@ function inject_instructions() {
   // SCB: Append our logo
   contentDiv.append(`<img class='above-vtt-logo above-vtt-right-margin-5px' width='120px' src='${window.EXTENSION_PATH}assets/logo.png' alt="above vtt logo" />`);
 
-  let instructionsButton = $("<a class='above-vtt-campaignscreen-white-button above-vtt-right-margin-5px instructions btn modal-link ddb-campaigns-detail-body-listing-campaign-link'>Instructions</a>");
+  let instructionsButton = $("<a style='padding:10px 5px;' class='above-vtt-campaignscreen-white-button above-vtt-right-margin-5px instructions btn modal-link ddb-campaigns-detail-body-listing-campaign-link'>Instructions</a>");
   contentDiv.append(instructionsButton);
   instructionsButton.click(function(e) {
     $("#campaign_banner").toggle();
   });
+  let spectatorJoinButton = $("<a style='padding:10px 25px;' class='above-vtt-campaignscreen-blue-button above-vtt-right-margin-5px button joinspectator btn modal-link ddb-campaigns-detail-body-listing-campaign-link'>Spectate</a>");
+  contentDiv.append(spectatorJoinButton);
+  spectatorJoinButton.click(function (e) {
+    e.preventDefault();
+    $(e.currentTarget).addClass("button-loading");
 
+    try {
+      window.open(`${window.document.location.href}?abovevtt=true&spectator=true`, '_blank');
+      // pop up blockers can prevent us from opening in a new tab. Tell our users in case this happens to them
+      let oldText = $(".joinspectator").text();
+      $(".joinspectator").removeClass("button-loading");
+      $(".joinspectator").text("Check for blocked pop ups!");
+      // reset our join button text, so it looks normal the next time they're on this tab
+      setTimeout(function () {
+        $(".joinspectator").text(oldText);
+      }, 2000);
+    }
+    catch (error) {
+      showError(error, "Failed to start AboveVTT from spectate join button");
+    }
+
+
+    $(e.currentTarget).removeClass("button-loading");
+  });
   const campaign_banner = $("<div id='campaign_banner'></div>");
   campaign_banner.append(`
     <h4><img class='above-vtt-right-margin-5px' alt='above vtt logo' width='100px' src='${window.EXTENSION_PATH}assets/logo.png'>Basic Instructions!</h4>
@@ -185,7 +208,7 @@ function inject_dm_join_button() {
     </div>
   `);
 
-  let dmJoinButton = $("<a class='above-vtt-campaignscreen-blue-button above-vtt-right-margin-5px button joindm btn modal-link ddb-campaigns-detail-body-listing-campaign-link'>JOIN AS DM</a>");
+  let dmJoinButton = $("<a style='padding:10px 25px;' class='above-vtt-campaignscreen-blue-button above-vtt-right-margin-5px button joindm btn modal-link ddb-campaigns-detail-body-listing-campaign-link'>Join as DM</a>");
   $(".above-vtt-content-div").append(dmJoinButton);
   dmJoinButton.click(function(e) {
     e.preventDefault();

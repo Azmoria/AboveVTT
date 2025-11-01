@@ -746,9 +746,9 @@ function check_single_token_visibility(id){
 	const tokenObjectValues = Object.values(window.TOKEN_OBJECTS);
 	const aPlayerToken = tokenObjectValues.some(d => d.options.id.startsWith('/profile'));
 	const playerTokenWithVisionEnabled = aPlayerToken == true && (window.TOKEN_OBJECTS[playerTokenId]?.options?.auraislight === true || (playerTokenId === undefined && tokenObjectValues.some(d => d.options.id.startsWith('/profile') && d.options.auraislight == true)));
-	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser) && d.options.auraislight == true);
+	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser || (d.options.share_vision != false && is_spectator_page())) && d.options.auraislight == true);
 
-	if ((((playerTokenId === undefined && playerTokenWithVisionEnabled) || sharedVisionToken) && (window.walls.length > 4 || window.CURRENT_SCENE_DATA.darkness_filter > 0)) || (playerTokenId !== undefined && window.TOKEN_OBJECTS[playerTokenId].options.auraislight === true))
+	if ((((playerTokenId === undefined && playerTokenWithVisionEnabled) || sharedVisionToken) && (window.walls?.length > 4 || window.CURRENT_SCENE_DATA.darkness_filter > 0)) || (playerTokenId !== undefined && window.TOKEN_OBJECTS[playerTokenId].options.auraislight === true))
 		playerTokenHasVision = true
 	else
 		playerTokenHasVision = false;
@@ -775,7 +775,7 @@ function check_single_token_visibility(id){
 
 	const isSelected = window.CURRENTLY_SELECTED_TOKENS.includes(id);
 
-	const sharedVision = (playerTokenId == id || window.TOKEN_OBJECTS[id].options.share_vision == true || window.TOKEN_OBJECTS[id].options.share_vision == window.myUser);
+	const sharedVision = (playerTokenId == id || window.TOKEN_OBJECTS[id].options.share_vision == true || window.TOKEN_OBJECTS[id].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[id].options.share_vision && is_spectator_page()));
 
 	const hideThisTokenInFogOrDarkness = (window.TOKEN_OBJECTS[id].options.revealInFog !== true); //we want to hide this token in fog or darkness
 
@@ -871,7 +871,7 @@ function do_check_token_visibility() {
 	const tokenObjectValues = Object.values(window.TOKEN_OBJECTS);
 	const aPlayerToken = tokenObjectValues.some(d => d.options.id.startsWith('/profile'));
 	const playerTokenWithVisionEnabled = aPlayerToken == true && (window.TOKEN_OBJECTS[playerTokenId]?.options?.auraislight === true || (playerTokenId === undefined && tokenObjectValues.some(d => d.options.id.startsWith('/profile') && d.options.auraislight == true)));
-	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser) && d.options.auraislight == true);
+	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser || (d.options.share_vision != false && is_spectator_page())) && d.options.auraislight == true);
 
 
 
@@ -1444,7 +1444,7 @@ function check_darkness_value(){
 		  	let tokenId = $(selectedTokens[j]).attr('data-id');
 			if (window.TOKEN_OBJECTS[tokenId] == undefined)
 				continue;
-			if(tokenId.includes(window.PLAYER_ID) || window.DM || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (playerTokenId == undefined && window.TOKEN_OBJECTS[tokenId].options.itemType == 'pc')){
+			if (tokenId.includes(window.PLAYER_ID) || window.DM || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[tokenId].options.share_vision && is_spectator_page()) || (playerTokenId == undefined && window.TOKEN_OBJECTS[tokenId].options.itemType == 'pc')){
 				tokenHasSharedVision = true;
 				break;
 			}
@@ -2136,6 +2136,9 @@ function redraw_light_walls(clear=true, editingWallPoints = false){
 		if(lineWidth == undefined || lineWidth == null){
 			lineWidth = 6;
 		}
+		wallBottom = wallBottom == null ? "" : wallBottom;
+		wallTop = wallTop == null ? "" : wallTop;
+
 		let currentSceneScale = window.CURRENT_SCENE_DATA.scale_factor ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor) : 1;
 		let currentSceneConversion = window.CURRENT_SCENE_DATA.conversion ? parseFloat(window.CURRENT_SCENE_DATA.conversion) : 1;
 
@@ -3494,14 +3497,15 @@ function drawing_mousemove(e) {
  * @returns
  */
 function drawing_mouseup(e) {
-
+	// ignore this if we're dragging a token
+	if ($(".ui-draggable-dragging:not([data-clone-id])").length > 0) {
+		$(".ui-draggable-dragging:not([data-clone-id])").toggleClass('.ui-draggable-dragging', false);
+		return
+	}
 
 	if(!window.MOUSEDOWN || (window.DRAWFUNCTION === "select" && e.touches != undefined))
 		return;
-	// ignore this if we're dragging a token
-	if ($(".ui-draggable-dragging:not([data-clone-id])").length > 0){
-		return
-	}
+
 	if (window.DRAWSHAPE == "3pointRect" || ((shiftHeld || (!e.touches && e.button != 0))  && ((window.DRAWFUNCTION == "wall" && window.DRAWSHAPE != 'rect')|| window.DRAWFUNCTION == "wall-door" || window.DRAWFUNCTION == 'wall-window'))){
 		return;
 	}
@@ -6704,9 +6708,7 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 				const recordLightFurtherThanNeed = Math.abs(recordLight - dist) > diffNeedForTerrainWalls;
 				const recordNoDarknessFurtherThanNeed = Math.abs(recordNoDarkness - dist) > diffNeedForTerrainWalls;
 				const recordMoveFurtherThanNeed = Math.abs(recordMove - dist) > diffNeedForTerrainWalls;
-				if (walls[j].terrainWall && closestLight && Vector.sqDist(pt, closestLight)<diffNeedForTerrainWalls){
-					continue;
-				}
+
 				
 
 				if (dist < recordLight && !notBlockVision.includes(walls[j].c)) {
@@ -7033,7 +7035,11 @@ function redraw_light(darknessMoved = false){
 	if(window.PARTICLE == undefined){
 		initParticle(new Vector(200, 200), 1);
 	}
-	
+	if(window.offScreenCombine == undefined){
+		window.offScreenCombine = new OffscreenCanvas(canvasWidth, canvasHeight);
+	}
+	const combineCtx = window.offScreenCombine.getContext("2d");
+
 	const offscreenCanvasMask = window.offscreenCanvasMask;
 	const offscreenContext = window.offscreenContext;
     
@@ -7147,7 +7153,7 @@ function redraw_light(darknessMoved = false){
 		for (let j = 0; j < selectedTokens.length; j++) {
 			let tokenId = $(selectedTokens[j]).attr('data-id');
 
-			if (tokenId.includes(window.PLAYER_ID) || window.DM || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (playerTokenId == undefined && window.TOKEN_OBJECTS[tokenId].options.itemType == 'pc'))
+			if (tokenId.includes(window.PLAYER_ID) || window.DM || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[tokenId].options.share_vision && is_spectator_page()) || (playerTokenId == undefined && window.TOKEN_OBJECTS[tokenId].options.itemType == 'pc'))
 				selectedIds.push(tokenId)
 		}
 	}
@@ -7256,9 +7262,14 @@ function redraw_light(darknessMoved = false){
 
 
 		if (window.lightAuraClipPolygon[auraId]?.light !== undefined) {
-			lightInLosContext.globalCompositeOperation = 'lighten';
-			drawCircle(lightInLosContext, window.lightAuraClipPolygon[auraId].middle.x, window.lightAuraClipPolygon[auraId].middle.y, window.lightAuraClipPolygon[auraId].light2.range, window.lightAuraClipPolygon[auraId].light2.color)
-			drawCircle(lightInLosContext, window.lightAuraClipPolygon[auraId].middle.x, window.lightAuraClipPolygon[auraId].middle.y, window.lightAuraClipPolygon[auraId].light1.range, window.lightAuraClipPolygon[auraId].light1.color)
+			combineCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+			combineCtx.globalCompositeOperation = 'lighten';
+			drawCircle(combineCtx, window.lightAuraClipPolygon[auraId].middle.x, window.lightAuraClipPolygon[auraId].middle.y, window.lightAuraClipPolygon[auraId].light2.range, window.lightAuraClipPolygon[auraId].light2.color)
+			drawCircle(combineCtx, window.lightAuraClipPolygon[auraId].middle.x, window.lightAuraClipPolygon[auraId].middle.y, window.lightAuraClipPolygon[auraId].light1.range, window.lightAuraClipPolygon[auraId].light1.color)
+			combineCtx.globalCompositeOperation = "destination-in";
+			drawPolygon(combineCtx, window.lineOfSightPolygons[auraId].polygon, "#FFF", true, 0, null, null, undefined, true, true);
+			lightInLosContext.globalCompositeOperation = "lighten";
+			lightInLosContext.drawImage(offScreenCombine, 0, 0);
 		}
 
 		if (selectedIds.length === 0 || found || (window.SelectedTokenVision !== true && !window.DM)) {
@@ -7317,7 +7328,7 @@ function redraw_light(darknessMoved = false){
 	const tokenObjectValues = Object.values(window.TOKEN_OBJECTS);
 	const aPlayerTokenExists = tokenObjectValues.some(d => d.options.id.startsWith('/profile'))
 	const playerTokenWithVisionEnabled = window.TOKEN_OBJECTS[playerTokenId]?.options?.auraislight === true || (playerTokenId === undefined && tokenObjectValues.some(d => d.options.id.startsWith('/profile') && d.options.auraislight == true));
-	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser) && d.options.auraislight == true);
+	const sharedVisionToken = tokenObjectValues.some(d => d.options.share_vision !== undefined && (d.options.share_vision === true || d.options.share_vision == window.myUser || (d.options.share_vision && is_spectator_page())) && d.options.auraislight == true);
 
 	if (aPlayerTokenExists && playerTokenWithVisionEnabled === false && sharedVisionToken === false) {
 		offscreenContext.globalCompositeOperation = "lighten";
@@ -7731,7 +7742,7 @@ function clipped_light(auraId, maskPolygon, playerTokenId, canvasWidth = getScen
 
 	if(lightRadius > darkvisionRadius)
 		circleRadius = lightRadius;
-	else if(selectedTokenCheck === true && (window.DM === true || window.TOKEN_OBJECTS[auraId].options.share_vision === true || window.TOKEN_OBJECTS[auraId].options.share_vision == window.myUser || auraId.includes(window.PLAYER_ID) || (window.TOKEN_OBJECTS[auraId].options.itemType === 'pc' && playerTokenId === undefined)))
+	else if (selectedTokenCheck === true && (window.DM === true || window.TOKEN_OBJECTS[auraId].options.share_vision === true || window.TOKEN_OBJECTS[auraId].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[auraId].options.share_vision && is_spectator_page()) || auraId.includes(window.PLAYER_ID) || (window.TOKEN_OBJECTS[auraId].options.itemType === 'pc' && playerTokenId === undefined)))
 		circleRadius = darkvisionRadius;
 	else if(lightRadius > 0)
 		circleRadius = lightRadius;

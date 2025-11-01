@@ -787,7 +787,13 @@ function update_carousel_combat_tracker(){
 	    }
 
 	    table.find(`tr[data-target='${firstTokenId}']`).toggleClass('first-in-round', true);
+		const images = table.find(`tr td:first-of-type img[data-id^='above-bucket-not-a-url']`);
 
+		for(let image of images){
+			image = $(image);
+			const imageId = image.attr('data-id');
+			updateImgSrc(imageId, image, image.is('video'), true)
+		}
 
 
 	    if(window.DM){
@@ -809,6 +815,8 @@ function update_carousel_combat_tracker(){
 	    	
 	    }
     }
+
+
 
     
 }
@@ -1087,8 +1095,8 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 	else{
 		img = $("<img width=35 height=35 class='Avatar_AvatarPortrait__2dP8u'>");
 	}
-
-	updateImgSrc(token.options.imgsrc, img, video);
+	img.attr('data-id', token.options.imgsrc);
+	updateImgSrc(token.options.imgsrc, img, video, true, update_carousel_combat_tracker);
 	img.css('border','3px solid '+token.options.color);
 	if (token.options.hidden == true){
 		img.css('opacity','0.5');
@@ -1466,8 +1474,9 @@ function ct_current_turn() {
 function ct_persist(){
 	let data= [];
 	$('#combat_area tr').each( function () {			
-			let optionsClone = $.extend(true, {}, window.all_token_objects[$(this).attr("data-target")].options);
-			optionsClone.alternativeImages = [];
+		let optionsClone = $.extend(true, {}, window.all_token_objects[$(this).attr("data-target")].options);
+		optionsClone.alternativeImages = [];
+		optionsClone.ct_show = $(this).find('.hideFromPlayerCombatButton svg.closedEye[style*="block"]').length == 0;
 
 	  	data.push( {
 			'data-target': $(this).attr("data-target"),
@@ -1571,7 +1580,7 @@ function ct_load(data=null){
 				window.all_token_objects[data[i]['data-target']].options = data[i]['options'];
 				window.all_token_objects[data[i]['data-target']].options.alternativeImages = currAltImage;
 				
-				if(window.all_token_objects[data[i]['data-target']].options.ct_show == true || (window.DM && window.all_token_objects[data[i]['data-target']].options.ct_show !== undefined))
+				if(data[i].options.ct_show == true || (window.DM && window.all_token_objects[data[i]['data-target']].options.ct_show !== undefined))
 				{
 
 					ct_add_token(window.all_token_objects[data[i]['data-target']],false,true);
