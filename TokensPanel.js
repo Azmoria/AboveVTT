@@ -2531,7 +2531,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         $('#token-configuration-modal .token-image-modal-remove-all-button').show();
         inputWrapper.find(".token-image-modal-url-label-add-wrapper > .token-image-modal-url-label-wrapper > .token-image-modal-footer-title").text(determineLabelText());
     };
-
+    window.currentAddImageUrl = addImageUrl;
     // MyToken name input handler
     const rename = async function(newName) {
         if (newName !== undefined && newName.length > 0) {

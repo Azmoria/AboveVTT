@@ -5772,8 +5772,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         childWindow.close();
     }, 2000)
   })
-
-  selectFile.addEventListener("click", (event) => {
+  const filePickerGetSelectPath = function () {
     const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
 
     if (selectedCheckboxes.length === 0) {
@@ -5813,7 +5812,11 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     if (paths.length === 0) {
       return;
     }
-
+    return paths;
+  }
+  window.getAvttFilePickerPaths = filePickerGetSelectPath;
+  selectFile.addEventListener("click", (event) => {
+    const paths = filePickerGetSelectPath();
     selectFunction(paths);
     draggableWindow.find(".title_bar_close_button").click();
   });
@@ -7182,20 +7185,22 @@ function refreshFiles(
                   left: (ui.position.left - (size / 2)),
                   top: (ui.position.top - (size / 2))
                 };
-
-
- 
-
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
-              } else if (closestFolder.length == 0) {
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+              } else if (droppedOn.closest('#myTokensFolder').length > 0 || droppedOn.closest('#scenes-panel').length > 0)  {
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                closestFolder.toggleClass('avtt-drop-target', true);
+              }
+              else if (closestFolder.length == 0) {
                 $(ui.helper).css("opacity", 1);
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
-              } else { 
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+              } 
+             else { 
                 $(ui.helper).css({
                   width: ``,
                   height: ``
                 });
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
                 if ($(this).attr('data-path') == closestFolder.attr('data-path'))
                   return;
                 closestFolder.toggleClass('avtt-drop-target', true); 
@@ -7204,14 +7209,42 @@ function refreshFiles(
             stop: function (event, ui) {
               avttHandleDragEnd(event);
               let droppedOn = $(document.elementFromPoint(event.clientX, event.clientY));
-              const closestFolder = droppedOn.closest('[data-is-folder="true"]');
+              const closestFilePickerFolder = droppedOn.closest('[data-is-folder="true"]');
               if(droppedOn.closest('#VTT').length>0){
                 avttHandleMapDrop(event, listItemArray)
-              } else if (closestFolder.length > 0){
-                if ($(this).attr('data-path') == closestFolder.attr('data-path'))
+              } else if (closestFilePickerFolder.length > 0){
+                if ($(this).attr('data-path') == closestFilePickerFolder.attr('data-path'))
                   return;
                 avttDragItems = draggedItems;
-                avttHandleFolderDrop(event, closestFolder.attr('data-path'));
+                avttHandleFolderDrop(event, closestFilePickerFolder.attr('data-path'));
+              }
+              else if (droppedOn.closest('#myTokensFolder').length>0){
+                const paths = window.getAvttFilePickerPaths();
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                let folder = find_sidebar_list_item(closestFolder);
+                importAvttTokens(paths, folder);
+              }
+              else if (droppedOn.closest('#scenes-panel').length > 0) {
+                const paths = window.getAvttFilePickerPaths();
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                if(closestFolder){
+                  let folder = find_sidebar_list_item(closestFolder);
+                  let fullPath = harvest_full_path(closestFolder);
+                  try {
+                    importAvttSelections(paths, folder.id, fullPath);
+                  } catch (error) {
+                    console.error("Failed to import from AVTT File Picker selection", error);
+                    alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+                  }
+                }
+                else{
+                  try {
+                    importAvttSelections(paths, RootFolder.Scenes.id, RootFolder.Scenes.path);
+                  } catch (error) {
+                    console.error("Failed to import from AVTT File Picker selection", error);
+                    alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+                  }
+                }
               }
             },
           })
