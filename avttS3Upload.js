@@ -3717,6 +3717,7 @@ function avttHandleDragStart(event, entry) {
 function avttHandleDragEnd() {
   const rows = $("#file-listing tr.avtt-file-row");
   rows.toggleClass("avtt-dragging avtt-drop-target", false);
+  $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
   avttDragItems = null;
   avttApplyClipboardHighlights();
 }
@@ -7189,7 +7190,10 @@ function refreshFiles(
               } else if (droppedOn.closest('#myTokensFolder').length > 0 || droppedOn.closest('#scenes-panel').length > 0)  {
                 const closestFolder = droppedOn.closest('.folder.list-item-identifier')
                 $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
-                closestFolder.toggleClass('avtt-drop-target', true);
+                if (closestFolder.is('#scenesFolder') || droppedOn.is('.sidebar-panel-body'))
+                  droppedOn.closest('.sidebar-panel-body').toggleClass('avtt-drop-target', true);
+                else
+                  closestFolder.toggleClass('avtt-drop-target', true);
               }
               else if (closestFolder.length == 0) {
                 $(ui.helper).css("opacity", 1);
@@ -7222,16 +7226,16 @@ function refreshFiles(
                 const paths = window.getAvttFilePickerPaths();
                 const closestFolder = droppedOn.closest('.folder.list-item-identifier')
                 let folder = find_sidebar_list_item(closestFolder);
-                importAvttTokens(paths, folder);
+                importAvttTokens(paths, folder);             
               }
               else if (droppedOn.closest('#scenes-panel').length > 0) {
                 const paths = window.getAvttFilePickerPaths();
                 const closestFolder = droppedOn.closest('.folder.list-item-identifier')
                 if(closestFolder){
-                  let folder = find_sidebar_list_item(closestFolder);
+                  let folderId = closestFolder.attr('data-id');
                   let fullPath = harvest_full_path(closestFolder);
                   try {
-                    importAvttSelections(paths, folder.id, fullPath);
+                    importAvttSelections(paths, folderId, fullPath);
                   } catch (error) {
                     console.error("Failed to import from AVTT File Picker selection", error);
                     alert(error?.message || "Failed to import selection from AVTT. See console for details.");

@@ -14125,7 +14125,8 @@ button#displayedDiceFormulaExit:hover {
 
 }
 
-.list-item-identifier.folder.avtt-drop-target:after {
+.list-item-identifier.folder.avtt-drop-target:after,
+.sidebar-panel-body.avtt-drop-target:after {
     content: '';
     position: absolute;
     top: 0px;
