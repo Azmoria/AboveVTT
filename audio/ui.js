@@ -208,7 +208,7 @@ async function importAvttAudioSelections(links) {
 
     $('body>.import-loading-indicator').remove();
 }
-
+window.importAvttAudioSelections = importAvttAudioSelections;
 /**
  *
  * @returns {HTMLDivElement}

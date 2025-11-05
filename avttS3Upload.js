@@ -7195,6 +7195,16 @@ function refreshFiles(
                 else
                   closestFolder.toggleClass('avtt-drop-target', true);
               }
+              else if (droppedOn.closest('#sounds-panel').length > 0) {
+                const trackList = droppedOn.closest('#sounds-panel #track-list');
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                trackList.toggleClass('avtt-drop-target', true)
+              } 
+              else if (droppedOn.closest('#token-configuration-modal .sidebar-panel-body').length>0){
+                const imageModal = droppedOn.closest('#token-configuration-modal .sidebar-panel-body');
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                imageModal.toggleClass('avtt-drop-target', true)
+              }
               else if (closestFolder.length == 0) {
                 $(ui.helper).css("opacity", 1);
                 $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
@@ -7249,6 +7259,16 @@ function refreshFiles(
                     alert(error?.message || "Failed to import selection from AVTT. See console for details.");
                   }
                 }
+              }
+              else if (droppedOn.closest('#sounds-panel').length > 0){
+                const paths = window.getAvttFilePickerPaths();
+                window.importAvttAudioSelections(paths)  
+              }
+              else if (droppedOn.closest('#token-configuration-modal .sidebar-panel-body').length > 0) {
+                const paths = window.getAvttFilePickerPaths();
+                for (let i = 0; i < paths.length; i++) {
+                  window.currentAddImageUrl(paths[i].link)
+                } 
               }
             },
           })
