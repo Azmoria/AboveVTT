@@ -40,7 +40,12 @@ const availableToAoe = [
 
 
 
-const throttleLight = throttle((darknessMoved = false) => {requestAnimationFrame(()=>{redraw_light(darknessMoved)})}, 1000/30);
+const throttleLight = throttle((darknessMoved = false) => {
+	if (!window.walls || window.walls?.length < 5) {
+		redraw_light_walls();
+	} 
+	requestAnimationFrame(()=>{redraw_light(darknessMoved)})
+}, 1000/30);
 const throttleTokenCheck = mydebounce(throttle(do_check_token_visibility, 1000/4), 20);
 const debounceStoreExplored = mydebounce((exploredCanvas, sceneId) => {		
 	let dataURI = exploredCanvas.toDataURL('image/jpg')
@@ -58,7 +63,7 @@ const debounceStoreExplored = mydebounce((exploredCanvas, sceneId) => {
 var debounceLightChecks = mydebounce((darknessMoved = false) => {		
 		if(window.DRAGGING)
 			return;
-		if(window.walls?.length < 5){
+	if (!window.walls || window.walls?.length < 5){
 			redraw_light_walls();	
 		}
 		
@@ -79,7 +84,7 @@ var debounceAudioChecks = mydebounce(() => {
 var longDebounceLightChecks = mydebounce((darknessMoved = false) => {		
 		if(window.DRAGGING)
 			return;
-		if(window.walls?.length < 5){
+		if (!window.walls || window.walls?.length < 5){
 			redraw_light_walls();	
 		}
 		//let promise = [new Promise (_ => setTimeout(redraw_light(), 1000))];
@@ -3405,10 +3410,7 @@ class Token {
 									tokenY = offsetTop + parseInt(curr.orig_top);
 									
 
-									$(tok).css('left', tokenX + "px");
-									$(tok).css('top', tokenY + "px");
-									curr.options.left =  tokenX + "px";
-									curr.options.top = tokenY+"px";
+								
 									if(!window.DM && window.playerTokenAuraIsLight){
 										const left = (tokenX + (parseFloat(curr.sizeWidth()) / 2)) / parseFloat(window.CURRENT_SCENE_DATA.scale_factor);
 										const top = (tokenY + (parseFloat(curr.sizeWidth()) / 2)) / parseFloat(window.CURRENT_SCENE_DATA.scale_factor);
@@ -3437,13 +3439,15 @@ class Token {
 										}
 										else{
 											window.oldTokenPosition[curr.options.id] = (window.oldTokenPosition[curr.options.id] != undefined) ? window.oldTokenPosition[curr.options.id] : {left: parseInt(curr.orig_left), top: parseInt(curr.orig_top)};
-										
-											$(tok).css('left', window.oldTokenPosition[curr.options.id].left + "px");
-											$(tok).css('top', window.oldTokenPosition[curr.options.id].top + "px");
+											tokenX = window.oldTokenPosition[curr.options.id].left;
+											tokenY = window.oldTokenPosition[curr.options.id].top;
 										}
 									}
 									
-						
+									$(tok).css('left', tokenX + "px");
+									$(tok).css('top', tokenY + "px");
+									curr.options.left = tokenX + "px";
+									curr.options.top = tokenY + "px";
 														
 									//curr.options.top=(parseInt(curr.orig_top)+offsetTop)+"px";
 									//curr.place();
@@ -4391,7 +4395,7 @@ function checkAudioVolume(){
 
 function setAudioAura (token, options){
 		
-		const auraRadius = parseFloat(options.audioChannel.range) / parseInt(window.CURRENT_SCENE_DATA.fpsq) * window.CURRENT_SCENE_DATA.hpps;
+	const auraRadius = parseFloat(options.audioChannel.range) / parseFloat(window.CURRENT_SCENE_DATA.fpsq) * window.CURRENT_SCENE_DATA.hpps;
 		const auraBg = `radial-gradient(transparent ${auraRadius+(parseInt(options.size)/2)-4}px, #fff ${auraRadius+(parseInt(options.size)/2)-4}px ${auraRadius+(parseInt(options.size)/2)}px);`;
 		const totalSize = parseInt(options.size) + (2 * auraRadius);
 		const absPosOffset = (options.size - totalSize) / 2;
@@ -4410,8 +4414,8 @@ function setAudioAura (token, options){
 function setTokenAuras (token, options) {
 	if (!options.aura1 || options.id.includes('exampleToken')) return;
 
-	const innerAuraSize = options.aura1.feet.length > 0 ? (options.aura1.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const outerAuraSize = options.aura2.feet.length > 0 ? (options.aura2.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const innerAuraSize = options.aura1.feet.length > 0 ? (options.aura1.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const outerAuraSize = options.aura2.feet.length > 0 ? (options.aura2.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
 	if ((innerAuraSize > 0 || outerAuraSize > 0) && options.auraVisible) {
 		// use sizeWidth and sizeHeight???
 		
@@ -4507,9 +4511,9 @@ function setTokenLight (token, options) {
 		token.parent().parent().find(`.aura-element-container-clip[id='${options.id}']`).remove();
 		return;
 	} 
-	const innerlightSize = options.light1.feet != undefined? (options.light1.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const outerlightSize = options.light2.feet != undefined ? (options.light2.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const visionSize = options.vision.feet != undefined ? (options.vision.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const innerlightSize = options.light1.feet != undefined ? (options.light1.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const outerlightSize = options.light2.feet != undefined ? (options.light2.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const visionSize = options.vision.feet != undefined ? (options.vision.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
 	const tokenId = options.id.replaceAll("/", "").replaceAll('.', '');
 	if (options.auraislight) {
 
