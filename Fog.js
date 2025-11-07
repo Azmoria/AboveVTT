@@ -6438,8 +6438,8 @@ Ray.prototype.cast = function(boundary) {
 					  
 		  	if(d < boundary.radius && Vector.sqDist(this.pos, boundary.a) > boundary.radius**2){
 		  		
-		  		 p2.x = this.pos.x + u1.x - m*this.dir.x;
-				 p2.y = this.pos.y + u1.y - m*this.dir.y;
+				let p2 = new Vector(this.pos.x + u1.x - m * this.dir.x, this.pos.y + u1.y - m * this.dir.y);
+				 
 
 				let distance1 = Vector.sqDist(this.pos, p1);
 				let distance2 = Vector.sqDist(this.pos, p2);
