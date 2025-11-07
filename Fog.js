@@ -6412,7 +6412,7 @@ Ray.prototype.draw = function(ctx) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }; */
 
-Ray.prototype.cast = function(boundary, p1, p2) {
+Ray.prototype.cast = function(boundary) {
   	if(boundary.radius !== undefined){
 		let u = {
 			x: boundary.a.x - this.pos.x,
@@ -6434,8 +6434,7 @@ Ray.prototype.cast = function(boundary, p1, p2) {
 			return;
 		}
 		else{
-			p1.x = this.pos.x + u1.x + m*this.dir.x;
-			p1.y = this.pos.y + u1.y + m*this.dir.y;
+			let p1 = new Vector(this.pos.x + u1.x + m * this.dir.x, this.pos.y + u1.y + m * this.dir.y);
 					  
 		  	if(d < boundary.radius && Vector.sqDist(this.pos, boundary.a) > boundary.radius**2){
 		  		
@@ -6488,9 +6487,8 @@ Ray.prototype.cast = function(boundary, p1, p2) {
 		let u = ((ca.x * r.y) - (ca.y * r.x)) / den;
 		
 		if (t >= 0 && t <= 1 && u >= 0) {
-		  p1.x = x1 + t * r.x;
-		  p1.y = y1 + t * r.y;
-		  return p1;
+			let pt = new Vector(x1 + t * r.x, y1 + t * r.y)
+			return pt;
 		} else {
 		  return;
 		}
@@ -6660,8 +6658,7 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 	const activeRays = buildActiveRays(window.PARTICLE, walls);
 	const lastRayIndex = activeRays.length - 1;
 	const squaredRadius = lightRadius ** 2;
-	let castPt1 = new Vector();
-	let castPt2 = new Vector();
+
 	for (let i = 0; i < activeRays.length; i++) {
 	    const ray = activeRays[i];
 	    let pt;
@@ -6694,7 +6691,7 @@ function particleLook(ctx, walls, lightRadius=100000, fog=false, fogStyle, fogTy
 			if(auraId != undefined && (tokenElev < wallBottom || tokenElev >= wallTop))
 				continue;
 
-			pt = ray.cast(walls[j], castPt1, castPt2);
+			pt = ray.cast(walls[j]);
 
 
 			if (pt) {
