@@ -47,21 +47,24 @@ $(function() {
       })
       .then((campaignDmId) => {
         const isDmPage = is_encounters_page();
+        const isSpectator = is_spectator_page();
         const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;
-        
-
-
-        if (isDmPage && campaignDmId == userId) {
+        if ((isDmPage && campaignDmId == userId) || isSpectator) {
           inject_dice();
+        }
+        return { campaignDmId, userId, isDmPage, isSpectator };
+      })
+      .then((data) => {
+        const { campaignDmId, userId, isDmPage, isSpectator } = data;  
+        if (isDmPage && campaignDmId == userId) {
           startup_step("Starting AboveVTT for DM");
           return start_above_vtt_for_dm();
         } 
-        else if (is_spectator_page()){
-          inject_dice();
+        else if (isSpectator){
           startup_step("Starting AboveVTT for Spectator");
           return start_above_vtt_for_spectator();
         }
-        else if(isDmPage ){
+        else if(isDmPage){
           startup_step("Player joining as DM")
           return start_player_joining_as_dm();
         }else if (is_characters_page()) {

@@ -32,7 +32,7 @@ class WeatherOverlay {
         let count;
         if (this.type === 'fog') count = 10;
         else if (this.type === 'rain') count = 120;
-        else if (this.type === 'snow') count = 220;
+        else if (this.type === 'snow') count = 320;
         else if (this.type === 'embers') count = 40;
         else if (this.type === 'cherryBlossoms') count = 40;
         else if (this.type === 'lightning') count = 60;
@@ -92,7 +92,7 @@ class WeatherOverlay {
             for (let i = 0; i < count; i++) {
                 const windVar = 0.06 + Math.random() * 0.08;
                 const windAngleVar = windAngle + (-0.18 + Math.random() * 0.36);
-                const r = 8 + Math.random() * this.width/800;
+                const r = 4 + Math.random() * this.width/500;
                 this.particles.push({
                     x: Math.random() * this.width,
                     y: Math.random() * this.height,
@@ -119,7 +119,7 @@ class WeatherOverlay {
                     groundX: groundX,
                     groundY: groundY,
                     z: ratio,
-                    r: 4 + Math.random() * 5,
+                    r: 2 + Math.random() * 4,
                     alpha: 0.8 + Math.random() * 0.2,
                     drift: 1 + Math.random() * 100, 
                     speed: 0.0001 + Math.random() * 0.0002, 
@@ -263,7 +263,7 @@ class WeatherOverlay {
             this.particles.push({
                 x,
                 y,
-                r: 8 + Math.random() * this.width / 800,
+                r: 4 + Math.random() * this.width / 500,
                 alpha: 1,
                 angle: Math.random() * Math.PI * 2,
                 spin: -0.02 + Math.random() * 0.04,
@@ -888,7 +888,7 @@ class WeatherOverlay {
                 p.groundX = groundX;
                 p.groundY = groundY;
                 p.z = ratio;
-                p.r = 4 + Math.random() * 5;
+                p.r = 2 + Math.random() * 4;
                 p.alpha = 0.8 + Math.random() * 0.2;
                 p.drift = 1 + Math.random() * 100;
                 p.speed = 0.0001 + Math.random() * 0.0002;
