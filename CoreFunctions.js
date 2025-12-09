@@ -631,12 +631,7 @@ function deleteDB(){
     const objectStore = gameIndexedDb.transaction([`exploredData`], "readwrite").objectStore('exploredData');
     const objectStoreRequest = objectStore.clear();
     objectStoreRequest.onsuccess = function(event) {       
-      exploredCanvas =  document.getElementById("exploredCanvas");
-      if(exploredCanvas != undefined){
-        let exploredCanvasContext = exploredCanvas.getContext('2d');
-        exploredCanvasContext.fillStyle = "black";
-        exploredCanvasContext.fillRect(0,0,exploredCanvas.width,exploredCanvas.height); 
-      }
+      $('#exploredCanvas').remove();
       redraw_light();
       alert('This campaigns local explored vision data has been cleared.')
     };
@@ -657,13 +652,7 @@ function deleteExploredScene(sceneId){
      .delete(`explore${window.gameId}${sceneId}`);
     deleteRequest.onsuccess = function(event) {  
       if(sceneId == window.CURRENT_SCENE_DATA.id){
-        let exploredCanvas = $('#exploredCanvas')
-        if(exploredCanvas.length > 0){
-          let exploredCanvasContext = exploredCanvas[0].getContext('2d');
-          exploredCanvasContext.globalCompositeOperation ='source-over';
-          exploredCanvasContext.fillStyle = "black";
-          exploredCanvasContext.fillRect(0,0,exploredCanvas[0].width,exploredCanvas[0].height); 
-        }
+        $('#exploredCanvas').remove();
         redraw_light();
         alert('Scene Explore Trail Data Cleared')
       }        
@@ -1167,7 +1156,6 @@ function inject_dice(){
        
        if(mutationTarget.hasClass(['encounter-details', 'encounter-builder', 'release-indicator'])){
          mutationTarget.remove();
-
        }
        if($(mutation.addedNodes).is('.encounter-builder, .release-indicator')){
          $(mutation.addedNodes).remove();
@@ -1187,7 +1175,7 @@ function inject_dice(){
  setTimeout(function(){
    window.encounterObserver.disconnect();
    delete window.encounterObserver;
- }, 20000);
+ }, 300000);
  
 }
 /**
@@ -1347,26 +1335,10 @@ function dropBoxOptions(callback, multiselect = false, fileType=['images', 'vide
       cancel: function() {
 
       },
-
-      // Optional. "preview" (default) is a preview link to the document for sharing,
-      // "direct" is an expiring link to download the contents of the file. For more
-      // information about link types, see Link types below.
-      linkType: "preview", // or "direct"
-
-      // Optional. A value of false (default) limits selection to a single file, while
-      // true enables multiple file selection.
-      multiselect: multiselect, // or true
-
-      // Optional. This is a list of file extensions. If specified, the user will
-      // only be able to select files with these extensions. You may also specify
-      // file types, such as "video" or "images" in the list. For more information,
-      // see File types below. By default, all extensions are allowed.
+      linkType: "preview",
+      multiselect: multiselect,
       extensions: fileType,
-
-      // Optional. A value of false (default) limits selection to files,
-      // while true allows the user to select both folders and files.
-      // You cannot specify `linkType: "direct"` when using `folderselect: true`.
-      folderselect: false, // or true
+      folderselect: false, 
   }
 
   return options
@@ -1783,31 +1755,43 @@ const debounce_pc_token_update = mydebounce(() => {
   window.PC_TOKENS_NEEDING_UPDATES.forEach((playerId) => {
     const pc = find_pc_by_player_id(playerId, false);
     let token = window.TOKEN_OBJECTS[pc?.sheet];     
+    let crossSceneToken = window.all_token_objects[pc?.sheet]; 
 
-    let crossSceneToken = window.all_token_objects[pc?.sheet] //for the combat tracker and cross scene syncing/tokens - we want to update this even if the token isn't on the current map
-   
-    if (crossSceneToken && pc) {
-      let currentImage = crossSceneToken.options.imgsrc;
-      if (currentImage != undefined) {
-        const newImage = (crossSceneToken.options.alternativeImages == undefined || crossSceneToken.options.alternativeImages?.length == 0) ? pc.image : currentImage;
-        const options = $.extend(true, token.options, pc, { imgsrc: newImage });
-        for (let i = 0; i < unusedPlayerData.length; i++) {
-          delete options[unusedPlayerData[i]];
-        }
-        crossSceneToken.options = $.extend(true, {}, options);
-        if(token){
-          token.hp = pc.hitPointInfo.current; // triggers concentration checks
-          token.options.hitPointInfo = pc.hitPointInfo;
-          token.options = options;
-          if (window.DM) {
-            token.place_sync_persist(); // update it on the server
-          }
-          else {
-            token.place(); // update token for players even if dm isn't connected to websocket
-          }
-        }
+    if (token) {
+      let currentImage = token.options.imgsrc;
+      const newImage = (token.options.alternativeImages == undefined || token.options.alternativeImages?.length == 0) ? pc.image : currentImage;
+      const options = $.extend(true, {}, token.options, pc, { imgsrc: newImage });
+      options.conditions = pc.conditions || [];
+      for (let i = 0; i < unusedPlayerData.length; i++) {
+        delete options[unusedPlayerData[i]];
       }
-    }   
+      token.hp = pc.hitPointInfo.current; // triggers concentration checks
+      token.options.hitPointInfo = pc.hitPointInfo;
+      token.options = $.extend(true, {}, options, { left: token.options.left, top: token.options.top });
+      if (window.DM) {
+        token.place_sync_persist(); // update it on the server
+      }
+      else {
+        token.place(); // update token for players even if dm isn't connected to websocket
+      }
+     
+      if (crossSceneToken && pc) {    
+        crossSceneToken = $.extend(true, {}, options);
+      } 
+    }
+    else if (crossSceneToken && pc) {
+      let currentImage = crossSceneToken.options.imgsrc;
+      const newImage = (crossSceneToken.options.alternativeImages == undefined || crossSceneToken.options.alternativeImages?.length == 0) ? pc.image : currentImage;
+      const options = $.extend(true, {}, crossSceneToken.options, pc, { imgsrc: newImage });
+      options.conditions = pc.conditions || [];
+      for (let i = 0; i < unusedPlayerData.length; i++) {
+        delete options[unusedPlayerData[i]];
+      }
+      crossSceneToken.hp = pc.hitPointInfo.current; 
+      crossSceneToken.options.hitPointInfo = pc.hitPointInfo;
+      crossSceneToken.options = $.extend(true, {}, options);
+    }
+  
   });
   if (window.DM) {
     update_pc_token_rows();
@@ -2338,7 +2322,7 @@ function inject_sidebar_send_to_gamelog_button(sidebarPaneContent) {
         text: html
       };
       window.MB.inject_chat(data);
-      notify_gamelog();
+      notify_gamelog([]);
     }
     else{
       
@@ -2355,6 +2339,64 @@ function inject_sidebar_send_to_gamelog_button(sidebarPaneContent) {
     
     
   });
+}
+
+function find_items_in_cache_by_id(itemIds = []) {
+  const foundItems = [];
+  for (let itemId of itemIds) {
+    const cachedItem = window.ITEMS_CACHE.find(ci => ci.id.toString() === itemId.toString());
+    if (cachedItem) {
+      foundItems.push(cachedItem);
+    }
+  }
+  return foundItems;
+}
+function find_items_in_cache_by_name(names = [], exactMatch = false) {
+  names = names.map(name => name.toLowerCase());
+  
+  if(exactMatch){
+    return window.ITEMS_CACHE.filter(ci => names.includes(ci.name.toString().toLowerCase()));
+  }
+  return window.ITEMS_CACHE.filter(ci => ci.name.toString().toLowerCase().includes(names));
+}
+function add_items_to_party_inventory(items = []) {
+  const itemIds = Object.keys(items);
+  if (itemIds.length === 0) {
+    console.warn('add_items_to_party_inventory called with no items');
+    return;
+  }
+  const characterId = window.DM ? parseInt(window.playerUsers[0]?.id) : parseInt(my_player_id());
+  const data = { characterId, equipment: [] };
+  for (let item of items) {
+    const entityId = parseInt(item.id);
+    const entityTypeId = parseInt(item.entityTypeId);
+    const quantity = parseInt(item.quantity);
+    const containerEntityTypeId = 618115330; // campaign inventory enum. See ContainerTypeEnum[ContainerTypeEnum["CAMPAIGN"] on DDB.
+    const containerEntityId = parseInt(find_game_id());
+    data.equipment.push({
+      entityId,
+      entityTypeId,
+      containerEntityTypeId,
+      containerEntityId,
+      quantity
+    });
+  }
+
+  DDBApi.addItemsToPartyInventory(data).then(response => {
+    console.log('add_items_to_party_inventory response:', response);
+    if(window.MB){
+      window.MB.sendMessage('character-sheet/item-shared/fulfilled', {});
+    }
+    else{
+      tabCommunicationChannel.postMessage({
+        msgType: 'DDBMessage',
+        action: 'character-sheet/item-shared/fulfilled',
+        data: {},
+        sendTo: window.sendToTab
+      });
+    }
+  });
+
 }
 async function fetch_github_issue_comments(issueNumber) {
   const request = await fetch("https://api.github.com/repos/cyruzzo/AboveVTT/issues?labels=bug", { credentials: "omit" });
@@ -2405,7 +2447,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     "position": "fixed",
     "height": height,
     "width": width,
-    "z-index": "90000",
+    "z-index": "110000",
     "display": "none"
   });
 

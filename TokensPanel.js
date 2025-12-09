@@ -1056,7 +1056,7 @@ function update_pc_token_rows() {
  */
 
 
-function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined) {
+async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined) {
 
 
     if (listItem === undefined) {
@@ -1217,9 +1217,11 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             options.id = listItem.sheet;
             if(window.all_token_objects[options.id] != undefined){           
                 options = {...options, ...window.all_token_objects[options.id].options}
-                if(specificImage)
-                    options.imgsrc = chosenImage;
+                if (specificImage) { 
+                    options = { ...options, ...options.alternativeImagesCustomizations[specificImage], imgsrc: chosenImage };
+                }
             }
+          
             tokenSizeSetting = options.tokenSize;
             tokenSize = parseInt(tokenSizeSetting);
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
@@ -1231,12 +1233,10 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             } else {
                 options.tokenSize = tokenSize;
             }
-            options.hitPointInfo = pc.hitPointInfo || {
-                current: 0,
-                maximum: 0,
-                temp: 0
-            };
-            options.armorClass = pc.armorClass;
+            if(pc){
+                options.hitPointInfo = pc.hitPointInfo;
+                options.armorClass = pc.armorClass;
+            }
             options = {...options, ...foundOptions, name: listItem.name};
             break;
         case ItemType.Monster:
@@ -1469,11 +1469,38 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             options.customInit = newInit
         }
 
+        let newAC = $(searchText).find('.custom-ac.custom-stat').text();
 
-        if($(searchText).find('table.abilities-saves, table.stat-table').length>0){
-             let physicalStats = $(searchText).find('table.abilities-saves.physical, table.stat-table.physical');
-             let mentalStats = $(searchText).find('table.abilities-saves.mental, table.stat-table.mental');
-             options.customStat = {
+        if(newAC == ''){
+            let match = searchText.matchAll(/(Armor Class|ac)[\s\S]*?[\s>]([0-9]+)[<\.\s]/gi).next()
+            if(match.value != undefined && match.value[2] != undefined){
+                newAC = match.value[2]
+            }
+        }
+
+        options.armorClass = (newAC) ? newAC : options.armorClass;
+
+        let pcURL = $(searchText).find('.custom-pc-sheet.custom-stat').text();
+        if (pcURL) { 
+            try{
+                const charURLparts = pcURL.match(/.*?\/characters\/([0-9]+)(\/.*?)?/i);
+                const charDetails  = await DDBApi.fetchCharacterDetails([charURLparts[1]]);
+                options = $.extend(true, {}, charDetails[0], options);
+                options.customStat = options.abilities;
+                if(!options.customInit){
+                    options.customInit = options.initiativeBonus;
+                }
+                delete options.abilities;
+            }
+            catch{
+                showErrorMessage(`Failed to fetch character data from DDB for url: ${pcURL}; It's possible the url is incorrect or you do not have access to the character`);
+            }
+        }
+        
+        if ($(searchText).find('table.abilities-saves, table.stat-table').length > 0) {
+            let physicalStats = $(searchText).find('table.abilities-saves.physical, table.stat-table.physical');
+            let mentalStats = $(searchText).find('table.abilities-saves.mental, table.stat-table.mental');
+            options.customStat = {
                 '0': {
                     mod: physicalStats.find('tr:nth-of-type(1) td:nth-of-type(2)').text(),
                     save: physicalStats.find('tr:nth-of-type(1) td:nth-of-type(3)').text()
@@ -1501,9 +1528,9 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             }
         }
 
-        if(options.customStat == undefined){
+        if (options.customStat == undefined) {
             let match = searchText.matchAll(/STR[<\s][\s\S]+?\(([+-][0-9]+)\)[\s\S]+?\(([+-][0-9]+)\)[\s\S]+?\(([+-][0-9]+)\)[\s\S]+?\(([+-][0-9]+)\)[\s\S]+?\(([+-][0-9]+)\)[\s\S]+?\(([+-][0-9]+)\)/gi).next()
-            if(match.value != undefined){
+            if (match.value != undefined) {
                 const str = match.value[1] != undefined ? match.value[1] : '+0'
                 const dex = match.value[2] != undefined ? match.value[2] : '+0'
                 const con = match.value[3] != undefined ? match.value[3] : '+0'
@@ -1511,7 +1538,7 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
                 const wis = match.value[5] != undefined ? match.value[5] : '+0'
                 const cha = match.value[6] != undefined ? match.value[6] : '+0'
 
-                options.customStat ={
+                options.customStat = {
                     '0': {
                         mod: str
                     },
@@ -1540,8 +1567,8 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             let matchWisSave = searchText.matchAll(/Saving Throw[\s\S]+?wis[\s]?([+-][0-9]+)?/gi).next()
             let matchChaSave = searchText.matchAll(/Saving Throw[\s\S]+?cha[\s]?([+-][0-9]+)?/gi).next()
 
-            
-            if(options.customStat == undefined){
+
+            if (options.customStat == undefined) {
                 options.customStat = {
                     '0': {
                         mod: '+0'
@@ -1570,18 +1597,6 @@ function create_and_place_token(listItem, hidden = undefined, specificImage= und
             options.customStat[4]['save'] = (matchWisSave.value && matchWisSave.value[1] != undefined) ? matchWisSave.value[1] : options.customStat[4]['mod'];
             options.customStat[5]['save'] = (matchChaSave.value && matchChaSave.value[1] != undefined) ? matchChaSave.value[1] : options.customStat[5]['mod'];
         }
-
-        let newAC = $(searchText).find('.custom-ac.custom-stat').text();
-
-        if(newAC == ''){
-            let match = searchText.matchAll(/(Armor Class|ac)[\s\S]*?[\s>]([0-9]+)[<\.\s]/gi).next()
-            if(match.value != undefined && match.value[2] != undefined){
-                newAC = match.value[2]
-            }
-        }
-
-
-        options.armorClass = (newAC) ? newAC : options.armorClass;
         options.monster = 'customStat'
     }
     if(foundOptions.color != undefined){
@@ -2438,11 +2453,12 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     listItem.rootId = listItem.rootId;
     // close any that are already open just to be safe
     let sidebarPanel;
+    let name = listItem.name;
     if(!selectedTokenImage && !redrawPanel){ // we just want to redraw the panel options not the images since we selected a token image to edit
         close_sidebar_modal();
         sidebarPanel = new SidebarPanel("token-configuration-modal");
+        
         display_sidebar_modal(sidebarPanel);
-        let name = listItem.name;
 
         sidebarPanel.updateHeader(name, "", "When placing tokens, one of these images will be chosen at random. Right-click an image for more options.");
         redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, undefined, selectedTokenImage);
@@ -2461,7 +2477,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         sidebarPanel = redrawPanel;
     }
    
-     let targetOptions = customization.tokenOptions;
+    let targetOptions = customization.tokenOptions;
     if(selectedTokenImage){
         if(customization.tokenOptions.alternativeImagesCustomizations == undefined)
             customization.tokenOptions.alternativeImagesCustomizations = {};
@@ -2501,7 +2517,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
             token = window.TOKEN_OBJECTS[id]
             if (token){
                 token.options.alternativeImages = customization.tokenOptions.alternativeImages;
-                token.sync($.extend(true, {}, window.TOKEN_OBJECTS[id].options))
+                token.sync(await $.extend(true, {}, token.options))
             }
         }
         if(['.mp4', '.webm', '.m4v'].some(d => type.includes(d))){
@@ -2531,7 +2547,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         $('#token-configuration-modal .token-image-modal-remove-all-button').show();
         inputWrapper.find(".token-image-modal-url-label-add-wrapper > .token-image-modal-url-label-wrapper > .token-image-modal-footer-title").text(determineLabelText());
     };
-
+    window.currentAddImageUrl = addImageUrl;
     // MyToken name input handler
     const rename = async function(newName) {
         if (newName !== undefined && newName.length > 0) {
@@ -2567,12 +2583,9 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         dropboxButton.toggleClass('token-row-button', true);
         oneDriveButton.toggleClass('token-row-button', true);
         avttButton.toggleClass('token-row-button', true);
-        if (window.testAvttFilePicker === true) {
-            inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
-        }
-        else{
-            inputWrapper.append(dropboxButton, oneDriveButton);
-        }
+        
+        inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
+
         
     }
 
@@ -4246,8 +4259,13 @@ function display_change_image_modal(placedToken) {
 
     /// update the modal header
     sidebarPanel.updateHeader(placedToken.options.name, "Token Images", "Click an image below to update your token or enter a new image URL at the bottom.");
-    window.CURRENTLY_SELECTED_TOKENS.push(placedToken.options.id);
-    const allTokenIds = [...new Set(window.CURRENTLY_SELECTED_TOKENS)]
+    let allTokenIds = [placedToken.options.id]
+   
+    if (window.CURRENTLY_SELECTED_TOKENS.includes(placedToken.options.id)){
+        window.CURRENTLY_SELECTED_TOKENS.push(placedToken.options.id);
+        allTokenIds = [...new Set(window.CURRENTLY_SELECTED_TOKENS)]
+    }
+    
     /// draw tokens in the body
     for (id of allTokenIds){
         const token = window.TOKEN_OBJECTS[id];
@@ -4270,6 +4288,8 @@ function display_change_image_modal(placedToken) {
         alternativeImages = [...new Set(alternativeImages)]; // clear out any duplicates
         console.log("display_change_image_modal", alternativeImages);
         alternativeImages.forEach(imgUrl => {
+            if (!imgUrl || sidebarPanel.body.find(`.example-token[data-src='${imgUrl}']`).length>0)
+                return;
             let html;
             let video = false;
             if(token?.options.videoToken == true || (['.mp4', '.webm', '.m4v'].some(d => imgUrl.includes(d)))){
@@ -4427,12 +4447,9 @@ function display_change_image_modal(placedToken) {
     }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE]);
 
     avttButton.toggleClass('token-row-button', true);
-    if(window.testAvttFilePicker === true){
-        sidebarPanel.inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
-    }
-    else{
-        sidebarPanel.inputWrapper.append(dropboxButton, oneDriveButton);
-    }
+    
+    sidebarPanel.inputWrapper.append(dropboxButton, avttButton, oneDriveButton);
+
    
 
     let inputWrapper = sidebarPanel.inputWrapper;

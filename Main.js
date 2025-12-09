@@ -31,13 +31,11 @@ function parse_img(url) {
 		} else if (retval.includes("https://drive.google.com") && !retval.match(/id=([a-zA-Z0-9_-]+)/g)) {
 			const parsed = 'https://drive.google.com/thumbnail?id=' + retval.split('/')[5] +'&sz=w3000';
 			retval = parsed;
-			console.log("parse_img is converting", url, "to", retval);
 			return retval;		
 		} 
 		else if (retval.startsWith("https://drive.google.com") || (retval.includes("https://drive.usercontent.google.com")) && retval.match(/id=([a-zA-Z0-9_-]+)/g)) {
 			const parsed = 'https://drive.google.com/thumbnail?id=' + retval.matchAll(/id=([a-zA-Z0-9_-]+)/g).next().value[1] +'&sz=w3000';
 			retval = parsed;
-			console.log("parse_img is converting", url, "to", retval);
 			return retval;		
 		} 
 		else if(retval.startsWith("https://www.googleapis.com/drive/v3/files/")){ // fix due to 1.5/1.6 beta 
@@ -49,7 +47,6 @@ function parse_img(url) {
 		else if(retval.includes("dropbox.com")){
 			const splitUrl = url.split('dropbox.com');
 			const parsed = `https://dl.dropboxusercontent.com${splitUrl[splitUrl.length-1]}`
-			console.log("parse_img is converting", url, "to", parsed);
 			retval = parsed;
 		}
 		else if(retval.includes("https://1drv.ms/"))
@@ -442,8 +439,11 @@ function map_load_error_cb(e) {
 		}
 	}
 	window.LOADING = false
-	window.MB.loadNextScene();
 	remove_loading_overlay();
+	$('.import-loading-indicator').remove();
+	delete window.LOADING;
+	window.MB.loadNextScene();
+	console.groupEnd();
 }
 
 /**
@@ -993,8 +993,7 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 		handles: "all",
 		containment: "#windowContainment",
 		start: function () {
-			$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
 		stop: function () {
 			$('.iframeResizeCover').remove();
@@ -1011,8 +1010,7 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 		scroll: false,
 		containment: "#windowContainment",
 		start: function () {
-			$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
 		stop: function () {
 			$('.iframeResizeCover').remove();
@@ -1085,8 +1083,7 @@ function build_draggable_monster_window() {
 		handles: "all",
 		containment: "#windowContainment",
 		start: function() {
-			$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
 		stop: function() {
 			$('.iframeResizeCover').remove();
@@ -1103,8 +1100,7 @@ function build_draggable_monster_window() {
 		scroll: false,
 		containment: "#windowContainment",
 		start: function() {
-			$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
 		stop: function() {
 			$('.iframeResizeCover').remove();
@@ -1164,7 +1160,7 @@ function minimize_player_monster_window_double_click(titleBar) {
  * Creates sidebar menu.
  * @returns void
  */
-function init_controls() {
+async function init_controls() {
 	if($("#switch_gamelog").length > 0){
 			if($('#settings-panel').length == 0){
 				init_sidebar_tabs();
@@ -1185,7 +1181,7 @@ function init_controls() {
  	if(gameLogButton.length == 0){
    	gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
  	}
- 	gameLogButton.click()
+ 	gameLogButton.click();
 
 	init_sidebar_tabs();
 	let sidebarControlsParent = is_characters_page() ? $(".ct-sidebar__inner>[class*='styles_controls']") : $(".sidebar__controls");
@@ -1683,8 +1679,7 @@ function  init_sheet() {
 			handles: "all",
 			containment: "#windowContainment",
 			start: function () {
-				$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-				$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+				$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 			},
 			stop: function () {
 				$('.iframeResizeCover').remove();
@@ -1701,8 +1696,7 @@ function  init_sheet() {
 			scroll: false,
 			containment: "#windowContainment",
 			start: function () {
-				$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));
-				$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+				$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 			},
 			stop: function () {
 				$('.iframeResizeCover').remove();
@@ -2233,7 +2227,7 @@ function init_ui() {
 	weatherLight.css("position", "absolute");
 	weatherLight.css("top", "0");
 	weatherLight.css("left", "0");
-	weatherLight.css("z-index", "10000000");
+	weatherLight.css("z-index", "25");
 
 	const fog = $("<canvas id='fog_overlay'></canvas>");
 	fog.css("top", "0");
@@ -2434,6 +2428,13 @@ function init_ui() {
 			$("#sheet").append($('<div class="iframeResizeCover"></div>'));
 			//return false;
 		}
+		let modal = m.target.closest(".sidebar-modal");
+		if(modal){
+			window.MODALDOWN = true;
+		}
+		else{
+			window.MODALDOWN = false;
+		}
 	}
 
 	// Function separated so it can be dis/enabled
@@ -2445,7 +2446,7 @@ function init_ui() {
 		if (event.target.tagName.toLowerCase() !== 'a') {
 			$("#splash").remove(); // don't remove the splash screen if clicking an anchor tag otherwise the browser won't follow the link
 		}
-		if (sidebar_modal_is_open() && event.which === 1) {
+		if (sidebar_modal_is_open() && event.which === 1 && !window.MODALDOWN) {
 			// check if the click was within the modal or within an element that we specifically don't want to close the modal
 			let modal = event.target.closest(".sidebar-modal");
 			let preventSidebarModalClose = event.target.closest(".prevent-sidebar-modal-close");
@@ -2817,11 +2818,9 @@ function init_zoom_buttons() {
 		</div></div>
 		`);
 		avttS3FileShare.click(launchFilePicker);
-		if (window.testAvttFilePicker === true) { //console testing var
-			zoom_section.append(avttS3FileShare, select_locked, ping_center, pause_players);
-		} else {
-			zoom_section.append(select_locked, ping_center, pause_players);
-		}
+
+		zoom_section.append(avttS3FileShare, select_locked, ping_center, pause_players);
+
 	}
 
 
@@ -3802,7 +3801,7 @@ function is_sidebar_visible() {
  * This will show/hide the sidebar regardless of which page we are playing on.
  */
 function toggle_sidebar_visibility() {
-		if (is_sidebar_visible() || (!window.DM && window.innerWidth < 1024 && $(`[class*='styles_mobileNav']>div`).length==0)) {
+	if (is_sidebar_visible() || (!window.DM && !is_spectator_page() && window.innerWidth < 1024 && $(`[class*='styles_mobileNav']>div`).length==0)) {
 			hide_sidebar();
 		} else {
 			show_sidebar();

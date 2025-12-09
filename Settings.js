@@ -12,11 +12,12 @@ function token_setting_options() {
 				{ value: "noConstraint", label: "No Constraint", description: `The token will show up as it is naturally largest side being equal to token size, we set "Ignore Aspect Ratio" to false and "Square to true. Borders and Health Aura are drawn as a drop shadow to fit the shape of the token.` },
 				{ value: "definitelyNotAToken", label: "Definitely Not a Token", description: `This token will have the shape of no contraints and be made to appear as a object tile` },
 				{ value: "labelToken", label: "Map Pin Token", description: `This token will have the settings of Definitely Not a Token and have it's name always displayed` },
-				{ value: "inPersonMini", label: "TV Table Mini - Hidden from Players", description: `This token will not be displayed to players on the scene but they will still see it in the combat tracker.` }
+				{ value: "inPersonMini", dmOnly: true, label: "TV Table Mini - Hidden from Players", description: `This token will not be displayed to players on the scene but they will still see it in the combat tracker.` }
 				
 			],
 			defaultValue: "circle",
-			menuPosition: '1'
+			menuPosition: '1',
+			player: true
 		},
 		{
 			name: 'tokenBaseStyleSelect',
@@ -32,7 +33,8 @@ function token_setting_options() {
 				{ value: "water", label: "Water", description: "A water base." }
 			],
 			defaultValue: "default",
-			menuPosition: '2'
+			menuPosition: '2',
+			player: true
 		},
 		{
 			name: "healthauratype",
@@ -47,7 +49,8 @@ function token_setting_options() {
 				{ value: "none", label: "None", description: "Tokens will not have a health visual" }
 			],
 			defaultValue: "aura",
-			menuPosition: '3'
+			menuPosition: '3',
+			player: true
       	},
       	{
 			name: 'lockRestrictDrop',
@@ -123,7 +126,8 @@ function token_setting_options() {
 				{ value: false, label: "Above darkness", description: "The token will appear above darkness/light" }
 			],
 			defaultValue: false,
-			menuPosition: '12'
+			menuPosition: '12',
+			player: true
 		},
 		{
 			name: 'disablestat',
@@ -164,7 +168,8 @@ function token_setting_options() {
 				{ value: false, label: 'Border', description: "The token has a border around it." }
 			],
 			defaultValue: false,
-			menuPosition: '11'
+			menuPosition: '11',
+			player: true
 		},
 		{
 			name: 'disableaura',
@@ -284,6 +289,23 @@ function token_setting_options() {
 			],
 			defaultValue: false,
 			hiddenSetting: true
+		},
+		{
+			name: "tokenWall",
+			label: "Block Vision",
+			type: 'dropdown',
+			options: [
+				{ value: false, label: 'Disabled', description: "Token will not block line of sight." },
+				{ value: "circle", label: 'Circle Wall', description: "Token will block line of sight as if walls in a cirle." },
+				{ value: "circleObject", label: 'Circle Object Wall', description: "Token will block line of sight as if object walls in a cirle." },
+				{ value: "circleWindow", label: 'Circle Window', description: "Token will block line of sight as if windows in a cirle." },
+				{ value: "circleCurtain", label: 'Circle Curtain', description: "Token will block line of sight as if curtains in a cirle." },
+				{ value: "square", label: 'Square Wall', description: "Token will block line of sight as if walls in a square." },
+				{ value: "squareObject", label: 'Square Object Wall', description: "Token will block line of sight as if object walls in a square." },
+				{ value: "squareWindow", label: 'Square Window', description: "Token will block line of sight as if windows in a square." },
+				{ value: "squareCurtain", label: 'Square Curtain', description: "Token will block line of sight as if curtains in a square." },
+			],
+			defaultValue: false
 		}
 		
 	];

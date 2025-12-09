@@ -1401,10 +1401,10 @@ class MessageBroker {
 
 										if(is_gamelog_popout()){
 											tabCommunicationChannel.postMessage({
-						           msgType: 'gamelogDamageButtons',
-						           damage: damage
-						          });
-						          return;
+												msgType: 'gamelogDamageButtons',
+												damage: damage
+											});
+											return;
 										}
 										if($(`.tokenselected:not([data-id*='profile'])`).length == 0){
 											showTempMessage('No non-player tokens selected');
@@ -1714,7 +1714,7 @@ class MessageBroker {
 				console.log("SETTO BACKGROUND A " + msg.data);
 				$("#tokens").children().remove();
 				$(".aura-element[id^='aura_'").remove();
-				$(".aura-element-container-clip").remove();
+				$(".aura-clip-container").remove();
 				$("[data-darkness]").remove();
 				$("[data-notatoken]").remove();
 
@@ -1781,7 +1781,7 @@ class MessageBroker {
 	
 						window.CURRENT_SCENE_DATA.conversion = 1;
 
-						if(data.scale_check && !data.UVTTFile && !data.is_video && (mapHeight > 2500 || mapWidth > 2500)){
+						if(!data.is_video && (mapHeight > 2500 || mapWidth > 2500)){
 							let conversion = 2;
 							if(mapWidth >= mapHeight){
 								conversion = 1980 / mapWidth;
@@ -1821,6 +1821,8 @@ class MessageBroker {
 								width: hexWidth,
 								height: hexHeight
 							}
+						}else{
+							delete window.CURRENT_SCENE_DATA.scaleAdjustment;
 						}
 
 						// Scale map according to scaleFactor
@@ -1854,9 +1856,9 @@ class MessageBroker {
 								$("#scene_map").css('opacity', 1)
 								$("#darkness_layer").show();
 							});
+							const url = data.player_map.startsWith(`above-bucket-not-a-url`) ? await getAvttStorageUrl(data.player_map) : await getGoogleDriveAPILink(data.player_map);
 							
-						
-							$("#scene_map").attr('src', await getGoogleDriveAPILink(data.player_map));
+							$("#scene_map").attr('src', url);
 							$('.import-loading-indicator .percentageLoaded').css('width', `20%`);		
 						}
 						await reset_canvas();
@@ -1956,7 +1958,7 @@ class MessageBroker {
 			remove_loading_overlay();
 			showError(e);
 		}
-		
+		remove_loading_overlay();
 		// console.groupEnd()
 	}
 	loadNextScene(){
@@ -2001,13 +2003,19 @@ class MessageBroker {
 	}
 	
 	convertChat(data,local=false) {
-
 		data.text = this.decode_message_text(data.text);
 
+
+		const isChatEnabled = is_encounters_page() || is_characters_page() || is_campaign_page();
+
 		//Security logic to prevent content being sent which can execute JavaScript.
-		data.player = DOMPurify.sanitize( data.player,{ALLOWED_TAGS: []});
-		data.img = DOMPurify.sanitize( data.img,{ALLOWED_TAGS: []});
+		let image = `<img class="${isChatEnabled ? 'tss-1e4a2a1-AvatarPortrait' : 'Avatar_AvatarPortrait__3cq6B'}" src="${encodeURI(data.img)}" alt="">`;
+		let player = `<span class="tss-1tj70tb-Sender" title="${data.player}">${data.player}</span>`;
+
+		player = DOMPurify.sanitize( player,{ALLOWED_TAGS: ['span']});
+		image = DOMPurify.sanitize( image,{ALLOWED_TAGS: ['img']});
 		data.text = DOMPurify.sanitize( data.text,{ALLOWED_TAGS: ['video','img','div','p', 'b', 'button', 'span', 'style', 'path', 'rect', 'svg', 'a', 'hr', 'ul', 'li', 'ol', 'h3', 'h2', 'h4', 'h1', 'table', 'tr', 'td', 'th', 'br', 'input', 'strong', 'em'], ADD_ATTR: ['target']}); //This array needs to include all HTML elements the extension sends via chat.
+
 
 		if(data.dmonly && !(window.DM) && !local) // /dmroll only for DM of or the user who initiated it
 			return $("<div/>");
@@ -2042,50 +2050,36 @@ class MessageBroker {
 		}
 
 
-		if (is_encounters_page() || is_characters_page() || is_campaign_page()) {
+		if (isChatEnabled) {
 			return $(`
 				<li class="tss-8-Other-ref tss-17y30t1-GameLogEntry-Other-Flex">
 					<p role="img" class="tss-wyeh8h-Avatar-Flex">
-						<img class="tss-1e4a2a1-AvatarPortrait" src="${data.img}" alt="">
+						${image}
 					</p>
 					<div class="tss-1e6zv06-MessageContainer-Flex">
 						<div class="tss-dr2its-Line-Flex">
-							<span class="tss-1tj70tb-Sender" title="${data.player}">${data.player}</span>
+							${player}
 						</div>
 						<div class="tss-8-Collapsed-ref tss-8-Other-ref tss-11w0h4e-Message-Collapsed-Other-Flex">${data.text}</div>
 						<time datetime="${datetime}" title="${datestamp} ${timestamp}" class="tss-1yxh2yy-TimeAgo-TimeAgo">${timestamp}</time>
 					</div>
 				</li>
 			`);
-		} /*else if (is_characters_page()) {
-			return $(`
-				<li class="cwBGi-s80YSXZFf9zFTAGg== wtVS4Bjey6LwdMo1GyKvpQ== QXDbdjnpeXLRB22KlOxDsA== _42x6X+dUmW-21eOxSO1c7Q== _9ORHCNDFVTb1uWMCEaGDYg==">
-					<p role="img" class="TILdlgSwOYvXr2yBdjxU7A== QXDbdjnpeXLRB22KlOxDsA==">
-						<img class="U5icMJo74qXY3K0pjow8zA==" src="${data.img}" alt="">
-					</p>
-					<div class="pw06vls7GmA2pPxoGyDytQ== QXDbdjnpeXLRB22KlOxDsA== VwlMdrxdj-7VFbj4bhgJCg== bDu7knPli3v29ahk5PQFIQ==">
-						<div class="zmFwkmlgaKJ3kVU14zW8Lg== QXDbdjnpeXLRB22KlOxDsA== CoBE7nCohYcFyEBBP3K93A==">
-							<span class="_22SVeI3ayk2KgS4V+GqCCA==">${data.player}</span>
-						</div>
-						<div class="oDA6c7IdLEVJ7uSe5103CQ== iQqUeZkD8989e4pBhSqIrQ== wtVS4Bjey6LwdMo1GyKvpQ== QXDbdjnpeXLRB22KlOxDsA==">${data.text}</div>
-						<time datetime="${datetime}" title="${datestamp} ${timestamp}" class="VL1LOQfDhMHRvAGyWG2vGg== _1-XSkDcxqHW18wFo5qzQzA==">${timestamp}</time>
-					</div>
-				</li>
-			`);
-		}*/
+		} 
 
 		let newentry = $("<div/>");
 		newentry.attr('class', 'GameLogEntry_GameLogEntry__2EMUj GameLogEntry_Other__1rv5g Flex_Flex__3cwBI Flex_Flex__alignItems-flex-end__bJZS_ Flex_Flex__justifyContent-flex-start__378sw');
-		newentry.append($("<p role='img' class='Avatar_Avatar__131Mw Flex_Flex__3cwBI'><img class='Avatar_AvatarPortrait__3cq6B' src='" + data.img + "'></p>"));
+		newentry.append($("<p role='img' class='Avatar_Avatar__131Mw Flex_Flex__3cwBI'>" + image + "</p>"));
 		let container = $("<div class='GameLogEntry_MessageContainer__RhcYB Flex_Flex__3cwBI Flex_Flex__alignItems-flex-start__HK9_w Flex_Flex__flexDirection-column__sAcwk'></div>");
 		container.append($("<div class='GameLogEntry_Line__3fzjk Flex_Flex__3cwBI Flex_Flex__justifyContent-space-between__1FcfJ'><span>" + data.player + "</span></div>"));
 		let entry = $("<div class='GameLogEntry_Message__1J8lC GameLogEntry_Collapsed__1_krc GameLogEntry_Other__1rv5g Flex_Flex__3cwBI'>" + data.text + "</div>");
+
+		
+		entry = DOMPurify.sanitize(entry, { ALLOWED_TAGS: allowedTagArray, ADD_ATTR: ['target'] }); //This array needs to include all HTML elements the extension sends via chat.
+
+
 		container.append(entry);
 
-		
-
-
-		
 		container.append($("<time datetime='" + datetime + "' class='GameLogEntry_TimeAgo__zZTLH TimeAgo_TimeAgo__2M8fr'></time"));
 
 		newentry.append(container);
@@ -2095,7 +2089,6 @@ class MessageBroker {
 		}
 
 		return newentry;
-		
 	}
 
 

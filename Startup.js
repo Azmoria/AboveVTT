@@ -47,21 +47,24 @@ $(function() {
       })
       .then((campaignDmId) => {
         const isDmPage = is_encounters_page();
+        const isSpectator = is_spectator_page();
         const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;
-        
-
-
-        if (isDmPage && campaignDmId == userId) {
+        if ((isDmPage && campaignDmId == userId) || isSpectator) {
           inject_dice();
+        }
+        return { campaignDmId, userId, isDmPage, isSpectator };
+      })
+      .then((data) => {
+        const { campaignDmId, userId, isDmPage, isSpectator } = data;  
+        if (isDmPage && campaignDmId == userId) {
           startup_step("Starting AboveVTT for DM");
           return start_above_vtt_for_dm();
         } 
-        else if (is_spectator_page()){
-          inject_dice();
+        else if (isSpectator){
           startup_step("Starting AboveVTT for Spectator");
           return start_above_vtt_for_spectator();
         }
-        else if(isDmPage ){
+        else if(isDmPage){
           startup_step("Player joining as DM")
           return start_player_joining_as_dm();
         }else if (is_characters_page()) {
@@ -76,7 +79,9 @@ $(function() {
         addExtensionPathStyles();
         $('body').append(`<script type="text/javascript" src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="h3iaoazdu0wqrfd"></script>`)
       }).then(() => {     
-
+        DDBApi.fetchItemsJsonWithToken().then(data => {
+          window.ITEMS_CACHE = data;
+        })
         const lastSendToDefault = localStorage.getItem(`${gameId}-sendToDefault`, gamelog_send_to_text()); 
 
         if(lastSendToDefault != null){
@@ -260,6 +265,11 @@ $(function() {
           else if(event.data.msgType == 'CharacterData'){
             update_pc_with_data(event.data.characterId, event.data.pcData);
           }
+          if (event.data.msgType == 'DDBMessage'){
+            if (event.data.sendTo == window.PLAYER_ID || (window.DM && event.data.sendTo == false)) {
+              window.MB.sendMessage(event.data.action, event.data.data);
+            }
+          }
         })
         
         
@@ -355,7 +365,7 @@ async function start_above_vtt_common() {
   
   await load_external_script("https://www.youtube.com/iframe_api");
   $("#site").append("<div id='windowContainment'></div>");
-
+  $("body").append(`<style>.ddb-footer{display:none}</style>`);
   startup_step("Gathering player character data");
   await rebuild_window_pcs();
   window.color = color_for_player_id(my_player_id()); // shortcut that we should figure out how to not rely on

@@ -53,7 +53,13 @@ async function avttSaveChunkedJson(objectStore, baseKey, data, options = {}) {
 	const previousChunkKeys = Array.isArray(existingManifest?.journalData?.chunkKeys)
 		? existingManifest.journalData.chunkKeys
 		: [];
-
+	for (const previousKey of previousChunkKeys) {
+		try {
+			await avttPromisifyIdbRequest(objectStore.delete(previousKey));
+		} catch (error) {
+			console.warn("Failed to delete stale journal chunk", previousKey, error);
+		}
+	}
 	const newChunkKeys = [];
 	for (let offset = 0, index = 0; offset < serialized.length; offset += chunkSize, index += 1) {
 		const chunkValue = serialized.slice(offset, offset + chunkSize);
@@ -66,16 +72,6 @@ async function avttSaveChunkedJson(objectStore, baseKey, data, options = {}) {
 		} catch (error) {
 			console.error("Failed to store journal chunk", chunkKey, error);
 			return;
-		}
-	}
-
-	for (const previousKey of previousChunkKeys) {
-		if (!newChunkKeys.includes(previousKey)) {
-			try {
-				await avttPromisifyIdbRequest(objectStore.delete(previousKey));
-			} catch (error) {
-				console.warn("Failed to delete stale journal chunk", previousKey, error);
-			}
 		}
 	}
 
@@ -168,7 +164,16 @@ class JournalManager{
 			let journalData;
 			try {
 				const objectStore = gameIndexedDb.transaction(["journalData"]).objectStore(`journalData`);
-				journalData = await avttLoadChunkedJson(objectStore, `Journal`, { dataType: "object" });
+				if(window.DM){
+					journalData = {
+						...await avttLoadChunkedJson(objectStore, `Journal`, { dataType: "object" }),
+						...await avttLoadChunkedJson(objectStore, `PlayerJournal`, { dataType: "object" })
+					};
+				}
+				else{
+					journalData = await avttLoadChunkedJson(objectStore, `PlayerJournal`, { dataType: "object" })
+				}
+				
 			} catch (error) {
 				console.warn("Failed to load journal entries", error);
 			}
@@ -276,20 +281,27 @@ class JournalManager{
 			return;
 		}
 		const executePersist = async () => {
-			const notes =
-				this.notes && typeof this.notes === "object" ? this.notes : {};
+			const notes = this.notes && typeof this.notes === "object" ? this.notes : {};
 			const statBlocks = Object.fromEntries(
-				Object.entries(notes).filter(([key]) => notes[key]?.statBlock === true),
+				Object.entries(notes).filter(([key]) => notes[key]?.statBlock === true)
 			);
 			const journal = Object.fromEntries(
-				Object.entries(notes).filter(([key]) => notes[key]?.statBlock !== true),
+				Object.entries(notes).filter(([key]) => notes[key]?.statBlock !== true && !notes[key]?.player)
 			);
+			const journalPlayersOnly = Object.fromEntries(
+				Object.entries(notes).filter(([key]) => notes[key]?.statBlock !== true && notes[key]?.player)
+			);
+			
 			const chapters = Array.isArray(this.chapters) ? this.chapters : [];
 
+			
 			try {
 				const transaction = gameIndexedDb.transaction([`journalData`], "readwrite");
 				const objectStore = transaction.objectStore(`journalData`);
-				await avttSaveChunkedJson(objectStore, `Journal`, journal, { dataType: "object" });
+				if(window.DM){
+					await avttSaveChunkedJson(objectStore, `Journal`, journal, { dataType: "object" });
+				}				
+				await avttSaveChunkedJson(objectStore, `PlayerJournal`, journalPlayersOnly, { dataType: "object" })
 				await avttSaveChunkedJson(objectStore, `JournalChapters`, chapters, {
 					dataType: "array",
 				});
@@ -317,21 +329,6 @@ class JournalManager{
 				console.warn("Failed to persist journal stat blocks", error);
 			}
 
-			if(window.DM){ // old storage kept as backup for now. 
-				try{
-					/*
-					Stop saving this here in 1.30 - remove at later date once confirmed migrated. 
-
-					localStorage.setItem('JournalStatblocks', JSON.stringify(statBlocks));   
-					localStorage.setItem('Journal' + this.gameid, JSON.stringify(journal));
-					localStorage.setItem('JournalChapters' + this.gameid, JSON.stringify(chapters));
-
-					*/ 
-				}
-				catch(e){
-					console.warn('localStorage Journal Storage Failed', e) // prevent errors from stopping code when local storage is full.
-				}
-			}
 		};
 
 		executePersist().catch((error) => {
@@ -339,13 +336,12 @@ class JournalManager{
 		});
 	}
 	
-	
-	
-	sync(){
-		let self=this;
-		const isAnyParentShared = function(chapter){
+
+	sync = mydebounce(() => {
+		let self = this;
+		const isAnyParentShared = function (chapter) {
 			let parentShared = false;
-			while (parentShared == false && chapter?.parentID != undefined){
+			while (parentShared == false && chapter?.parentID != undefined) {
 				const parentId = chapter.parentID;
 				chapter = self.chapters.find(d => d.id == parentId);
 				if (chapter?.shareWithPlayer)
@@ -353,25 +349,25 @@ class JournalManager{
 			}
 			return parentShared;
 		}
-		if(window.DM){
-			window.MB.sendMessage('custom/myVTT/JournalChapters',{
+		if (window.DM) {
+			window.MB.sendMessage('custom/myVTT/JournalChapters', {
 				chapters: self.chapters
 			});
 			let sendNotes = [];
-			
 
-			for(let i in self.notes){
+
+			for (let i in self.notes) {
 				const parentFolder = self.chapters.find(d => d.notes.includes(i));
-				if (self.notes[i].player || parentFolder?.shareWithPlayer || isAnyParentShared(parentFolder)){
+				if (self.notes[i].player || parentFolder?.shareWithPlayer || isAnyParentShared(parentFolder)) {
 					self.notes[i].id = i;
 					sendNotes.push(self.notes[i])
 				}
 			}
 
 			self.sendNotes(sendNotes)
-			
+
 		}
-	}
+	}, 5000);
 	sendNotes(sendNotes){
 
 		let self=this;
@@ -1815,11 +1811,7 @@ class JournalManager{
 		    $(this).find('p').remove();
 		    $(this).after(input)
 	    })
-		$(note_text).find('img[data-src*="above-bucket-not-a-url"]').each(async (index, image) => {
-			const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
-			image.src = src;
-			image.href = src;
-		})
+
 		if(!noteAlreadyOpen){
 			note.append(note_text);
 		}
@@ -1841,8 +1833,7 @@ class JournalManager{
 			$("[role='dialog']").draggable({
 				containment: "#windowContainment",
 				start: function () {
-					$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-					$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+					$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 				},
 				stop: function () {
 					$('.iframeResizeCover').remove();			
@@ -1850,8 +1841,7 @@ class JournalManager{
 			});
 			$("[role='dialog']").resizable({
 				start: function () {
-					$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-					$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+					$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 				},
 				stop: function () {
 					$('.iframeResizeCover').remove();			
@@ -1877,7 +1867,8 @@ class JournalManager{
 					    overflow: auto !important;
 					}
 				</stlye>`);
-				
+				if(!window.DM)
+					$(window.childWindows[title].document).find("body").addClass('body-rpgcharacter-sheet');
 				
 				$(this).siblings(".ui-dialog-titlebar").children(".ui-dialog-titlebar-close").click();
 			});
@@ -2210,10 +2201,8 @@ class JournalManager{
 		}
 		const embededIframes = target.find('iframe');
 		for(let i=0; i<embededIframes.length; i++){
-			embededIframes[i].setAttribute('allowfullscreen', '');
-			embededIframes[i].setAttribute('webkitallowfullscreen', '');
-			embededIframes[i].setAttribute('mozallowfullscreen', '');
-			embededIframes[i].src = `${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(embededIframes[i].src)}`;
+			if(!embededIframes[i].src.startsWith(window.EXTENSION_PATH))
+				embededIframes[i].src = `${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(embededIframes[i].src)}`;
 		}
 
 
@@ -2473,20 +2462,29 @@ class JournalManager{
 		let $newHTML = $(newHtml);
 		
 		
-		const aboveSrc = $newHTML.find(`[src*='above-bucket'], [href*='above-bucket']`);
+		const aboveSrc = $newHTML.find(`[src*='above-bucket']:not([src*='?src=above-bucket']), [href*='above-bucket']`);
 		for (let i = 0; i < aboveSrc.length; i++) {
 			const currTarget = aboveSrc[i];
-			const src = currTarget.src;
-			const href = currTarget.href;
+			const src = decodeURI(currTarget.src);
+			const href = decodeURI(currTarget.href);
 
 			if (src?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
 				let url = src.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
 				url = await getAvttStorageUrl(url);
-				$(currTarget).attr('src', url);
+				if ($(currTarget).is('source') && $(currTarget).parent().is('video')) {
+					const parentVideo = $(currTarget).parent('video');
+					parentVideo.attr('src', url);
+					$(currTarget).remove();
+				}
+				else{
+					$(currTarget).attr('src', url);
+				}
+				
+				
 			}
 			else if (href?.match(/.*?above-bucket-not-a-url\/(.*?)/gi)) {
 				let url = href.replace(/.*?above-bucket-not-a-url\/(.*?)/gi, '$1')
-				url = await getAvttStorageUrl(url);
+				url = await getAvttStorageUrl(decodeURI(url));
 				$(currTarget).attr('href', url);
 			}
 		}
@@ -2513,12 +2511,69 @@ class JournalManager{
 						mozallowfullscreen></iframe>`)
 			$(iframes[i]).replaceWith(newFrame);
 		}
+		const avttIframes = $newHTML.find('iframe[src*="src=above-bucket-not-a-url"]');
+		for (let i = 0; i < avttIframes.length; i++) {
+			const currSrc = avttIframes[i].src;
+			const urlParams = new URLSearchParams(currSrc.split('?')[1]);
+			const origSrc = urlParams.get('src');
+			const src = await getAvttStorageUrl(origSrc, true);
+			avttIframes[i].src = `${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(src)}`;
+		}
+		$newHTML.find('img[data-src*="above-bucket-not-a-url"]').each(async (index, image) => {
+			const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
+			image.src = src;
+			image.href = src;
+		})
 	    $newHTML.find('.ignore-abovevtt-formating').each(function(index){
 			$(this).empty().append(ignoreFormatting[index].innerHTML);
 	    })
 
 
         $(target).html($newHTML);
+
+		const partyLootTable = $(target).find('.party-item-table');
+		for (let i = 0; i < partyLootTable.length; i++) {
+			const currTable = $(partyLootTable[i]);
+			const rows = currTable.find('tbody tr');
+			rows.each(function () {
+				
+				const link = $(this).find('.item-link-cell a');
+				const targetLink = link.length>0 ? link.attr('href') :
+									$(this).find('.item-link-cell')?.text();
+			
+				const itemId = link.length > 0 ? targetLink?.match(/\/(\d*?)\-.*?$/i)?.[1] :
+													targetLink?.match(/https.*\/(\d*?)\-.*?$/i)?.[1];
+				
+				
+				if (itemId && window.ITEMS_CACHE) {
+					const itemData = window.ITEMS_CACHE.find(d => d.id == itemId);
+					if (itemData) {
+						const descriptionCell = $(this).find('.item-description-cell');
+						descriptionCell.html(itemData.description);
+						if(link.length == 0){
+							const itemLink = $(`<a href=${targetLink?.match(/https.*\/\d*?\-.*?$/i)?.[0]}" class='tooltip-hover no-border ignore-abovevtt-formating'>${itemData.name}</a>`);
+							$(this).find('.item-link-cell').empty().append(itemLink);
+						}
+						const quantity = parseInt($(this).find('.item-quantity-cell').text()) || 1;
+						const itemAddCell = $(this).find('.item-add-cell');
+						const button = $(`<button class="item-add-button" data-quantity="${quantity}" data-id="${itemId}" title="Add ${itemData.name} to Party Loot">+</button>`);
+						itemAddCell.empty().append(button);
+					}
+				}
+			});
+		}
+		if (partyLootTable.length > 0){
+			$(target).off('click.addPartyLootItem').on('click.addPartyLootItem', '.item-add-button', function (e) {
+				e.preventDefault();
+				e.stopPropagation();
+				const itemId = $(this).data('id');
+				const quantity = parseInt($(this).data('quantity')) || 1;
+				const itemData = find_items_in_cache_by_id([itemId]);
+				itemData[0].quantity = quantity;
+				add_items_to_party_inventory(itemData);
+			});
+		}
+
     }
 	
 	note_visibility(id,visibility){
@@ -2564,7 +2619,7 @@ class JournalManager{
 		$("#site-main").append(note);
 		note.dialog({
 			draggable: true,
-			width: 860,
+			width: 900,
 			height: 600,
 			position: {
 			   my: "center",
@@ -2590,8 +2645,7 @@ class JournalManager{
 		$("[role='dialog']").draggable({
 			containment: "#windowContainment",
 			start: function () {
-				$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-				$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+				$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 			},
 			stop: function () {
 				$('.iframeResizeCover').remove();			
@@ -2599,8 +2653,7 @@ class JournalManager{
 		});
 		$("[role='dialog']").resizable({
 			start: function () {
-				$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-				$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+				$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 			},
 			stop: function () {
 				$('.iframeResizeCover').remove();			
@@ -3369,8 +3422,9 @@ class JournalManager{
 			    font-weight: 700;
 			}		
 			.ddbc-creature-block {
-			    background: url(https://www.dndbeyond.com/Content/Skins/Waterdeep/images/mon-summary/stat-block-top-texture.png),url(https://www.dndbeyond.com/Content/Skins/Waterdeep/images/mon-summary/paper-texture.png);
-			    background-size: 100% auto;
+				--image-background: url(https://www.dndbeyond.com/Content/Skins/Waterdeep/images/mon-summary/stat-block-top-texture.png),url(https://www.dndbeyond.com/Content/Skins/Waterdeep/images/mon-summary/paper-texture.png);
+				background: var(--background-color, var(--image-background));
+			   	background-size: 100% auto;
 			    background-position: top;
 			    background-repeat: no-repeat,repeat;
 			    position: relative;
@@ -3378,7 +3432,8 @@ class JournalManager{
 			    border: 1px solid #d4d0ce;
 			    padding: 15px 10px;
 			    font-family: Scala Sans Offc,Roboto,Helvetica,sans-serif;
-			    font-size: 15px
+			    font-size: 15px;
+
 			}
 
 			.ddbc-creature-block:after,.ddbc-creature-block:before {
@@ -3699,9 +3754,46 @@ class JournalManager{
 <p>4th level (3 slots): greater invisibility, ice storm</p>
 <p>5th level (1 slot): cone of cold</p>`
 			    },
+				{
+					"title": "Treasure / Loot Table",
+					"description": "Add a treasure table with buttons to add to party inventory.",
+					"content": `<style id='contentStyles'>${contentStyles}</style>
+					
+					<table class="party-item-table" style="width: 100%; border-collapse: collapse;" border="1">
+						<thead>
+							<tr>
+							<th style="padding: 8px; text-align: left;">Quantity</th>
+							<th style="padding: 8px; text-align: left;">Item</th>
+							<th style="padding: 8px; text-align: left;">Description</th>
+							<th style="padding: 8px; text-align: left;">Add to Party Inventory</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td class="item-quantity-cell" style="padding: 8px; text-align: left;">2</td>
+								<td class="item-link-cell" style="padding: 8px; text-align: left;"><a class="tooltip-hover no-border ignore-abovevtt-formating" href="https://www.dndbeyond.com/magic-items/8960641-potion-of-healing">Potion of Healing</a></td>
+								<td class="item-description-cell" style="padding: 8px; text-align: left;">Auto Fills</td>
+								<td class="item-add-cell" style="padding: 8px; text-align: left;">Auto Fills</td>
+							</tr>
+							<tr>
+								<td class="item-quantity-cell" style="padding: 8px; text-align: left;">Insert Quantity</td>
+								<td class="item-link-cell" style="padding: 8px; text-align: left;">Insert Item Link</td>
+								<td class="item-description-cell" style="padding: 8px; text-align: left;">Auto Fills</td>
+								<td class="item-add-cell" style="padding: 8px; text-align: left;">Auto Fills</td>
+							</tr>
+							<tr>
+								<td class="item-quantity-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
+								<td class="item-link-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
+								<td class="item-description-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
+								<td class="item-add-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
+							</tr>
+						</tbody>
+					</table>			
+					`
+				},
 			],
 		  	table_grid: false,
-			toolbar: 'undo styleselect template | horizontalrules | bold italic underline strikethrough | alignleft aligncenter alignright justify| outdent indent | bullist numlist | forecolor backcolor | fontsizeselect | link unlink | image media table tableCustom | code',
+			toolbar: 'undo styleselect template | horizontalrules | bold italic underline strikethrough | alignleft aligncenter alignright justify| outdent indent | bullist numlist | forecolor backcolor | fontsizeselect | link unlink | image media filePickers table tableCustom | code',
 			image_class_list: [
 				{title: 'Magnify', value: 'magnify'},
 			],
@@ -3734,21 +3826,192 @@ class JournalManager{
 				        ],
 				      onclick: (e) => {e.preventDefault(); e.stopPropagation(); editor.insertContent(`<img class="mon-stat-block__separator-img" alt="" src="https://www.dndbeyond.com/file-attachments/0/579/stat-block-header-bar.svg"/>`)},
 				    });
-				editor.on('init', function (e) {
-					const body = $(e.target.contentDocument.body);
-					const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]');
-					const backgroundColor = $(':root').css('--background-color'); // support azmoria's dark mode without requiring inverse filters
-					const fontColor = $(':root').css('--font-color');
-					body.css({
-						background: backgroundColor,
-						color: fontColor,
-						'--font-color': fontColor,
-						'--background-color': backgroundColor
-					});
+
+				editor.addButton('filePickers', {
+					type: 'splitbutton',
+					text: '',
+					icon: 'upload',
+					tooltip: 'Upload/Select File From File Picker',
+					menu: [
+						{
+							text: "Azmoria's AboveVTT File Picker",
+							onclick: (e) => { 
+								e.preventDefault();
+								e.stopPropagation(); 
+								launchFilePicker(async function (files) {
+									try {
+										for (let i = 0; i < files.length; i++) {
+											const fileType = files[i].type;
+											const link = files[i].link;
+
+											if (fileType === avttFilePickerTypes.IMAGE) {
+												tinymce.activeEditor.insertContent(`<img class="magnify" alt="" data-src="${link}" />`);
+											} else if (fileType === avttFilePickerTypes.VIDEO) {
+												tinymce.activeEditor.insertContent(`<video controls="controls" width="100%" height="auto"><source src="${link}" /></video>`);
+											} else if (fileType === avttFilePickerTypes.AUDIO) {
+												tinymce.activeEditor.insertContent(`<audio controls src="${link}"></audio>`);
+											} else {
+												tinymce.activeEditor.insertContent(`<iframe width='100%' height='400' src='${window.EXTENSION_PATH}iframe.html?src=${link}'
+												allowfullscreen
+												webkitallowfullscreen
+												mozallowfullscreen></iframe>`);
+											}
+										}
+									} catch (error) {
+										console.error("Failed to import from AVTT File Picker selection", error);
+										alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+									}
+								}, undefined,
+								async function (files) {
+									try {
+										for (let i = 0; i < files.length; i++) {
+											const link = files[i].link;
+											tinymce.activeEditor.insertContent(`<span class="journal-site-embed">${link}</span>`);
+										}
+									}
+									catch (error) {
+										console.error("Failed to import from AVTT File Picker selection", error);
+										alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+									}
+								});
+							},
+						},
+						{
+							text: "Dropbox - Insert Image/Video/Audio",
+							onclick: (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								const dropboxOptions = dropBoxOptions(function (links) {
+									for (let i = 0; i < links.length; i++) {
+										const link = parse_img(links[i].link);
+										const extension = links[i].link.split('?')[0].match(/.*\.(.*)?$/i)?.[1];
+										if (allowedImageTypes.includes(extension)) {
+											tinymce.activeEditor.insertContent(`<img class="magnify" alt="" src='${link}' />`);
+										} else if (allowedVideoTypes.includes(extension)) {
+											tinymce.activeEditor.insertContent(`<video controls="controls" width="100%" height="auto"><source src="${link}"/></video>`);
+										} else if (allowedAudioTypes.includes(extension)) {
+											tinymce.activeEditor.insertContent(`<audio controls src="${link}"></audio>`);
+										}
+									}
+								}, true, ['images','video','audio'], false);
+								Dropbox.choose(dropboxOptions)
+							},
+						},
+						{
+							text: "Dropbox - Site Embed",
+							onclick: (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								const dropboxOptions = dropBoxOptions(function (links) {
+									for (let i = 0; i < links.length; i++) {
+										const link = links[i].link;
+										tinymce.activeEditor.insertContent(`<span class="journal-site-embed">${link}</span>`);
+									}
+								}, false, ['images', 'video', 'audio', 'document', 'text'], false);
+								Dropbox.choose(dropboxOptions)
+							},
+						},
+						{
+							text: "OneDrive - Insert Image",
+							onclick: (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								launchPicker(e, function (links) {
+									for (let i = 0; i < links.length; i++) {
+										const link = parse_img(links[i].link);
+										tinymce.activeEditor.insertContent(`<img class="magnify" alt="" src='${link}' />`);
+									}
+								}, 'multiple', ['photo', '.webp']);
+							},
+						},
+						{
+							text: "OneDrive - Site Embed",
+							onclick: (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								launchPicker(e, function (links) {
+									for (let i = 0; i < links.length; i++) {
+										const link = links[i].link;
+										tinymce.activeEditor.insertContent(`<span class="journal-site-embed">${link}</span>`);
+									}
+								}, 'single', ['files']);
+							},
+						}
+					],
+					onclick: (e) => { 
+						e.preventDefault();
+						e.stopPropagation();
+						launchFilePicker(async function (files) {
+							try {
+								for (let i = 0; i < files.length; i++) {
+									const fileType = files[i].type;
+									const link = files[i].link;
+
+									if (fileType === avttFilePickerTypes.IMAGE) {
+										tinymce.activeEditor.insertContent(`<img class="magnify" alt="" data-src="${link}" />`);
+									} else if (fileType === avttFilePickerTypes.VIDEO) {
+										tinymce.activeEditor.insertContent(`<video controls="controls" width="100%" height="auto"><source src="${link}" /></video>`);
+									} else if (fileType === avttFilePickerTypes.AUDIO) {
+										tinymce.activeEditor.insertContent(`<audio controls src="${link}"></audio>`);
+									} else {
+										tinymce.activeEditor.insertContent(`<iframe width='100%' height='400' src='${window.EXTENSION_PATH}iframe.html?src=${link}'
+												allowfullscreen
+												webkitallowfullscreen
+												mozallowfullscreen></iframe>`);
+									}
+								}
+							} catch (error) {
+								console.error("Failed to import from AVTT File Picker selection", error);
+								alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+							}
+						}, undefined,
+							async function (files) {
+								try {
+									for (let i = 0; i < files.length; i++) {
+										const link = files[i].link;
+										tinymce.activeEditor.insertContent(`<span class="journal-site-embed">${link}</span>`);
+									}
+								}
+								catch (error) {
+									console.error("Failed to import from AVTT File Picker selection", error);
+									alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+								}
+							});
+						},
+				});
+				editor.addCommand('setAvttImageSrc', function (e) {
+					const body = e.target.contentDocument?.body != undefined ? $(e.target.contentDocument.body) : $(e.target);
+					const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]:not([src^="above-bucket-not-a-url"])');
 					avttImages.each(async (index, image) => {
 						const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
 						image.src = src;
 					})
+					const avttImages2 = body.find('img[src^="above-bucket-not-a-url"]');
+					avttImages2.each(async (index, image) => {
+						const origSrc = image.getAttribute('src');
+						const src = await getAvttStorageUrl(origSrc, true);
+						image.setAttribute('data-src', origSrc)
+						image.src = src;
+					})
+
+					if (editor.isDirty()) {
+						debounceNoteSave(e, editor);
+					}
+				});
+				editor.on('init', function (e) {
+					const body = $(e.target.contentDocument.body);
+					const backgroundColor = $(':root').css('--background-color'); // support azmoria's dark mode without requiring inverse filters
+					const fontColor = $(':root').css('--font-color');
+					if(backgroundColor && fontColor){
+						body.css({
+							background: backgroundColor,
+							color: fontColor,
+							'--font-color': fontColor,
+							'--background-color': backgroundColor
+						});
+					}
+
+					editor.execCommand('setAvttImageSrc', e);
 				});
 
 				editor.on('NodeChange', async function (e) {
@@ -3775,22 +4038,7 @@ class JournalManager{
 				    return;
 				});
 				editor.on('change keyup', async function(e){
-					const body = $(e.target);
-					const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]:not([src])');
-					avttImages.each(async (index, image) => {
-						const src = await getAvttStorageUrl(image.getAttribute('data-src'), true);
-						image.src = src;
-					})
-					const avttImages2 = body.find('img[src^="above-bucket-not-a-url"]');
-					avttImages2.each(async (index, image) => {
-						const origSrc = image.getAttribute('src');
-						const src = await getAvttStorageUrl(origSrc, true);
-						image.setAttribute('data-src', origSrc)
-						image.src = src;
-					})
-				    if(editor.isDirty()){
-				    	debounceNoteSave(e, editor);
-				    }
+					editor.execCommand('setAvttImageSrc', e);
 				});
 			},
 			relative_urls : false,

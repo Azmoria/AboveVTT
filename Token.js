@@ -40,25 +40,33 @@ const availableToAoe = [
 
 
 
-const throttleLight = throttle((darknessMoved = false) => {requestAnimationFrame(()=>{redraw_light(darknessMoved)})}, 1000/30);
+const throttleLight = throttle((darknessMoved = false) => {
+	if(window.LOADING){
+		return;
+	}
+	if (!window.walls || window.walls?.length < 5) {
+		redraw_light_walls();
+	} 
+	requestAnimationFrame(()=>{redraw_light(darknessMoved)})
+}, 1000/30);
 const throttleTokenCheck = mydebounce(throttle(do_check_token_visibility, 1000/4), 20);
- const debounceStoreExplored = mydebounce((exploredCanvas) => {		
+const debounceStoreExplored = mydebounce((exploredCanvas, sceneId) => {		
 	let dataURI = exploredCanvas.toDataURL('image/jpg')
 
 	let storeImage = gameIndexedDb.transaction([`exploredData`], "readwrite")
 	let objectStore = storeImage.objectStore(`exploredData`)
-	let deleteRequest = objectStore.delete(`explore${window.gameId}${window.CURRENT_SCENE_DATA.id}`);
+	let deleteRequest = objectStore.delete(`explore${window.gameId}${sceneId}`);
 	deleteRequest.onsuccess = (event) => {
-	  const objectStoreRequest = objectStore.add({exploredId: `explore${window.gameId}${window.CURRENT_SCENE_DATA.id}`, 'exploredData': dataURI});
+		const objectStoreRequest = objectStore.add({ exploredId: `explore${window.gameId}${sceneId}`, 'exploredData': dataURI});
 	};
 	deleteRequest.onerror = (event) => {
-	  const objectStoreRequest = objectStore.add({exploredId: `explore${window.gameId}${window.CURRENT_SCENE_DATA.id}`, 'exploredData': dataURI});
+		const objectStoreRequest = objectStore.add({ exploredId: `explore${window.gameId}${sceneId}`, 'exploredData': dataURI});
 	};
 }, 5000)
 var debounceLightChecks = mydebounce((darknessMoved = false) => {		
 		if(window.DRAGGING)
 			return;
-		if(window.walls?.length < 5){
+	if (!window.walls || window.walls?.length < 5){
 			redraw_light_walls();	
 		}
 		
@@ -79,7 +87,7 @@ var debounceAudioChecks = mydebounce(() => {
 var longDebounceLightChecks = mydebounce((darknessMoved = false) => {		
 		if(window.DRAGGING)
 			return;
-		if(window.walls?.length < 5){
+		if (!window.walls || window.walls?.length < 5){
 			redraw_light_walls();	
 		}
 		//let promise = [new Promise (_ => setTimeout(redraw_light(), 1000))];
@@ -146,7 +154,7 @@ class Token {
 		return 0;
 	}
 	set baseHp(newValue) {
-		let currentHP = this.options.hitPointInfo ? this.options.hitPointInfo.current : this.options.hp
+		let currentHP = this.hp
 		if (this.options.hitPointInfo) {
 			this.options.hitPointInfo.current = newValue;
 		} else {
@@ -161,7 +169,7 @@ class Token {
 			let msgdata = {
 				player: this.options.name,
 				img: parse_img(this.options.imgsrc),
-				text: `<b>Check for concentration! If damage was from a single source DC ${Math.floor((this.options.hp - newValue)/2) > 10 ? Math.floor((this.options.hp - newValue)/2) : 10}</b>`,
+				text: `<b>Check for concentration! If damage was from a single source DC ${Math.floor((currentHP - newValue) / 2) > 10 ? Math.floor((currentHP - newValue)/2) : 10}</b>`,
 			};
 			window.MB.inject_chat(msgdata);
 		}
@@ -386,6 +394,8 @@ class Token {
 					$('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}</style>`);
 					$('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
 					this.options.conditions.push({ name: conditionName });
+					if (!window.all_token_objects[this.options.id].options.conditions.some(d => d.name == conditionName))
+						window.all_token_objects[this.options.id].options.conditions.push({ name: conditionName });
 					setTimeout(function () {
 						$(`.ct-sidebar__inner .ct-condition-manage-pane__condition-name:contains('${conditionName}') ~ .ct-condition-manage-pane__condition-toggle>[class*='styles_toggle'][aria-pressed="false"]`).click();
 					}, 30)
@@ -404,7 +414,9 @@ class Token {
 		            });	
 				}        
 	        } else {
-	            this.options.conditions.push({ name: conditionName });
+				this.options.conditions.push({ name: conditionName });
+				if (!window.all_token_objects[this.options.id].options.conditions.some(d => d.name == conditionName))
+					window.all_token_objects[this.options.id].options.conditions.push({ name: conditionName });
 	        }
 	    } else {
 	    	let condition = {
@@ -412,6 +424,8 @@ class Token {
 	    		'text': text
 	    	}
 			this.options.custom_conditions.push(condition);
+			if (!window.all_token_objects[this.options.id].options.custom_conditions.some(d => d.name == conditionName))
+				window.all_token_objects[this.options.id].options.custom_conditions.push(condition);
 	    }
 	}
 	
@@ -422,6 +436,13 @@ class Token {
 					$('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}</style>`);
 					$('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
 					this.options.conditions = this.options.conditions.filter(c => {
+						if (typeof c === "string") {
+							return c !== conditionName;
+						} else {
+							return c?.name !== conditionName;
+						}
+					});
+					window.all_token_objects[this.options.id].options.conditions = window.all_token_objects[this.options.id].options.conditions.filter(c => {
 						if (typeof c === "string") {
 							return c !== conditionName;
 						} else {
@@ -447,7 +468,15 @@ class Token {
 					});
 				}
 			} else {
+				
 				this.options.conditions = this.options.conditions.filter(c => {
+					if (typeof c === "string") {
+						return c !== conditionName;
+					} else {
+						return c?.name !== conditionName;
+					}
+				});
+				window.all_token_objects[this.options.id].options.conditions = this.options.conditions.filter(c => {
 					if (typeof c === "string") {
 						return c !== conditionName;
 					} else {
@@ -457,6 +486,7 @@ class Token {
 			}
 		} else {
 			array_remove_index_by_value(this.options.custom_conditions, conditionName);
+			array_remove_index_by_value(window.all_token_objects[this.options.id].options.custom_conditions, conditionName);
 		}
 	}
 	isInCombatTracker() {
@@ -564,7 +594,7 @@ class Token {
 
 		
 		$("#aura_" + id.replaceAll("/", "")).remove();
-		$(`.aura-element-container-clip[id='${id}']`).remove()
+		$(`.aura-element-container-clip[id='${id}']`).parent().remove()
 		$(`[data-darkness='darkness_${id}']`).remove();
 		$(`[data-notatoken='notatoken_${id}']`).remove()
 
@@ -600,7 +630,7 @@ class Token {
 				window.TOKEN_OBJECTS[this.options.combatGroup].delete();
 			}
 		}
-		if(this.options.darkness){
+		if (this.options.darkness || this.options.tokenWall){
 			redraw_drawn_light();
 		}
 
@@ -741,8 +771,8 @@ class Token {
 
 			old.animate({left: this.options.left,top: this.options.top,}, { duration: 0, queue: true, 
 				complete: async function() {
-					const darknessMoved = self.options.darkness;
-					if(self.options.darkness)
+					const darknessMoved = self.options.darkness || self.options.tokenWall;
+					if (darknessMoved)
 						redraw_drawn_light();
 					
 					if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
@@ -758,7 +788,7 @@ class Token {
 			}
 			setTokenBase($(`[data-notatoken='notatoken_${this.options.id}']`), this.options);
 			let tokenBorderWidth = (this.options.underDarkness == true) ? (this.sizeWidth() / window.CURRENT_SCENE_DATA.hpps * 2 / window.CURRENT_SCENE_DATA.scale_factor)+"px" : (this.sizeWidth() / window.CURRENT_SCENE_DATA.hpps * 2)+"px";	
-			if(this.options.darkness){
+			if (this.options.darkness){
 				let copyImage = $(`[data-darkness='darkness_${this.options.id}']`);
 				copyImage.css({
 					left: parseInt(parseFloat(this.options.left) / window.CURRENT_SCENE_DATA.scale_factor),
@@ -867,7 +897,7 @@ class Token {
 	}
 
 	snap_to_closest_square() {
-		if ((!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer()) || this.options.locked) return; // don't allow moving if the token is locked
+		if ((!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer() && this.options.share_vision != true &&  this.options.share_vision != window.myUser) || this.options.locked) return; // don't allow moving if the token is locked
 		if (window.DM && this.options.locked) return; // don't allow moving if the token is locked
 		// shamelessly copied from the draggable code later in this file
 		// this should be a XOR... (A AND !B) OR (!A AND B)
@@ -2145,8 +2175,8 @@ class Token {
 						left: this.options.left,
 						top: this.options.top,
 					}, { duration: animationDuration, queue: true, complete: async function() {
-							const darknessMoved = self.options.darkness;
-							if(self.options.darkness)
+						const darknessMoved = self.options.darkness || self.options.tokenWall;
+							if (darknessMoved)
 								redraw_drawn_light();
 							
 							if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
@@ -2210,8 +2240,8 @@ class Token {
 							width: this.sizeWidth(),
 							height: this.sizeHeight()
 						}, { duration: animationDuration, queue: false, complete: async function() {
-							const darknessMoved = self.options.darkness;
-							if(self.options.darkness)
+							const darknessMoved = self.options.darkness || self.options.tokenWall;
+							if(darknessMoved)
 								redraw_drawn_light();
 							
 							if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
@@ -2530,13 +2560,13 @@ class Token {
 						color: 'rgba(142, 142, 142, 1)'
 					}
 				}
-				if((!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer()) || this.options.locked){
+				if((!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer() && this.options.share_vision != true &&  this.options.share_vision != window.myUser) || this.options.locked){
 					if(!window.DM || (window.DM && !$('#select_locked>div.ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active'))){
 						old.draggable("disable");
 						old.removeClass("ui-state-disabled"); // removing this manually.. otherwise it stops right click menu
 					}
 				}
-				else if((window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer()) || !this.options.locked || (window.DM && !$('#select_locked>div.ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active'))){
+				else if((window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer() && this.options.share_vision != true &&  this.options.share_vision != window.myUser) || !this.options.locked || (window.DM && !$('#select_locked>div.ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active'))){
 					old.draggable("enable");
 				}	
 				else if(!window.DM && ((!this.options.restrictPlayerMove  && !this.isCurrentPlayer())) || !this.options.locked){
@@ -2575,8 +2605,8 @@ class Token {
 						}, 
 						{ 
 							duration: animationDuration, queue: true, complete: async function() {
-								const darknessMoved = self.options.darkness;
-								if(self.options.darkness)
+								const darknessMoved = self.options.darkness || self.options.tokenWall;
+								if (darknessMoved)
 									redraw_drawn_light();
 								
 								if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
@@ -2658,12 +2688,12 @@ class Token {
 								}, 
 								{ 
 									duration: animationDuration, queue: true, complete: async function() {
-										const darknessMoved = self.options.darkness;
+										const darknessMoved = self.options.darkness || self.options.tokenWall;
 									
 										if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
-											throttleLight();
+											throttleLight(darknessMoved);
 										else
-											debounceLightChecks()
+											debounceLightChecks(darknessMoved)
 									}
 								}
 							);
@@ -2675,7 +2705,7 @@ class Token {
 						const copyImage = oldImage.clone();
 						underDarkToken.append(copyImage);
 						
-						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
+							if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
 							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
 							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
 								updateTokenSrc(this.options.imgsrc, copyImage, this.options.videoToken);
@@ -2926,12 +2956,19 @@ class Token {
 
 				this.update_health_aura(tok);
 				let currentSceneScale = parseFloat(window.CURRENT_SCENE_DATA.scale_factor) ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor) : 1
-				if(this.options.scaleCreated != undefined && this.options.scaleCreated != currentSceneScale){
-					let difference = this.sizeWidth()/this.options.scaleCreated*currentSceneScale/2 - this.sizeWidth()/2;
-					this.options.top = `${parseFloat(this.options.top)/this.options.scaleCreated*currentSceneScale+difference}px`
-					this.options.left =  `${parseFloat(this.options.left)/this.options.scaleCreated*currentSceneScale+difference}px`
+				if(this.options.scaleCreated){
+					if (window.CURRENT_SCENE_DATA.scale_factor * window.CURRENT_SCENE_DATA.conversion == this.options.scaleCreated)
+						this.options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
+
+					if (this.options.scaleCreated != currentSceneScale) {
+						let difference = this.sizeWidth() / this.options.scaleCreated * currentSceneScale / 2 - this.sizeWidth() / 2;
+						this.options.top = `${parseFloat(this.options.top) / this.options.scaleCreated * currentSceneScale + difference}px`
+						this.options.left = `${parseFloat(this.options.left) / this.options.scaleCreated * currentSceneScale + difference}px`
+					}
 				}
-				this.options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;	
+
+				this.options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
+
 				tok.css("position", "absolute");
 				tok.css("--z-index-diff", zindexdiff);
 				tok.css("top", this.options.top);
@@ -3033,7 +3070,7 @@ class Token {
 								self.sync($.extend(true, {}, self.options));
 							}
 							
-							let darknessMoved = self.options.darkness;
+							let darknessMoved = self.options.darkness || self.options.tokenWall;
 							if (self.selected ) {
 								for (let tok of window.dragSelectedTokens){
 									let id = $(tok).attr("data-id");	
@@ -3047,6 +3084,14 @@ class Token {
 									if(curr?.options?.darkness === true)
 										darknessMoved = true;
 								}												
+							}
+							if(darknessMoved){
+								redraw_light(darknessMoved);
+								redraw_drawn_light();
+								if(window.EXPERIMENTAL_SETTINGS.dragLight == true)
+									throttleLight();
+								else
+									debounceLightChecks()
 							}
 							//remove cover for smooth drag
 							$('.iframeResizeCover').remove();
@@ -3119,8 +3164,7 @@ class Token {
 				
 						
 						// for dragging behind iframes so tokens don't "jump" when you move past it
-						$("#resizeDragMon").append($('<div class="iframeResizeCover"></div>'));			
-						$("#sheet").append($('<div class="iframeResizeCover"></div>'));
+						$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 
 
 						self.orig_top = self.options.top;
@@ -3398,10 +3442,7 @@ class Token {
 									tokenY = offsetTop + parseInt(curr.orig_top);
 									
 
-									$(tok).css('left', tokenX + "px");
-									$(tok).css('top', tokenY + "px");
-									curr.options.left =  tokenX + "px";
-									curr.options.top = tokenY+"px";
+								
 									if(!window.DM && window.playerTokenAuraIsLight){
 										const left = (tokenX + (parseFloat(curr.sizeWidth()) / 2)) / parseFloat(window.CURRENT_SCENE_DATA.scale_factor);
 										const top = (tokenY + (parseFloat(curr.sizeWidth()) / 2)) / parseFloat(window.CURRENT_SCENE_DATA.scale_factor);
@@ -3430,13 +3471,15 @@ class Token {
 										}
 										else{
 											window.oldTokenPosition[curr.options.id] = (window.oldTokenPosition[curr.options.id] != undefined) ? window.oldTokenPosition[curr.options.id] : {left: parseInt(curr.orig_left), top: parseInt(curr.orig_top)};
-										
-											$(tok).css('left', window.oldTokenPosition[curr.options.id].left + "px");
-											$(tok).css('top', window.oldTokenPosition[curr.options.id].top + "px");
+											tokenX = window.oldTokenPosition[curr.options.id].left;
+											tokenY = window.oldTokenPosition[curr.options.id].top;
 										}
 									}
 									
-						
+									$(tok).css('left', tokenX + "px");
+									$(tok).css('top', tokenY + "px");
+									curr.options.left = tokenX + "px";
+									curr.options.top = tokenY + "px";
 														
 									//curr.options.top=(parseInt(curr.orig_top)+offsetTop)+"px";
 									//curr.place();
@@ -3532,7 +3575,7 @@ class Token {
 						tok.removeClass("ui-state-disabled");
 					}
 				}
-				if (!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer()) {
+				if (!window.DM && this.options.restrictPlayerMove && !this.isCurrentPlayer() && this.options.share_vision != true &&  this.options.share_vision != window.myUser) {
 					tok.draggable("disable");
 					tok.removeClass("ui-state-disabled");
 				}
@@ -4024,11 +4067,13 @@ function place_token_at_map_point(tokenObject, x, y, forcePlaceAndSize = false, 
 		...tokenObject,
 		id: tokenObject.id // pc.id uses the DDB characterId, but we want to use the pc.sheet for player ids. So just use whatever we were given with tokenObject.id
 	};
+	forcePlaceAndSize = forcePlaceAndSize || 
+		options.alternativeImagesCustomizations?.[options.imgsrc]?.tokenSize != undefined;
 	if(window.all_token_objects[options.id] !== undefined && options.alternativeImages){
 		if(!(window.all_token_objects[options.id].options.imgsrc in options.alternativeImages)){
 			window.all_token_objects[options.id].options.imgsrc = options.imgsrc;
 		}
-		let alternativeImages = options.alternativeImages;
+		let alternativeImages = [...options.alternativeImages];
 		options = {
 			...options,
 			...window.all_token_objects[options.id].options,
@@ -4040,7 +4085,12 @@ function place_token_at_map_point(tokenObject, x, y, forcePlaceAndSize = false, 
 		options.imgsrc = parse_img(options.imgsrc);
 	}
 
+	if (options.alternativeImagesCustomizations?.[options.imgsrc] != undefined){
+		options = { ...options, ...options.alternativeImagesCustomizations[options.imgsrc]};
+	}
+
 	if (options.size == undefined || forcePlaceAndSize) {
+		delete options.gridSquares;
 		if (options.tokenSize != undefined && parseFloat(options.tokenSize) != NaN) {
 			// tokenSize was specified, convert it to size. tokenSize is the number of squares this token fills
 			options.size = Math.round(window.CURRENT_SCENE_DATA.hpps) * parseFloat(options.tokenSize);
@@ -4384,7 +4434,7 @@ function checkAudioVolume(){
 
 function setAudioAura (token, options){
 		
-		const auraRadius = parseFloat(options.audioChannel.range) / parseInt(window.CURRENT_SCENE_DATA.fpsq) * window.CURRENT_SCENE_DATA.hpps;
+	const auraRadius = parseFloat(options.audioChannel.range) / parseFloat(window.CURRENT_SCENE_DATA.fpsq) * window.CURRENT_SCENE_DATA.hpps;
 		const auraBg = `radial-gradient(transparent ${auraRadius+(parseInt(options.size)/2)-4}px, #fff ${auraRadius+(parseInt(options.size)/2)-4}px ${auraRadius+(parseInt(options.size)/2)}px);`;
 		const totalSize = parseInt(options.size) + (2 * auraRadius);
 		const absPosOffset = (options.size - totalSize) / 2;
@@ -4403,8 +4453,8 @@ function setAudioAura (token, options){
 function setTokenAuras (token, options) {
 	if (!options.aura1 || options.id.includes('exampleToken')) return;
 
-	const innerAuraSize = options.aura1.feet.length > 0 ? (options.aura1.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const outerAuraSize = options.aura2.feet.length > 0 ? (options.aura2.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const innerAuraSize = options.aura1.feet.length > 0 ? (options.aura1.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const outerAuraSize = options.aura2.feet.length > 0 ? (options.aura2.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
 	if ((innerAuraSize > 0 || outerAuraSize > 0) && options.auraVisible) {
 		// use sizeWidth and sizeHeight???
 		
@@ -4469,7 +4519,15 @@ function setTokenAuras (token, options) {
 					currAura.attr('data-animation', '')
 				}
 				currAura.attr('data-custom-animation', 'true')
+
 				currAura.css('--custom-mask-image', `url('${parse_img(options.animation.customAuraMask)}')`)
+				if (options.animation.customAuraMask?.includes('above-bucket-not-a-url')){
+					setAvttFilePickerCssVar({
+						var: '--custom-mask-image', 
+						target: currAura,
+						url: options.animation.customAuraMask
+					})
+				}
 			}
 			else{
 				currAura.attr('data-animation', options.animation.aura)
@@ -4478,8 +4536,6 @@ function setTokenAuras (token, options) {
 		else{
 			currAura.removeAttr('data-animation')
 		}
-
-		
 	} else {
 		const tokenId = token.attr("data-id").replaceAll("/", "");
 		token.parent().parent().find("#aura_" + tokenId).remove();
@@ -4497,12 +4553,12 @@ function setTokenLight (token, options) {
 			(!window.DM && playerNoVision && !playerNoTokenIsPc && zeroLight) || 
 			window.CURRENT_SCENE_DATA.disableSceneVision == true || 
 			options.id.includes('exampleToken')) {
-		token.parent().parent().find(`.aura-element-container-clip[id='${options.id}']`).remove();
+		token.parent().parent().find(`.aura-element-container-clip[id='${options.id}']`).parent().remove();
 		return;
 	} 
-	const innerlightSize = options.light1.feet != undefined? (options.light1.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const outerlightSize = options.light2.feet != undefined ? (options.light2.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
-	const visionSize = options.vision.feet != undefined ? (options.vision.feet / parseInt(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const innerlightSize = options.light1.feet != undefined ? (options.light1.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const outerlightSize = options.light2.feet != undefined ? (options.light2.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
+	const visionSize = options.vision.feet != undefined ? (options.vision.feet / parseFloat(window.CURRENT_SCENE_DATA.fpsq)) * window.CURRENT_SCENE_DATA.hpps/window.CURRENT_SCENE_DATA.scale_factor  : 0;
 	const tokenId = options.id.replaceAll("/", "").replaceAll('.', '');
 	if (options.auraislight) {
 
@@ -4546,8 +4602,8 @@ function setTokenLight (token, options) {
 		const opacity2Value = options?.light2?.color ? options.light2.color.replace(/[a-zA-Z\(\)\s]/g, '').split(',').splice(3, 1) : 1;
 		const daylightOpacityValue = window.CURRENT_SCENE_DATA?.daylight ? window.CURRENT_SCENE_DATA.daylight.replace(/[a-zA-Z\(\)\s]/g, '').split(',').splice(3, 1) : 1;
 
-		let clippath = window.lineOfSightPolygons ? `path("${window.lineOfSightPolygons[options.id]?.clippath}")` : undefined;
-		let devilsightClip = window.lineOfSightPolygons ? `path("${window.lineOfSightPolygons[options.id]?.devilsightClip}")` : undefined;
+		let clippath = window.lineOfSightPolygons ? `polygon(${window.lineOfSightPolygons[options.id]?.clippath})` : undefined;
+		let devilsightClip = window.lineOfSightPolygons ? `polygon(${window.lineOfSightPolygons[options.id]?.devilsightClip})` : undefined;
 
 		const lightStyles = `width:${totalSize }px;
 							height:${totalSize }px;
@@ -4586,10 +4642,10 @@ function setTokenLight (token, options) {
 
 		
 
-		token.parent().parent().find(".aura-element-container-clip[id='" + options.id+"']").remove();
+		token.parent().parent().find(".aura-element-container-clip[id='" + options.id+"']").parent().remove();
 
 
-		const lightElement = options.sight =='devilsight' || options.sight =='truesight' ?  $(`<div class='aura-element-container-clip light' style='clip-path: ${clippath};' id='${options.id}'><div class='aura-element' id="light_${tokenId}" data-id='${options.id}' style='${lightStyles}'></div></div><div class='aura-element-container-clip vision' style='clip-path: ${devilsightClip};' id='${options.id}'><div class='aura-element darkvision' id="vision_${tokenId}" data-id='${options.id}' style='${visionStyles}'></div></div>`) : $(`<div class='aura-element-container-clip light' style='clip-path: ${clippath};' id='${options.id}'><div class='aura-element' id="light_${tokenId}" data-id='${options.id}' style='${lightStyles}'></div><div class='aura-element darkvision' id="vision_${tokenId}" data-id='${options.id}' style='${visionStyles}'></div></div>`) 
+		const lightElement = options.sight == 'devilsight' || options.sight == 'truesight' ? $(`<div class='aura-clip-container'><div class='aura-element-container-clip light' style='clip-path: ${clippath};' id='${options.id}'><div class='aura-element' id="light_${tokenId}" data-id='${options.id}' style='${lightStyles}'></div></div></div><div class='aura-clip-container vision'><div class='aura-element-container-clip vision' style='clip-path: ${devilsightClip};' id='${options.id}'><div class='aura-element darkvision' id="vision_${tokenId}" data-id='${options.id}' style='${visionStyles}'></div></div></div>`) : $(`<div class='aura-clip-container'><div class='aura-element-container-clip light' style='clip-path: ${clippath};' id='${options.id}'><div class='aura-element' id="light_${tokenId}" data-id='${options.id}' style='${lightStyles}'></div><div class='aura-element darkvision' id="vision_${tokenId}" data-id='${options.id}' style='${visionStyles}'></div></div></div>`) 
 
 		lightElement.contextmenu(function(){return false;});
 		$("#light_container").prepend(lightElement);
@@ -4613,6 +4669,12 @@ function setTokenLight (token, options) {
 				}
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").attr('data-custom-animation', 'true')
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").css('--custom-mask-image', `url('${parse_img(options.animation.customLightMask)}')`)
+				setAvttFilePickerCssVar({
+					var: '--custom-mask-image',
+					target: token.parent().parent().find(".aura-element-container-clip[id='" + options.id + "']"),
+					url: options.animation.customLightMask
+				})
+			
 			}
 			else{
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").attr('data-animation', options.animation.light)
@@ -4638,7 +4700,7 @@ function setTokenLight (token, options) {
 		}
 		token.parent().parent().find("#light_" + tokenId).toggleClass("islight", true);
 	} else {
-		token.parent().parent().find(`.aura-element-container-clip[id='${options.id}']`).remove();
+		token.parent().parent().find(`.aura-element-container-clip[id='${options.id}']`).parent().remove();
 	}
 	
 

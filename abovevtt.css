@@ -344,9 +344,11 @@ button .ddbc-tab-options__header-heading .menu-option{
     border: solid black 1px;
 }
 
-.body-rpgcharacter-sheet div.avtt-sidebar-controls,
-.avtt-spectator-sheet div.avtt-sidebar-controls {
+.body-rpgcharacter-sheet div.avtt-sidebar-controls {
     margin: 4px 0px 0px 0px !important;
+}
+.avtt-spectator-sheet div.avtt-sidebar-controls {
+    margin: 3px 0px 0px 0px !important;
 }
 .ct-character-sheet--dark-mode .ct-sidebar__inner div[class*='styles_content'] #chat-text {
     color: #bfccd6;
@@ -871,7 +873,15 @@ select#doorTypeSelectUVTT{
     top:-100px;
     left:-100px;
 }
-
+.note form .mce-container-body .iframeResizeCover{
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width:100%;
+    height:100%;
+    position: absolute;
+}
 #exitWizard{
     z-index: 50;
     position: fixed;
@@ -4547,6 +4557,12 @@ div.ct-sidebar__pane-content > div.selected-tab,
 .ct-sidebar--visible{
    height: calc(-15px + 100vh) !important;
 }
+.ct-sidebar__inner [class*='styles_controls']>span{
+    visibility: hidden; 
+    width: 0px;
+    height: 0px; 
+    position: absolute;
+}
 
 /*this may be a DDB bug - as the `Send to (default)` button scrolls off screen and messess with our layout as at 4/25/2024*/
 .ct-sidebar__pane-content>div:first-of-type,
@@ -4783,6 +4799,9 @@ div#importer_area>div>div:first-of-type {
     margin: 2px !important;
     position: relative !important;
     opacity: 1 !important;
+}
+div#token-change-image-modal img.example-token:first-of-type {
+    box-shadow: 0px 0px 2px 2px #1b9af07a;
 }
 #token-change-image-modal .example-token{
     width:90px;
@@ -7285,21 +7304,21 @@ div#file-listing-section .sidebar-panel-loading-indicator {
     filter: drop-shadow(2px 2px 4px #000)
 }
 /*one button*/
-.encounter-builder-page :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(1) {
+.encounter-builder-page:not(.avtt-spectator-sheet) :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(1) {
     margin-right:60px;
 }
 
 /* two buttons */
-.encounter-builder-page :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(2) ~ button:last-of-type {
+.encounter-builder-page:not(.avtt-spectator-sheet) :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(2) ~ button:last-of-type {
     margin-right:30px;
 }
 
 /* three buttons */
-.encounter-builder-page :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(3) ~ button:last-of-type {
+.encounter-builder-page:not(.avtt-spectator-sheet) :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(3) ~ button:last-of-type {
     margin-right:0px;
 }
 /* four buttons */
-.encounter-builder-page :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(4) ~ button:last-of-type {
+.encounter-builder-page:not(.avtt-spectator-sheet) :is(#combat_area, #combat_area_carousel) td button:first-of-type:nth-last-of-type(4) ~ button:last-of-type {
 
     margin-right:0px;
 }
@@ -7615,7 +7634,7 @@ button.avttPicker.token-row-button span.avtt-btn-status {
 }
 
 button span.avtt-btn-status {
-background-image: var(--avtt-mask);
+    background-image: var(--avtt-mask);
     -webkit-background-position: 0px 2px;
     background-position: 0px -2px;
     background-size: 100%;
@@ -7636,13 +7655,13 @@ background-image: var(--avtt-mask);
 .sidebar-list-item-row-item button.avttPicker.token-row-button span.avtt-btn-status {
     background-image: none;
     -webkit-mask-image: var(--avtt-mask);
-    -webkit-mask-size: 25px 17px;
-    -webkit-mask-position: 0px 2px;
+    -webkit-mask-size: 30px 30px;
+    -webkit-mask-position: -2px -1px;
     mask-image: var(--avtt-mask);
-    mask-size: 25px 25px;
+    mask-size: 30px 30px;
     mask-repeat: no-repeat;
-    mask-position: 0px 2px;
-    background: #d30000;
+    mask-position: -2px -1px;
+    background: #000000;
 }
 
 button.launchPicker.token-row-button span.onedrive-btn-status{
@@ -7686,9 +7705,12 @@ button span.onedrive-btn-status{
     top: 2px;
 }
 #sounds-panel button span.avtt-btn-status {
-    background-position: -2px -3px;
+    background-position: -2px -2px;
     top: 0px;
     left: 0px;
+    background-size: 24px;
+    width: 100%;
+    height: 100%;
 }
 #sounds-panel .sidebar-panel-body>button{
     vertical-align:top;
@@ -7709,7 +7731,7 @@ button span.onedrive-btn-status{
 
 .addTokenMenu:hover,
 .hover-add-button:hover~.addTokenMenu {
-    width: 102px;
+    width: 136px;
     flex-shrink: 0;
 }
 
@@ -8784,14 +8806,18 @@ body:not(.body-rpgcampaign) .site-bar{
     display: none;
 }
 .aura-element-container-clip{
+    position: absolute;
+}
+.aura-clip-container {
     width: 100%;
     height: 100%;
     position: absolute;
-    z-index: 9;
+    z-index: 8;
     mix-blend-mode: lighten;
 }
-
-
+.aura-clip-container.vision:has(.devilsight){
+    z-index: 20 !important;
+}
 [data-darkness]{
     transform: rotate(var(--token-rotation));
     z-index:16 !important;
@@ -8820,8 +8846,9 @@ body:not(.body-rpgcampaign) .site-bar{
     opacity: 1 !important;
 }
 
-.body-rpgcharacter-sheet #tokens .inPersonMini,
-.avtt-spectator-sheet #tokens .inPersonMini {
+.body-rpgcharacter-sheet :is(#tokens, #token_map_items) .inPersonMini,
+.avtt-spectator-sheet :is(#tokens, #token_map_items) .inPersonMini
+{
     display: none !important;
 }
 
@@ -9009,6 +9036,11 @@ div.note[id^="ui-id"] .mce-listbox button{
 
 div.note[id^="ui-id"] .mce-btn button {
     padding: 1px 4px;
+}
+.note .mce-container .mce-btn i.mce-ico.mce-i-upload:not(.mce-i-resize):before {
+    font-family: "Material Icons", sans-serif !important;
+    content: "\f09b";
+    font-size: 20px;
 }
 body .mce-abs-layout-item,
 .mce-abs-end{
@@ -14125,7 +14157,19 @@ button#displayedDiceFormulaExit:hover {
 
 }
 
-
+.list-item-identifier.folder.avtt-drop-target:after,
+.sidebar-panel-body.avtt-drop-target:after,
+#track-list.avtt-drop-target:after {
+    content: '';
+    position: absolute;
+    top: 0px;
+    bottom: 0px;
+    left: 0px;
+    right: 0px;
+    box-shadow: inset 0px 0px 4px 1px #aaF;
+    border: 1px #0000ff33 dotted;
+    pointer-events: none;
+}
 
 /***** Icon UI *****/
 
@@ -14245,9 +14289,23 @@ button#displayedDiceFormulaExit:hover {
     top:26px;
     left:unset !important;
 }
-.body-rpgcharacter-sheet.mobileAVTTUI #zoom_buttons{
-    top:30px;
+
+.body-rpgcharacter-sheet.mobileAVTTUI #zoom_buttons {
+    top: 30px;
 }
+
+.avtt-spectator-sheet #zoom_buttons {
+    top: 0px;
+}
+.avtt-spectator-sheet.mobileAVTTUI #zoom_buttons {
+    top: 28px;
+}
+
+.avtt-spectator-sheet #hide_rightpanel,
+.avtt-spectator-sheet.mobileAVTTUI #hide_rightpanel {
+    top: 0px !important;
+}
+
 .mobileAVTTUI #zoom_buttons span,
 .mobileAVTTUI #zoom_buttons svg{
     font-size: 22px !important;

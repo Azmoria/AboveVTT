@@ -208,7 +208,7 @@ async function importAvttAudioSelections(links) {
 
     $('body>.import-loading-indicator').remove();
 }
-
+window.importAvttAudioSelections = importAvttAudioSelections;
 /**
  *
  * @returns {HTMLDivElement}
@@ -450,7 +450,14 @@ function init_mixer() {
                 if (channel.paused) {
                     play_svg.css('display', 'block');
                     pause_svg.css('display', 'none');
+                    validIcon.css('display', 'none');
                     channel_play_pause.toggleClass('playing pressed', false);
+                }
+                else if (window.MIXER._players[id].readyState != 0) {
+                    play_svg.css('display', 'none');
+                    validIcon.css('display', 'none');
+                    pause_svg.css('display', 'block');
+                    channel_play_pause.toggleClass('playing pressed', true);
                 }
                 else {
                     play_svg.css('display', 'none');
@@ -988,12 +995,9 @@ function init_trackLibrary() {
         }
     });
     trackLibrary.dispatchEvent(new Event('onchange'));
-    if (window.testAvttFilePicker === true) {
-        $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, avttButton, importCSV, exportCSV, importTrackFields, trackList);
-    }
-    else {
-        $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, oneDriveButton, importCSV, exportCSV, importTrackFields, trackList);
-    }
+    
+    $("#sounds-panel .sidebar-panel-body").append(header, searchTrackLibary, "<br>", addTracksToMixer, addShuffledToMixer, "<br>", addTrack, dropBoxbutton, avttButton, importCSV, exportCSV, importTrackFields, trackList);
+
     
 }
 

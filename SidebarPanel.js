@@ -451,6 +451,9 @@ function build_dropdown_input(settingOption, currentValue, changeHandler) {
   let input = $(`<select name="${settingOption.name}"></select>`);
   wrapper.append(input);
   for (const option of settingOption.options) {
+    if(!window.DM && option.dmOnly)
+      continue;
+    
     input.append(`<option value="${option.value}">${option.label}</option>`);
   }
   if (currentValue !== undefined) {
@@ -773,6 +776,7 @@ class SidebarListItem {
     let parentId = sceneData.parentId || RootFolder.Scenes.id;
     let item = new SidebarListItem(sceneData.id, name, sceneData.player_map, ItemType.Scene, folderPath, parentId);
     item.isVideo = sceneData.player_map_is_video == "1"; // explicity using `==` instead of `===` in case it's ever `1` or `"1"`
+    item.isUvtt = sceneData.UVTTFile == 1;
     item.noteData = sceneData.noteData || undefined;
     return item;
   }
@@ -1090,6 +1094,7 @@ function avttTokenDeriveName(relativePath) {
 
 async function importAvttTokens(links, baseFolderItem) {
   if (!Array.isArray(links) || links.length === 0) {
+    $('body>.import-loading-indicator').remove();
     return;
   }
   if (
@@ -1099,9 +1104,10 @@ async function importAvttTokens(links, baseFolderItem) {
     baseFolderItem.folderType !== ItemType.MyToken
   ) {
     console.warn("importAvttTokens called with invalid base folder", baseFolderItem);
+    $('body>.import-loading-indicator').remove();
     return;
   }
-  build_import_loading_indicator("Importing Tokens...");
+ 
   const baseFullPath = sanitize_folder_path(baseFolderItem.fullPath());
 
   const folderSet = new Set();
@@ -1592,10 +1598,10 @@ function build_sidebar_list_row(listItem) {
   rowItem.append(imgHolder);
   if (listItem.type !== "aoe" && !listItem.isTypeScene()){
     let tokenCustomizations = find_token_customization(listItem.type, listItem.id);
-    let listingImage = (tokenCustomizations?.tokenOptions?.alternativeImages && tokenCustomizations.tokenOptions?.alternativeImages[0] != undefined) ? tokenCustomizations.tokenOptions?.alternativeImages[0] : listItem.image; 
+    let listingImage = (tokenCustomizations?.tokenOptions?.alternativeImages && tokenCustomizations.tokenOptions?.alternativeImages?.[0] != undefined) ? tokenCustomizations.tokenOptions.alternativeImages[0] : listItem.image; 
     let img;
     let video = false;
-    let isAvttBucketFile = listingImage.startsWith('above-bucket-not-a-url');
+    let isAvttBucketFile = listingImage?.startsWith('above-bucket-not-a-url');
     if (isAvttBucketFile) {
       listingImage = avttSidebarApplyThumbnailPrefix(listingImage);
     }
@@ -1614,7 +1620,6 @@ function build_sidebar_list_row(listItem) {
     } else{
         img = $(`<img src="" loading="lazy" alt="${listItem.name} image" class="token-image" />`);
     }
-
     updateImgSrc(listingImage, img, video, false);
     imgHolder.append(img);
   }
@@ -1807,7 +1812,8 @@ function build_sidebar_list_row(listItem) {
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
         
         const avttButton = createCustomAvttChooser('', function (links) { 
-          importAvttTokens(links, listItem);
+          build_import_loading_indicator("Importing Tokens...");
+          setTimeout(function(){importAvttTokens(links, listItem)}, 30);
         }, [avttFilePickerTypes.VIDEO, avttFilePickerTypes.IMAGE, avttFilePickerTypes.FOLDER]);
         avttButton.toggleClass('token-row-button avtt-file-button', true);
         avttButton.attr('title', "Create token from Azmoria's AVTT File Picker"); 
@@ -1817,12 +1823,9 @@ function build_sidebar_list_row(listItem) {
         
        
         let addToken = $(`<button class="token-row-button hover-add-button" title="Create New Token"><span class="material-icons">person_add_alt_1</span></button>`);
-        if (window.testAvttFilePicker === true) { //console testing var
-          addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
-        }
-        else{
-          addTokenMenu.append(addToken, dropboxButton, oneDriveButton);
-        }
+
+        addTokenMenu.append(addToken, dropboxButton, avttButton, oneDriveButton);
+
 
        
         rowItem.append(addTokenMenu);
@@ -2155,9 +2158,10 @@ function did_click_row(clickEvent) {
       else if(clickedItem.type == ItemType.Scene){
         // show the preview
         build_and_display_sidebar_flyout(clickEvent.clientY, async function (flyout) {
-          if (clickedItem.isVideo) {
-            flyout.append(`<div style="background:lightgray;padding:10px;">This map is a video. We don't currently support previewing videos.</div>`);
-          } else {
+          if (clickedItem.isVideo || clickedItem.isUvtt) {
+            flyout.append(`<div style="background:lightgray;padding:10px;">This map is a ${clickedItem.isVideo ? 'video' : 'UVTT scene'}. We don't currently support previewing ${clickedItem.isVideo ? 'videos' : 'UVTT scenes' }.</div>`);
+          } 
+          else {
             const src = clickedItem.image.startsWith('above-bucket-not-a-url') 
               ? await getAvttStorageUrl(clickedItem.image, true) 
               : clickedItem.image;

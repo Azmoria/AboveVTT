@@ -363,7 +363,7 @@ const avttPrimeListingCachesFromFullListing = throttle((entries) => {
         entry.Key &&
         !avttIsHiddenSystemRelativeKey(avttExtractRelativeKey(entry.Key)),
     );
-  // Deduplicate global list by Key
+
   if (Array.isArray(avttAllFilesCache)) {
     const dedup = new Map();
     for (const e of avttAllFilesCache) {
@@ -1941,7 +1941,10 @@ async function avttPasteFiles(destinationFolder) {
     typeof destinationFolder === "string" ? destinationFolder : currentFolder,
   );
 }
-
+async function setAvttFilePickerCssVar(options = {}) {
+  const url = await getAvttStorageUrl(options.url, true);
+  options.target.css(options.var, `url('${url}')`);
+}
 async function avttImportSelectedFiles(selection) {
   const entries = Array.isArray(selection) ? selection : avttGetSelectedEntries();
   const csvFiles = entries.filter((e) => !e.isFolder && /\.csv$/i.test(e.key));
@@ -3717,6 +3720,7 @@ function avttHandleDragStart(event, entry) {
 function avttHandleDragEnd() {
   const rows = $("#file-listing tr.avtt-file-row");
   rows.toggleClass("avtt-dragging avtt-drop-target", false);
+  $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
   avttDragItems = null;
   avttApplyClipboardHighlights();
 }
@@ -3839,14 +3843,19 @@ async function avttHandleFolderDrop(event, destinationPath) {
 }
 
 async function avttHandleMapDrop(event, listItemArray) {
-  if(listItemArray.length>10){
-    alert('Can only drop 10 tokens or less at once')
-    return;
+  if (listItemArray.length == 1){
+    create_and_place_token(listItemArray[0].listItem, event.shiftKey, listItemArray[0].url, event.pageX, event.pageY, false, undefined, undefined, { tokenStyleSelect: "definitelyNotAToken" });
   }
-  for(item of listItemArray){
-    create_and_place_token(item.listItem, event.shiftKey, item.url, event.pageX, event.pageY, false, undefined, undefined, { tokenStyleSelect: "definitelyNotAToken" });
+  else if (listItemArray.length < 10 || confirm(`This will add ${listItemArray.length} tokens which could lead to unexpected results. Are you sure you want to add all of these tokens?`)) {
+    let distanceFromCenter = window.CURRENT_SCENE_DATA.hpps * window.ZOOM * (listItemArray.length / 8); 
+    for (let index = 0; index<listItemArray.length; index++) {
+      let item = listItemArray[index];
+      let radius = index / listItemArray.length;
+      let left = event.pageX + (distanceFromCenter * Math.cos(2 * Math.PI * radius));
+      let top = event.pageY + (distanceFromCenter * Math.sin(2 * Math.PI * radius));
+      create_and_place_token(item.listItem, event.shiftKey, item.url, left, top, false, undefined, undefined, { tokenStyleSelect: "definitelyNotAToken" });
+    }
   }
-    
 }
 
 
@@ -4668,6 +4677,10 @@ const PatreonAuth = (() => {
       avttUploadController.abort('User cancelled upload by logout.')
       avttActiveSearchAbortController = null; 
     }catch{};
+    try{
+      window.abortGetAllUserFilesController.abort('User logged out, aborting file fetch.');
+    }
+    catch{};
   }
 
   return {
@@ -4728,7 +4741,7 @@ const debounceSearchFiles = (searchTerm, fileTypes) => {
   avttDebouncedSearchHandler(searchTerm, fileTypes);
 };
 
-async function launchFilePicker(selectFunction = false, fileTypes = []) {
+async function launchFilePicker(selectFunction = false, fileTypes = [], secondarySelectFunction = null) {
   $("#avtt-s3-uploader").remove();
   const draggableWindow = find_or_create_generic_draggable_window(
     "avtt-s3-uploader",
@@ -4774,7 +4787,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
                 width: calc(100% + 2px);
                 left: -1px;
             }
-            
+
             #file-listing-section {
                 text-align: left;
                 margin: 7px 10px 20px 10px;
@@ -5214,7 +5227,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         <div id="avtt-file-picker">
             <div id="select-section">
                 <div>
-                    <div id='sizeUsed'><span id='user-used'></span> used of <span id='user-limit'> </span></div>
+                    <div id='sizeUsed'><span id='user-used'>${formatFileSize(S3_Current_Size) || ''}</span> used of <span id='user-limit'>${formatFileSize(activeUserLimit) || ''}</span></div>
                     <div id='patreon-tier'><span class='user-teir-level'></span><span> | <a draggable='false' id='logout-patreon-button'>Logout</a></span></div>
                 </div>
                 <div style='display: flex; gap: 10px; line-height: 16px; width: 100%; align-items: center; padding-left:20px;'>
@@ -5283,8 +5296,9 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
             </div>
             <div id="avtt-select-controls" style="text-align:center; margin-top:10px;">
                 <button id="copy-path-to-clipboard" style="${typeof selectFunction === "function" ? "display: none;" : ""}">Copy Path</button>
+                <button id='embed-file' style='display: ${typeof secondarySelectFunction === "function" ? "" : "none;"}'>Site Embed</button>
                 <button id="select-file" style="${typeof selectFunction === "function" ? "" : "display: none;"}">Select</button>
-            </div>
+              </div>
         </div>
 
     
@@ -5313,6 +5327,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
   const copyPathButton = document.getElementById("copy-path-to-clipboard"); 
   const searchInput = document.getElementById("search-files");
   const selectFile = document.getElementById("select-file");
+  const embedFile = document.getElementById("embed-file");
   const filePickerElement = document.getElementById("avtt-file-picker");
   const selectFilesToggle = document.getElementById("avtt-select-files");
   const logoutPatreonButton = document.getElementById("logout-patreon-button");
@@ -5772,8 +5787,7 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
         childWindow.close();
     }, 2000)
   })
-
-  selectFile.addEventListener("click", (event) => {
+  const filePickerGetSelectPath = function () {
     const selectedCheckboxes = $('#file-listing input[type="checkbox"]:checked');
 
     if (selectedCheckboxes.length === 0) {
@@ -5813,11 +5827,19 @@ async function launchFilePicker(selectFunction = false, fileTypes = []) {
     if (paths.length === 0) {
       return;
     }
-
+    return paths;
+  }
+  window.getAvttFilePickerPaths = filePickerGetSelectPath;
+  selectFile.addEventListener("click", (event) => {
+    const paths = filePickerGetSelectPath();
     selectFunction(paths);
     draggableWindow.find(".title_bar_close_button").click();
   });
-
+  embedFile.addEventListener("click", (event) => {
+    const paths = filePickerGetSelectPath();
+    secondarySelectFunction(paths);
+    draggableWindow.find(".title_bar_close_button").click();
+  });
   $(searchInput)
     .off("input keypress")
     .on("input keypress", async (event) => {
@@ -6788,8 +6810,8 @@ function refreshFiles(
     avttHideActionsMenu();
     avttHideExportMenu();
     avttUpdateSortIndicators();
-    if (recheckSize) {
-        getUserUploadedFileSize(false, { signal })
+    if (recheckSize || window.filePickerFirstLoad) {
+      getUserUploadedFileSize(false, { signal, bypassCache: window.filePickerFirstLoad })
         .then((size) => {
           S3_Current_Size = size;
           document.getElementById("user-used").innerHTML = formatFileSize(S3_Current_Size);
@@ -7143,6 +7165,8 @@ function refreshFiles(
             appendTo: 'body',
             zIndex: 10000000,
             start: function (event, ui) {
+              $("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));;		
+	
               draggedItems = avttHandleDragStart(event, entry);
               listItemArray = [];
               window.orig_zoom = window.ZOOM;
@@ -7182,37 +7206,123 @@ function refreshFiles(
                   left: (ui.position.left - (size / 2)),
                   top: (ui.position.top - (size / 2))
                 };
-
-
- 
-
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
-              } else if (closestFolder.length == 0) {
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+              } else if (droppedOn.closest('#myTokensFolder').length > 0 || droppedOn.closest('#scenes-panel').length > 0)  {
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                if (closestFolder.is('#scenesFolder') || droppedOn.is('.sidebar-panel-body'))
+                  droppedOn.closest('.sidebar-panel-body').toggleClass('avtt-drop-target', true);
+                else
+                  closestFolder.toggleClass('avtt-drop-target', true);
+              }
+              else if (droppedOn.closest('#sounds-panel').length > 0) {
+                const trackList = droppedOn.closest('#sounds-panel #track-list');
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                trackList.toggleClass('avtt-drop-target', true)
+              } 
+              else if (droppedOn.closest('#token-configuration-modal .sidebar-panel-body').length>0){
+                const imageModal = droppedOn.closest('#token-configuration-modal .sidebar-panel-body');
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+                imageModal.toggleClass('avtt-drop-target', true)
+              }
+              else if (closestFolder.length == 0) {
                 $(ui.helper).css("opacity", 1);
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
-              } else { 
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
+              } 
+             else { 
                 $(ui.helper).css({
                   width: ``,
                   height: ``
                 });
-                $('[data-is-folder="true"]').toggleClass('avtt-drop-target', false);
+                $('.avtt-drop-target').toggleClass('avtt-drop-target', false);
                 if ($(this).attr('data-path') == closestFolder.attr('data-path'))
                   return;
                 closestFolder.toggleClass('avtt-drop-target', true); 
               }
             },
             stop: function (event, ui) {
+              $(".iframeResizeCover").remove();
               avttHandleDragEnd(event);
               let droppedOn = $(document.elementFromPoint(event.clientX, event.clientY));
-              const closestFolder = droppedOn.closest('[data-is-folder="true"]');
+              const closestFilePickerFolder = droppedOn.closest('[data-is-folder="true"]');
               if(droppedOn.closest('#VTT').length>0){
                 avttHandleMapDrop(event, listItemArray)
-              } else if (closestFolder.length > 0){
-                if ($(this).attr('data-path') == closestFolder.attr('data-path'))
+              } else if (closestFilePickerFolder.length > 0){
+                if ($(this).attr('data-path') == closestFilePickerFolder.attr('data-path'))
                   return;
                 avttDragItems = draggedItems;
-                avttHandleFolderDrop(event, closestFolder.attr('data-path'));
+                avttHandleFolderDrop(event, closestFilePickerFolder.attr('data-path'));
               }
+              else if (droppedOn.closest('#myTokensFolder').length>0){
+                const paths = window.getAvttFilePickerPaths();
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                let folder = find_sidebar_list_item(closestFolder);
+                importAvttTokens(paths, folder);             
+              }
+              else if (droppedOn.closest('#scenes-panel').length > 0) {
+                const paths = window.getAvttFilePickerPaths();
+                const closestFolder = droppedOn.closest('.folder.list-item-identifier')
+                if(closestFolder){
+                  let folderId = closestFolder.attr('data-id');
+                  let fullPath = harvest_full_path(closestFolder);
+                  try {
+                    importAvttSelections(paths, folderId, fullPath);
+                  } catch (error) {
+                    console.error("Failed to import from AVTT File Picker selection", error);
+                    alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+                  }
+                }
+                else{
+                  try {
+                    importAvttSelections(paths, RootFolder.Scenes.id, RootFolder.Scenes.path);
+                  } catch (error) {
+                    console.error("Failed to import from AVTT File Picker selection", error);
+                    alert(error?.message || "Failed to import selection from AVTT. See console for details.");
+                  }
+                }
+              }
+              else if (droppedOn.closest('#sounds-panel').length > 0){
+                const paths = window.getAvttFilePickerPaths();
+                window.importAvttAudioSelections(paths)  
+              }
+              else if (droppedOn.closest('#token-configuration-modal .sidebar-panel-body').length > 0) {
+                const paths = window.getAvttFilePickerPaths();
+                for (let i = 0; i < paths.length; i++) {
+                  window.currentAddImageUrl(paths[i].link)
+                } 
+              }
+              else if ((droppedOn.is('.note') && droppedOn.find('.mce-tinymce').length > 0) || droppedOn.closest('.note').find('.mce-tinymce').length > 0) {
+                const paths = window.getAvttFilePickerPaths();
+                for (let i = 0; i < paths.length; i++) {  
+                  const fileType = paths[i].type;
+                  const link = paths[i].link;
+                  if(event.shiftKey){
+                    tinymce.activeEditor.insertContent(`<span class="journal-site-embed">${link}</span>`);
+                  } else{
+                    if (fileType === avttFilePickerTypes.IMAGE) {
+                      tinymce.activeEditor.insertContent(`<img class="magnify" alt="" data-src="${link}" />`);
+                    } else if (fileType === avttFilePickerTypes.VIDEO) {
+                      tinymce.activeEditor.insertContent(`<video controls="controls" width="100%" height="auto"><source src="${link}" /></video>`);
+                    } else if (fileType === avttFilePickerTypes.AUDIO) {
+                      tinymce.activeEditor.insertContent(`<audio controls src="${link}"></audio>`);
+                    } else {
+                      tinymce.activeEditor.insertContent(`<iframe width='100%' height='400' src='${window.EXTENSION_PATH}iframe.html?src=${link}'
+                        allowfullscreen
+                        webkitallowfullscreen
+                        mozallowfullscreen></iframe>`);
+                    } 
+                    
+                  }
+                  
+                }
+              }
+              const allCheckboxes = avttGetAllCheckboxElements();
+              allCheckboxes.forEach((checkbox) => {
+                checkbox.checked = false;
+              });
+              avttUpdateSelectNonFoldersCheckbox();
+              avttUpdateActionsMenuState();
+              avttApplyClipboardHighlights();
             },
           })
        
@@ -8320,6 +8430,9 @@ async function getUserUploadedFileSize(forceFullCheck = false, options = {}) {
         });
         continue;
       }
+      if (avttIsFileCacheRelativeKey(relative)) {
+        continue;
+      }
       const normalizedRelative = avttNormalizeRelativePath(relative);
       if (normalizedRelative) {
         nonThumbnailKeys.add(normalizedRelative);
@@ -8416,10 +8529,10 @@ async function getUserUploadedFileSize(forceFullCheck = false, options = {}) {
     }
   })();
 
-  if (shouldUseCache) {
-    avttUsageCache.pending = usagePromise;
-  }
-
+ 
+  avttUsageCache.pending = usagePromise;
+  
+  
   try {
     const totalBytes = await usagePromise;
     avttUsageCache.totalBytes = Number.isFinite(Number(totalBytes))
@@ -8444,8 +8557,8 @@ async function getAllUserFiles(options = {}) {
     return avttWrapPromiseWithAbort(existing.promise, signal);
   }
 
-  const abortController = new AbortController();
-  const { signal: internalSignal } = abortController;
+  window.abortGetAllUserFilesController = new AbortController();
+  const { signal: internalSignal } = window.abortGetAllUserFilesController;
   let linkedAbortHandler = null;
   if (signal) {
     linkedAbortHandler = () => {
@@ -8542,7 +8655,6 @@ async function avttExecuteGetAllUserFilesRequest(options, signal) {
   let continuationToken = null;
   let iterationSafeGuard = 0;
   const MAX_ITERATIONS = 2000;
-
   while (iterationSafeGuard < MAX_ITERATIONS) {
     iterationSafeGuard += 1;
     if (signal?.aborted) {
