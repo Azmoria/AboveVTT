@@ -93,6 +93,17 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
           token.track_ability(spellName, numberFound)
         }
         let input = createCountTracker(token, spellName, numberFound, remainingText, "");
+        const playerDisabled = $(this).hasClass('player-disabled');
+        if (!window.DM && playerDisabled) {
+          input.prop('disabled', true);
+        }
+        const partyLootTable = $(this).closest('.party-item-table');
+        if (partyLootTable.hasClass('shop') && numberFound > 0) {
+          $(this).closest('tr').find('td>.item-quantity-take-input').val(1);
+        }
+        else {
+          $(this).closest('tr').find('td>.item-quantity-take-input').val(numberFound);
+        }
         $(this).find('p').remove();
         $(this).after(input)
       })
@@ -1811,10 +1822,18 @@ const fetch_tooltip = mydebounce(async (dataTooltipHref, name, callback) => {
           let bodyClass = $(moreInfo).find('body').attr('class');
           let subClasses = !tooltipBody.length && dataTooltipHref[1].match(/#.*$/gi) ? ['p-article-a', 'p-article-content'] : ['more-info', 'detail-content']
           if(!tooltipBody.length && dataTooltipHref[1].match(/#.*$/gi)){
-          let section = $(moreInfo).find(dataTooltipHref[1].match(/#.*$/gi)[0]);
-          let sectionElementType = $(moreInfo).find(dataTooltipHref[1].match(/#.*$/gi)[0])[0].tagName
+            let section = $(moreInfo).find(dataTooltipHref[1].match(/#.*$/gi)[0]);
+            if(section.length == 0){
 
-           tooltipBody = $('<div>').append(section.nextUntil(`${sectionElementType}.heading-anchor`).addBack());
+              const toolTipJson = { Tooltip: '' }
+              window.tooltipCache[typeAndId] = toolTipJson;
+              callback(toolTipJson); 
+              return;
+            } 
+              
+            let sectionElementType = $(moreInfo).find(dataTooltipHref[1].match(/#.*$/gi)[0])[0].tagName
+            tooltipBody = $('<div>').append(section.nextUntil(`${sectionElementType}.heading-anchor`).addBack());
+            
           }
           else if(!tooltipBody.length && $(moreInfo).find('.p-article-content').length>0){
             tooltipBody = $('<div>').append($(moreInfo).find('.p-article-content'));

@@ -2010,7 +2010,18 @@ class Token {
 								    }
 
 								    let input = createCountTracker(window.JOURNAL.notes[noteId], spellName, numberFound, remainingText, "", track_ability);
-								    $(this).find('p').remove();
+									const playerDisabled = $(this).hasClass('player-disabled');
+									if (!window.DM && playerDisabled) {
+										input.prop('disabled', true);
+									}
+									const partyLootTable = $(this).closest('.party-item-table');
+									if (partyLootTable.hasClass('shop') && numberFound > 0) {
+										$(this).closest('tr').find('td>.item-quantity-take-input').val(1);
+									}
+									else {
+										$(this).closest('tr').find('td>.item-quantity-take-input').val(numberFound);
+									}
+									$(this).find('p').remove();
 								    $(this).after(input)
 							    })
 					            flyout.append(tooltipHtml);
@@ -4669,12 +4680,13 @@ function setTokenLight (token, options) {
 				}
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").attr('data-custom-animation', 'true')
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").css('--custom-mask-image', `url('${parse_img(options.animation.customLightMask)}')`)
-				setAvttFilePickerCssVar({
-					var: '--custom-mask-image',
-					target: token.parent().parent().find(".aura-element-container-clip[id='" + options.id + "']"),
-					url: options.animation.customLightMask
-				})
-			
+				if(options.animation.customLightMask?.includes('above-bucket-not-a-url')){
+					setAvttFilePickerCssVar({
+						var: '--custom-mask-image',
+						target: token.parent().parent().find(".aura-element-container-clip[id='" + options.id + "']"),
+						url: options.animation.customLightMask
+					})
+				}
 			}
 			else{
 				token.parent().parent().find(".aura-element-container-clip[id='" + options.id +"']").attr('data-animation', options.animation.light)

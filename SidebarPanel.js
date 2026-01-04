@@ -545,20 +545,20 @@ function build_rangeInput_input(settingOption, currentValue, changeHandler){
     
     range.on('input change', function(){
    
-      const rangeValue = parseInt(range.val());
+      const rangeValue = parseFloat(range.val());
       input.val(rangeValue);
       changeHandler(settingOption.name, rangeValue);
     });
 
 
     range.on('mouseup', function(){
-        const rangeValue = parseInt(range.val());
+      const rangeValue = parseFloat(range.val());
         changeHandler(settingOption.name, rangeValue);
     });
 
     input.on('input change', function(){
       $("#darkness_layer").toggleClass("smooth-transition", true);
-      const inputValue = parseInt(input.val());
+      const inputValue = parseFloat(input.val());
       range.val(inputValue);
       changeHandler(settingOption.name, inputValue);
     });
@@ -1807,7 +1807,7 @@ function build_sidebar_list_row(listItem) {
               create_token_inside(listItem, links[i].name, links[i].link, links[i].type, undefined, undefined, undefined, true);
             }   
             did_change_mytokens_items();       
-        }, 'multiple')
+        }, 'multiple', ['photo', '.webp'])
         oneDriveButton.toggleClass('token-row-button one-drive-button', true);
         oneDriveButton.attr('title', 'Create token from Onedrive'); 
         

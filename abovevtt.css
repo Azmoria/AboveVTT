@@ -33,6 +33,9 @@ body > button,
     border: 1px solid lightgray;
     font-size: 12px;
 }
+.note-text table{
+    width: revert-layer;
+}
 .top_menu input,
 .top_menu select{
     box-sizing: border-box;
@@ -140,7 +143,7 @@ button.daylight span.material-symbols-outlined {
     left: -2%;
     width: 104%;
     height: 104%;
-    z-index: 70000;
+    z-index: 170000;
     background-color: #26282a;
 }
 #loading_overlay_bg {
@@ -194,7 +197,25 @@ body > div {
     padding: 2px 4px;
 }
 
-
+.party-item-table input.injected-input[disabled] {
+    appearance: none !important;
+    background: none !important;
+    border: none !important;
+}
+.party-item-table td.item-add-cell{
+    min-width: 90px;
+}
+.note-text .ct-currency-button__currency-item-preview{
+    width:16px;
+    height:16px;
+    position:relative;
+    display:inline-block;
+}
+.note-text .party-currency {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 [class*='GameLogEntries'] [class*='Message-Collapsed-Other-Flex'] {
     padding: 8px 10px;
     color: rgb(92, 112, 128);
@@ -340,8 +361,10 @@ button .ddbc-tab-options__header-heading .menu-option{
 
 .top_menu.visible {
     max-height: 100%;
-    overflow-y: auto;
     border: solid black 1px;
+    overflow: hidden auto;
+    height: calc(100% - 100px);
+    max-height: fit-content;
 }
 
 .body-rpgcharacter-sheet div.avtt-sidebar-controls {
@@ -381,7 +404,7 @@ button .ddbc-tab-options__header-heading .menu-option{
     justify-content: center;
     width: 75px;
     top: 2px;
-    z-index: 57000;
+    z-index: 125000;
 }
 
 #scene_selector_toggle > span {
@@ -946,7 +969,7 @@ select#doorTypeSelectUVTT{
 }
 
 div#combat_button {
-    z-index: 57000;
+    z-index: 125000;
     position: fixed;
 }
 .ui-resizable-s{
@@ -992,7 +1015,7 @@ ul.context-menu-list.context-menu-root{
 
 div.top_menu.visible,
 .ddbc-tab-options--layout-pill{
-    z-index: 57000;
+    z-index: 125000;
 }
 
 #scene_selector{
@@ -1407,16 +1430,19 @@ input {
     border-radius: 0px 0px 5px 5px !important;
 }
 #sources-import-iframe {
-    top: 0;
+    top: 8px;
     left: 0;
-    height: 100%;
+    height: calc(100% - 8px);
     width: 100%;
     position: absolute;
     border: none;
     border-radius: 0px 0px 5px 5px;
 }
 
-
+#sources-import-main-container .sidebar-panel-loading-indicator {
+    height: calc(100% - 8px) !important;
+    top: 8px !important;
+}
 #sources-import-content-container{
     width:100%;
     height:100%;
@@ -1620,7 +1646,7 @@ div#combat-tracker-settings form > div {
 #zoom_buttons {
     position: absolute;
     top: -3px;
-    z-index: 57000;
+    z-index: 125000;
     display: flex;
     flex-direction: row;
 }
@@ -1773,7 +1799,12 @@ div#combat-tracker-settings form > div {
 [class*='styles_mobileNav'].visibleMobileNav>div>button[class*='styles_navToggle']{
     display: flex;
 }
-
+#adjustments-flyout>div>button.token-wall-poly-button{
+    display:none;
+}
+#adjustments-flyout>div>button.token-wall-poly-button.visible{
+    display:block;
+}
 .hasTooltip::after {
     content: attr(data-name);
     -webkit-font-smoothing: antialiased;
@@ -2065,7 +2096,13 @@ input.menu-input.hpMenuInput[readonly]:focus  {
     height: 450px;
     left: 5px;
     top: 67px;
-    z-index: 56000;
+    z-index: 125000;
+}
+#noty_layout__bottomRight {
+    z-index: 128000 !important;
+}
+.dice-rolling-panel{
+    z-index: 130000 !important;
 }
 div#combat_button{
     top: 40px;
@@ -3199,6 +3236,103 @@ body .note-visibility-toggle-container {
     padding: 10px;
     width:80%;
 }
+
+#dmScreenContainer {
+    overflow: hidden;
+    height: calc(100% - 35px);
+    width: calc(100% + 2px);
+    left: -1px;
+    border: 1px solid #ddd;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 0px 0px 10px 10px;
+    padding: 10px;
+    position: relative;
+    top: -5px;
+    background: var(--background-color, #F9F8F3);
+    .dmScreenheader{
+        position: sticky;
+        top: 0px;
+        background: var(--background-color, #F9F8F3);
+        .dmScreenTitle {
+            cursor: pointer;
+            span {
+                font-size: 0.8em;
+            }
+        }
+    }
+    h1{
+        font-size: 24px;
+    }
+    table {
+        font-size: 12px;
+        tr:nth-child(odd) {
+            background-color: #F1EBDD;
+        }
+        tr:nth-child(even) {
+            background-color: #F9F8F3;
+        }
+    }
+    .dmScreenDropdown {
+        position: absolute;
+        top: 100%;
+        left: calc(50% - 125px);
+        background: white;
+        border: 2px solid rgb(51, 51, 51);
+        box-shadow: rgba(0, 0, 0, 0.3) 0px 4px 8px;
+        z-index: 1000;
+        min-width: 250px;
+        .dmScreenDropdownItem {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid rgb(221, 221, 221);
+            background-color: rgb(255, 255, 255);
+        }
+    }
+    #dmScreenBlocks {
+        overflow: auto;
+        height: calc(100% - 26px);
+    }
+    .dmScreenBlock { 
+        h1 {
+            font-size: 20px;
+        }
+        h2 {
+            font-size: 16px;
+            border-bottom: #D6BE8C solid thin;
+        }
+        
+        &#dmScreenTravel {
+            .dmScreenColumns{
+                column-width: 400px;
+            }
+        }
+        .dmScreenColumns {
+            column-count: auto;
+            column-width: 300px;
+            column-gap: 20px;
+            column-rule: 1px solid #ccc;
+        }
+
+        .dmScreenChunk {
+            break-inside: avoid;
+            margin-bottom: 15px;
+            font-size: 12px;
+            text-align: left;
+        }
+        .dmScreenChunkDefinition {
+            margin: 5px 0px;
+            h3 {
+                font-size: 15px;
+                border: none;
+            }
+            hr {
+                display: none;
+            }
+        }
+    }
+}
+
 #patreons ul li {
     width: 136px;
 }
@@ -4700,6 +4834,7 @@ h5.token-image-modal-footer-title:after {
     display: flex;
     flex-direction: row;
     width: 100%;
+    position:relative;
 }
 .sidebar-panel-footer-horizontal-wrapper .sidebar-panel-footer-button {
     margin: 0px 4px 0px 4px;
@@ -4865,7 +5000,7 @@ td button.block-send-to-game-log {
     display: flex;
     float: unset;
     top:50%;
-    right: -2px;
+    right: 2px;
     transform: translate(0px, -50%);
 }
 td button.block-send-to-game-log span{
@@ -6045,6 +6180,7 @@ button.avtt-roll-button:has(button.avtt-roll-button) {
     font-size:unset;
     font-weight:unset;
 }
+
 .ct-sidebar__portal{
     overflow: unset !important;
     z-index: 57000 !important;
@@ -6296,7 +6432,7 @@ div#selectedTokensBorderRotationGrabberConnector,
 }
 .top_menu.visible,
 .ddbc-tab-options--layout-pill{
-    z-index: 57000;
+    z-index: 125000;
 }
 
 /*combat tracker face lift*/
@@ -8154,7 +8290,7 @@ button#changeTokenImage:before{
 }
 #tokenOptionsPopup>#tokenOptionsContainer>div[data-option-name='lockRestrictDrop'] .door-lock {
     position:absolute;
-    left:-1px;
+    left:-6px;
     padding:3px 0px;
     font-size:16px;  
 }

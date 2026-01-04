@@ -82,6 +82,9 @@ $(function() {
         DDBApi.fetchItemsJsonWithToken().then(data => {
           window.ITEMS_CACHE = data;
         })
+       DDBApi.debounceGetPartyInventory()
+
+       
         const lastSendToDefault = localStorage.getItem(`${gameId}-sendToDefault`, gamelog_send_to_text()); 
 
         if(lastSendToDefault != null){
@@ -91,7 +94,7 @@ $(function() {
           $(`[class*='listItemTextRoot']:contains('Everyone')`).parent().click();
         }
         $('body').toggleClass('reduceMovement', (window.EXPERIMENTAL_SETTINGS['reduceMovement'] == true));
-        $('body').toggleClass('mobileAVTTUI', (window.EXPERIMENTAL_SETTINGS['iconUi'] == true));
+        $('body').toggleClass('mobileAVTTUI', (window.EXPERIMENTAL_SETTINGS['iconUi'] != false));
         $('body').toggleClass('color-blind-avtt', (window.EXPERIMENTAL_SETTINGS['colorBlindText'] == true));
           // STREAMING STUFF
 
@@ -458,6 +461,9 @@ async function start_above_vtt_for_dm() {
   window.CONNECTED_PLAYERS['0'] = window.AVTT_VERSION; // ID==0 is DM
 
   window.ScenesHandler = new ScenesHandler();
+  
+  startup_step("Initializing DM Screen");
+  initDmScreen(); // Initialize DM screen after ddbConfigJson is loaded
 
   startup_step("Fetching Encounters from DDB");
   const avttId = window.location.pathname.split("/").pop();

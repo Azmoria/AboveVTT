@@ -2574,7 +2574,51 @@ function getVisionBlockingTokenWalls(){
 				visionBlockingTokenWalls.push(boundary);
 			}
 		}
-		
+		else if (currentToken.options.tokenWall && currentToken.options.tokenWall?.includes('poly')) {
+			if(currentToken.options.tokenWallPoly == undefined || currentToken.options.tokenWallPoly.relativePoints?.length < 2)
+				continue;
+	
+			let points = currentToken.options.tokenWallPoly.relativePoints;
+			const imageScale = currentToken.options.tokenWallPoly?.origImageSize != undefined && currentToken.options.imageSize != undefined ? currentToken.options.imageSize / currentToken.options.tokenWallPoly.origImageSize : 1;
+			const tokenSizeScale = currentToken.options.tokenWallPoly?.origSize != undefined ? currentToken.options.size / currentToken.options.tokenWallPoly.origSize : 1;
+			const tokenLeft = parseFloat(currentToken.options.left) / sceneScale;
+			const tokenTop = parseFloat(currentToken.options.top) / sceneScale;
+			const rotatedPoints = points.map(pt => {
+
+				let x = (pt.x * tokenSizeScale) / sceneScale;
+				let y = (pt.y * tokenSizeScale) / sceneScale;
+
+				x = cX + (tokenLeft + x - cX) * imageScale;
+				y = cY + (tokenTop + y - cY) * imageScale;
+				
+				let rotatedPoint = rotatePoint(x, y, cX, cY, rot);
+				const origRot = currentToken.options.tokenWallPoly.origRot;
+				if (origRot != undefined){
+					rotatedPoint = rotatePoint(rotatedPoint.x, rotatedPoint.y, cX, cY, -1 * (parseFloat(origRot) * (Math.PI / 180)));
+				}
+				return { x: rotatedPoint.x, y: rotatedPoint.y };
+			});
+			for (let i in rotatedPoints) {
+				let boundary = new Boundary()
+				if (i == rotatedPoints.length - 1) {
+					boundary.a = rotatedPoints[i];
+					boundary.b = rotatedPoints[0];
+				}
+				else {
+					boundary.a = rotatedPoints[i];
+					boundary.b = rotatedPoints[parseInt(i) + 1];
+				}
+				if (currentToken.options.tokenWall.includes('Window')) {
+					boundary.c = 1;
+				} else if (currentToken.options.tokenWall.includes('Curtain')) {
+					boundary.c = 8;
+				}
+				else if (currentToken.options.tokenWall.includes('Object')) {
+					boundary.terrainWall = true;
+				}
+				visionBlockingTokenWalls.push(boundary);
+			}
+		}
 	}
 	return visionBlockingTokenWalls;
 }
@@ -2863,8 +2907,8 @@ function drawing_mousedown(e) {
 	window.DRAWTYPE = (data.from == 'vision_menu') ? 'light' : data.fill
 	window.DRAWCOLOR = data.background_color
 	window.DRAWLOCATION = data.location
-	window.DRAWSHAPE = window.drawAudioPolygon ? 'polygon' : data.shape;
-	window.DRAWFUNCTION = window.drawAudioPolygon ? 'audio-polygon' : data.function;
+	window.DRAWSHAPE = window.drawAudioPolygon || window.drawTokenWallPolygon ? 'polygon' : data.shape;
+	window.DRAWFUNCTION = window.drawAudioPolygon ? 'audio-polygon' : window.drawTokenWallPolygon ? 'token-wall-polygon' : data.function;
 
 	//these are used with walls or elevation tool
 	window.wallTop = data.wall_top_height;
@@ -3644,7 +3688,8 @@ function drawing_mouseup(e) {
 		window.DRAWFUNCTION == "draw_text" ||
 		window.DRAWFUNCTION === "select" || 
 		window.DRAWFUNCTION == "elev" || 
-		window.DRAWFUNCTION == "audio-polygon") && e.which !== 1 && !e.touches)
+		window.DRAWFUNCTION == "audio-polygon" ||
+		window.DRAWFUNCTION == "token-wall-polygon") && e.which !== 1 && !e.touches)
 	{
 		return;
 	}
@@ -4803,8 +4848,8 @@ function handle_drawing_button_click() {
 		window.DRAWTYPE = (drawData.from == 'vision_menu') ? 'light' : drawData.fill
 		window.DRAWCOLOR = drawData.background_color
 		window.DRAWLOCATION = drawData.location
-		window.DRAWSHAPE = window.drawAudioPolygon ? 'polygon' : drawData.shape;
-		window.DRAWFUNCTION = window.drawAudioPolygon ? 'audio-polygon' : drawData.function;
+		window.DRAWSHAPE = window.drawAudioPolygon || window.drawTokenWallPolygon ? 'polygon' : drawData.shape;
+		window.DRAWFUNCTION = window.drawAudioPolygon ? 'audio-polygon' : window.drawTokenWallPolygon ? 'token-wall-polygon' : drawData.function;
 
 		target.on('mousedown touchstart', data, drawing_mousedown);
 		target.on('mouseup touchend',  data, drawing_mouseup);
@@ -5375,6 +5420,28 @@ function savePolygon(e) {
 		debounceAudioChecks();
 		delete window.drawingAudioTokenId 
 		delete window.drawAudioPolygon
+	}
+	else if(window.DRAWFUNCTION === 'token-wall-polygon'){
+		const token = window.TOKEN_OBJECTS[window.drawingTokenWallTokenId];
+		const left = parseFloat(token.options.left);
+		const top = parseFloat(token.options.top);
+		const relativePoints = polygonPoints.map(point => {
+			return { 
+				x: point.x - parseFloat(left),
+				y: point.y - parseFloat(top)
+			};
+		});
+		token.options.tokenWallPoly = {
+			origImageSize: token.options.imageSize,
+			origRot: token.options.rotation,
+			origScale: window.CURRENT_SCENE_DATA.scale_factor,
+			origSize: token.options.size,
+			relativePoints
+		}
+
+		token.place_sync_persist();
+		delete window.drawingTokenWallTokenId
+		delete window.drawTokenWallPolygon
 	}
 	else{
 		data = [

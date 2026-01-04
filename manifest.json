@@ -2,7 +2,7 @@
 	"manifest_version": 3,
 	"name": "AboveVTT",
 	"description": "Integrated VTT for D&DBeyond",
-	"version": "1.46",
+	"version": "1.47",
 	"content_scripts": [
 		{
 			"matches": [
@@ -92,6 +92,7 @@
 			"KeypressHandler.js",
 			"DiceContextMenu/*",
 			"DiceRoller.js",
+			"DMScreen.js",
 			"ChatObserver.js",
 			"Main.js",
 			"MonsterStatBlock.js",

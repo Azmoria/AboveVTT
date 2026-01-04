@@ -2324,6 +2324,17 @@ async function redraw_scene_list(searchTerm) {
 										}
 
 										let input = createCountTracker(window.JOURNAL.notes[noteId], spellName, numberFound, remainingText, "", track_ability);
+										const playerDisabled = $(this).hasClass('player-disabled');
+										if (!window.DM && playerDisabled) {
+											input.prop('disabled', true);
+										}
+										const partyLootTable = $(this).closest('.party-item-table');
+										if (partyLootTable.hasClass('shop') && numberFound > 0) {
+											$(this).closest('tr').find('td>.item-quantity-take-input').val(1);
+										}
+										else {
+											$(this).closest('tr').find('td>.item-quantity-take-input').val(numberFound);
+										}
 										$(this).find('p').remove();
 										$(this).after(input)
 									})
@@ -3072,16 +3083,20 @@ function load_sources_iframe_for_map_import(hidden = false) {
 		const sourcesBody = $(event.target).contents();
 		sourcesBody.find('head').append(`<style id='dndbeyondSourcesiFrameStyles' type="text/css">
 			#site-main,
-			.single-column #content{
+			.single-column #content,
+			main[class*='page_root']{
 				padding: 0px !important;
 			} 
 			header[role='banner'],
+			header.navigationContainer,
 			#site-main > .site-bar,
 			#site-main > header.page-header,
 			#mega-menu-target,
 			footer,
 			.ad-container,
-			.ddb-site-banner{
+			.ddb-site-banner,
+			[href*='marketplace.dndbeyond.com'],
+			[src*='marketplace.dndbeyond.com']{
 				display:none !important;
 			}
 			.ddb-collapsible-filter{
@@ -3097,24 +3112,29 @@ function load_sources_iframe_for_map_import(hidden = false) {
 		$('#sources-import-content-container').find(".sidebar-panel-loading-indicator").remove();
 
 		// give the search bar focus, so we can just start typing to filter sources without having to click into it
-		sourcesBody.find(".ddb-collapsible-filter__input").focus();
+		sourcesBody.find("[class*='SearchInput_searchInput']").focus();
+
 
 		// hijack the links and open our importer instead
-		sourcesBody.find("a.sources-listing--item").click(function (event) {
+		sourcesBody.off('click.importer').on('click.importer', "a[class*='SourceCard_imageLink']", function (event) {
 			event.stopPropagation();
 			event.preventDefault();
 			const sourceAbbreviation = event.currentTarget.href.split("sources/").pop();
-			const image = $(event.currentTarget).find(".sources-listing--item--avatar").css("background-image").slice(4, -1).replace(/"/g, "");
-			const title = $(event.currentTarget).find(".sources-listing--item--title").text();
+			const image = $(event.currentTarget).find("[class*='SourceCard_image']").attr('src');
+			const title = $(event.currentTarget).closest("[class*='SourcesList_sourceWrapper']").find("a[class*='SourceCard_sourceTitle']").text().trim();
 			scene_importer_clicked_source(sourceAbbreviation, undefined, image, title);
+			$('#sources-import-content-container').append(build_combat_tracker_loading_indicator('One moment while we load sourcebook'));
 			mega_importer(true, sourceAbbreviation);
 			iframe.hide();
 		});
-
+		sourcesBody.find("a[class*='SourceCard_sourceTitle']").click(function (event) {
+			event.stopPropagation();
+			event.preventDefault();
+		})
 		add_scene_importer_back_button(sourcesBody);
 	});
 
-	iframe.attr("src", `/sources`);
+	iframe.attr("src", `/en/library?ownership=owned-shared`);
 }
 
 function adjust_create_import_edit_container(content='', empty=true, title='', width100Minus=500, minWidth=850){
@@ -3291,8 +3311,8 @@ async function create_scene_root_container(fullPath, parentId) {
 
 
 	const onedriveImport = await build_tutorial_import_list_item({
-		"title": "Onedrive Image or Video",
-		"description": "Build a scene using a Onedrive image or video file.",
+		"title": "Onedrive Image",
+		"description": "Build a scene using a Onedrive image file.",
 		"category": "Scenes",
 		"player_map": "",
 	}, `${window.EXTENSION_PATH}images/Onedrive_icon.svg`, false);
@@ -3306,7 +3326,7 @@ async function create_scene_root_container(fullPath, parentId) {
 		e.preventDefault();
     	launchPicker(e, function(files){
 			create_scene_inside(parentId, fullPath, files[0].name, files[0].link);
-		});
+		}, 'single', ['photo', '.webp']);
 	});
 
 
@@ -3569,7 +3589,7 @@ async function build_source_book_chapter_import_section(sceneSet) {
 function add_scene_importer_back_button(container) {
 	const backButton = $(`<a class="quick-menu-item-link importer-back-button" href="#">Back</a>`);
 
-	const searchContainer = container.find(".ddb-collapsible-filter").first();
+	const searchContainer = container.find(".ddb-collapsible-filter, [class*='SourcesContents_contents']").first();
 	searchContainer.prepend(backButton);
 	searchContainer.css({ "display": "flex" });
 	backButton.click(function (e) {
