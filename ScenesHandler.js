@@ -138,8 +138,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			aligner1.height(59);
 			aligner1.css("position", "absolute");
 			aligner1.css("border-radius", "50%");
-			aligner1.css("top", Math.floor($("#scene_map").height() / copiedSceneData.vpps) / 2 * copiedSceneData.vpps + copiedSceneData.offsety - 29 + "px");
-			aligner1.css("left", Math.floor($("#scene_map").width() / copiedSceneData.hpps) / 2  * copiedSceneData.hpps + copiedSceneData.offsetx - 29 + "px");
+			aligner1.css("top", `${Math.floor($("#scene_map").height() / 60) / 2 * 60 - 29}px`);
+			aligner1.css("left", `${Math.floor($("#scene_map").width() / 60) / 2 * 60 - 29}px`);
 			aligner1.css("z-index", 40);
 
 			let drawX = function(canvas) {
@@ -177,14 +177,11 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			aligner2.height(59);
 			aligner2.css("position", "absolute");
 			aligner2.css("border-radius", "50%");
-			if (!just_rescaling) {
-				aligner2.css("top", parseFloat(aligner1.css('top')) + copiedSceneData.vpps*3 + "px");
-				aligner2.css("left", parseFloat(aligner1.css('left')) + copiedSceneData.hpps*3  + "px");
-			}
-			else {
-				aligner2.css("top", parseFloat(aligner1.css('top')) + copiedSceneData.vpps*3 + "px");
-				aligner2.css("left", parseFloat(aligner1.css('left')) + copiedSceneData.hpps*3 + "px");
-			}
+			
+			aligner2.css("top", `${parseFloat(aligner1.css('top')) + 180}px`);
+			aligner2.css("left", `${parseFloat(aligner1.css('left')) + 180}px`);
+			
+			
 			aligner2.css("z-index", 40);
 
 			let canvas2 = aligner2.get(0);
@@ -506,13 +503,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		scene.offsetx = parseFloat(scene.offsetx);
 		scene.offsety = parseFloat(scene.offsety);
 
-		let copiedSceneData = {
-			...$.extend(true, {}, window.CURRENT_SCENE_DATA),
-			hpps: window.CURRENT_SCENE_DATA.hpps,
-			vpps: window.CURRENT_SCENE_DATA.vpps,
-			offsetx: window.CURRENT_SCENE_DATA.offsetx,
-			offsety: window.CURRENT_SCENE_DATA.offsety
-		}
+		let copiedSceneData = $.extend(true, {}, window.CURRENT_SCENE_DATA);
+		
 
 		scene.scale_factor = 1;
 		scene.grid_subdivided = '0';
@@ -551,10 +543,10 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		}
 
 		//This is still used for grid wizard loading since we load so many times -- it is not used for other scene loading though. You can find that in message broker handleScene
-		load_scenemap(map_url, map_is_video, window.CURRENT_SCENE_DATA.width, window.CURRENT_SCENE_DATA.height, window.CURRENT_SCENE_DATA.UVTTFile, function() {
+		load_scenemap(map_url, map_is_video, window.CURRENT_SCENE_DATA.width, window.CURRENT_SCENE_DATA.height, window.CURRENT_SCENE_DATA.UVTTFile, async function() {
 			$("#scene_map").off("load");
-			reset_canvas();
-			set_default_vttwrapper_size()
+			await reset_canvas();
+			await set_default_vttwrapper_size()
 			align_grid(false, false, copiedSceneData);
 			window.WeatherOverlay.stop();
 		});
@@ -1107,6 +1099,8 @@ function folder_path_of_scene(scene) {
 	}
 }
 function find_parent_of_scene(scene) {
+	if(scene.parentId == undefined)
+		return false;
 	return window.ScenesHandler.scenes.find(s => s.id === scene.parentId);
 }
 function find_ancestors_of_scene(scene, found = []) {

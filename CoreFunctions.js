@@ -392,15 +392,17 @@ function inject_chat_buttons() {
   if ($(".roll-button").length == 0) {
     const rollButton = $(`<button class="roll-button">Roll</button>`);
     const modInput = $(`<div class='roll-mod-container'>
+        <button class="roll-button-mod dis roll_mods_button icon-disadvantage markers-icon"></button>
         <button class="roll-button-mod minus">-</button>
         <input class="roll-input-mod" type='number' value='0' step='1'></input>
         <button class="roll-button-mod plus">+</button>
+        <button class="roll-button-mod adv roll_mods_button icon-advantage markers-icon"></button>
       </div>`)
     modInput.append(rollButton);
 
     
     $("body").append(modInput);
-
+    let advDis;
     modInput.off('click.button').on('click.button', 'button.roll-button-mod', function(e){
       e.preventDefault();
       const clickedButton = $(this)
@@ -411,17 +413,17 @@ function inject_chat_buttons() {
       else if(clickedButton.hasClass('plus')){
         input.val(parseInt(input.val())+1);
       }
+      else if (clickedButton.hasClass('adv')){
+        advDis = 'kh';
+        rollButton.click();
+      }
+      else if(clickedButton.hasClass('dis')){
+        advDis = 'kl'
+        rollButton.click();
+      }
     });
     rollButton.on("click", function (e) {
       let modValue = parseInt($('.roll-input-mod').val())
-      if ($(".dice-toolbar").hasClass("rollable") && modValue == 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {     
-          let theirRollButton = $(".dice-toolbar__target").children().first();
-          if (theirRollButton.length > 0) {
-            // we found a DDB dice roll button. Click it and move on
-            theirRollButton.click();
-            return;
-          }
-      }
 
       const rollExpression = [];
       const diceToCount = $(".dice-roller > div img[data-count]").length>0 ? $(".dice-roller > div img[data-count]") : $('.dice-die-button__count')
@@ -435,35 +437,20 @@ function inject_chat_buttons() {
           count = $(this).attr("data-count");
           dieType = $(this).attr("alt");
         }
-        rollExpression.push(count + dieType);
+        if(advDis != undefined){
+          rollExpression.push(count*2 + dieType + advDis + count);
+       
+        }
+        else{
+          rollExpression.push(count + dieType);
+        }
+        
       });
+      advDis = undefined;
       $('.dice-toolbar__dropdown-selected>div:first-of-type')?.click();
       let expression = `${rollExpression.join("+")}${modValue<0 ? modValue : `+${modValue}`}`
-      let sendToDM = window.DM || false;
-      let sentAsDDB = send_rpg_dice_to_ddb(expression, sendToDM);
-      if (!sentAsDDB) {
-        const roll = new rpgDiceRoller.DiceRoll(rollExpression.join("+"));
-        
-        const text = roll.output;
-        const uuid = new Date().getTime();
-        const data = {
-          player: window.PLAYER_NAME,
-          img: window.PLAYER_IMG,
-          text: text,
-          dmonly: sendToDM,
-          id: window.DM ? `li_${uuid}` : undefined
-        };
-        window.MB.inject_chat(data);
 
-        if (window.DM) { // THIS STOPPED WORKING SINCE INJECT_CHAT
-          $("#" + uuid).on("click", () => {
-            const newData = {...data, dmonly: false, id: undefined, text: text};
-            window.MB.inject_chat(newData);
-            $(this).remove();
-          });
-        }
-            
-      }
+      window.diceRoller.roll(new DiceRoll(expression));
 
       $(".roll-mod-container").removeClass("show");
       $(".dice-roller > div img[data-count]").removeAttr("data-count");
@@ -1143,6 +1130,7 @@ function inject_dice(){
               left: 10px;
               pointer-events: all
           }
+
         </style>
     </div>
   `);
@@ -1307,7 +1295,7 @@ function createCustomAvttChooser(text, callback = function () { }, selectionType
   })
   return button;
 }
-function createCustomDropboxChooser(text, options){
+function createCustomDropboxChooser(text, options) {
   let button = $(`<button class="dropboxChooser"><span class="dropin-btn-status"></span>${text}</button>`)
   button.off('click.dropbox').on('click.dropbox', function(e){
     e.stopPropagation();
@@ -2342,7 +2330,7 @@ function inject_sidebar_send_to_gamelog_button(sidebarPaneContent) {
 function find_items_in_cache_by_id_and_name(items = []) {
   const foundItems = [];
   for (let item of items) {
-    const cachedItem = window.ITEMS_CACHE.find(ci => ci.id.toString() === item.id.toString() && ci.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(item.name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+    const cachedItem = window.ITEMS_CACHE.find(ci => ci.id.toString() === item.id.toString() && ci.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(item.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')));
     if (cachedItem) {
       foundItems.push(cachedItem);
     }
@@ -2565,7 +2553,7 @@ function display_url_embeded(url){
   $('body').append(container);
 }
 
-function find_or_create_generic_draggable_window(id, titleBarText, addLoadingIndicator = true, addPopoutButton = false, popoutSelector=``, width='80%', height='80%', top='10%', left='10%', showSlow = true, cancelClasses='') {
+function find_or_create_generic_draggable_window(id, titleBarText, addLoadingIndicator = true, addPopoutButton = false, popoutSelector=``, width='80%', height='80%', top='10%', left='10%', showSlow = true, cancelClasses='', hideOnX = false) {
   console.log(`find_or_create_generic_draggable_window id: ${id}, titleBarText: ${titleBarText}, addLoadingIndicator: ${addLoadingIndicator}, addPopoutButton: ${addPopoutButton}`);
   const existing = id.startsWith("#") ? $(id) : $(`#${id}`);
   if (existing.length > 0) {
@@ -2620,7 +2608,13 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
   const close_title_button = $(`<div class="title_bar_close_button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>`);
   titleBar.append(close_title_button);
   close_title_button.on("click.close", function (event) {
-    close_and_cleanup_generic_draggable_window($(event.currentTarget).closest('.resize_drag_window').attr('id'));
+    if(hideOnX){
+      $(event.currentTarget).closest('.resize_drag_window').hide();
+    }
+    else{
+      close_and_cleanup_generic_draggable_window($(event.currentTarget).closest('.resize_drag_window').attr('id'));
+    }
+
   });
 
   if (addPopoutButton) {
