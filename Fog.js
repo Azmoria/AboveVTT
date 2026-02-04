@@ -1262,11 +1262,11 @@ function svg_grid(type = '1', xs = 100, ys = 100, color = 'black', lineWidth = 5
         </svg>` 
         : (type === '2') ? // Vertical Hex (Pointy Top, Vertical Sides)
         `<svg xmlns="http://www.w3.org/2000/svg" width="${xs}" height="${ys*1.5}" overflow="visible">
-            <path d="M ${xs} ${ys/4} L ${xs/2} 0 L 0 ${ys/4} L 0 ${ys*3/4} L ${xs/2} ${ys} L ${xs} ${ys*3/4} M ${xs/2} ${ys} L ${xs/2} ${ys*1.5} Z" ${strokeAttr}/>
+            <path d="M ${xs} ${ys / 4} L ${xs / 2} 0 L 0 ${ys / 4} L 0 ${ys * 3 / 4} L ${xs / 2} ${ys} L ${xs} ${ys * 3 / 4} L${xs} ${ys / 4} M ${xs/2} ${ys} L ${xs/2} ${ys*1.5} Z" ${strokeAttr}/>
         </svg>` 
         : // Horizontal Hex (Flat Top, Pointy Sides)
         `<svg xmlns="http://www.w3.org/2000/svg" width="${xs*1.5}" height="${ys}" overflow="visible">
-            <path d="M ${xs/4} ${ys} L 0 ${ys/2} L ${xs/4} 0 L ${xs*3/4} 0 L ${xs} ${ys/2} L ${xs*3/4} ${ys} M ${xs} ${ys/2} L ${xs*1.5} ${ys/2} Z" ${strokeAttr}/>
+            <path d="M ${xs / 4} ${ys} L 0 ${ys / 2} L ${xs / 4} 0 L ${xs * 3 / 4} 0 L ${xs} ${ys / 2} L ${xs * 3 / 4} ${ys} L ${xs / 4} ${ys} M ${xs} ${ys/2} L ${xs*1.5} ${ys/2} Z" ${strokeAttr}/>
         </svg>`
 		).replace(/\s+/g, ' ').trim();
     return "data:image/svg+xml;base64," + btoa(svg);
@@ -1279,7 +1279,7 @@ function draw_svg_grid(type=null, hpps=null, vpps=null, offsetX=null, offsetY=nu
 	//what does grid scale measure for hex - i'm confused ????
 	const hexscale = (gridType === '1' ? 1 : sr3);
 	const xs = (hpps || window.CURRENT_SCENE_DATA.hpps)/ scale / (gridType === '3' ? sr3 : 1) / hexscale;
-	const ys = (vpps || window.CURRENT_SCENE_DATA.vpps)/ scale / (gridType === '2' ? sr3 : 1) / hexscale;
+	const ys = (hpps || window.CURRENT_SCENE_DATA.hpps)/ scale / (gridType === '2' ? sr3 : 1) / hexscale;
 	let startX = Math.round((offsetX || window.CURRENT_SCENE_DATA.offsetx) / scale);
 	let startY = Math.round((offsetY || window.CURRENT_SCENE_DATA.offsety) / scale); 
 	if(gridType !== '1') { //old 0,0 was center of hex - we are going from edge
@@ -1293,7 +1293,7 @@ function draw_svg_grid(type=null, hpps=null, vpps=null, offsetX=null, offsetY=nu
 	const yadj = gridType === '2' ? 1.5 : 1; //adjust for next row/col extra bits
 	const xadj = gridType === '3' ? 1.5 : 1;
 	grc.css('background-image', "url("+gr+")");
-	grc.css('background-size', `${Math.round(xs * xadj)}px ${Math.round(ys * yadj)}px`);
+	grc.css('background-size', `${xs * xadj}px ${ys * yadj}px`);
 	grc.css('background-position-x', startX);
 	grc.css('background-position-y', startY);
 	grc.css('height', $('#scene_map').height());
