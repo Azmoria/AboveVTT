@@ -775,27 +775,13 @@ function token_context_menu_expanded(tokenIds, e) {
 
 		toTopMenuButton.off().on("click", function(tokenIds){
 			tokens.forEach(token => {
-				$(".token").each(function(){	
-					let tokenId = $(this).attr('data-id');	
-					let tokenzindexdiff = window.TOKEN_OBJECTS[tokenId].options.zindexdiff;
-					if (tokenzindexdiff >= window.TOKEN_OBJECTS[token.options.id].options.zindexdiff && tokenId != token.options.id) {
-						window.TOKEN_OBJECTS[token.options.id].options.zindexdiff = tokenzindexdiff + 1;
-					}		
-				});
-				token.place_sync_persist();
+				token.moveToTop();
 			});
 		});
 
 		toBottomMenuButton.off().on("click", function(tokenIds){
 			tokens.forEach(token => {			
-				$(".token").each(function(){	
-					let tokenId = $(this).attr('data-id');	
-					let tokenzindexdiff = window.TOKEN_OBJECTS[tokenId].options.zindexdiff;
-					if (tokenzindexdiff <= window.TOKEN_OBJECTS[token.options.id].options.zindexdiff && tokenId != token.options.id) {
-						window.TOKEN_OBJECTS[token.options.id].options.zindexdiff = Math.max(tokenzindexdiff - 1, -5000);
-					}		
-				});
-				token.place_sync_persist();
+				token.moveToBottom();
 			});
 		});
 		let lockSettings = token_setting_options().filter((d) => d.name == 'lockRestrictDrop')[0];
@@ -1063,7 +1049,7 @@ function token_context_menu_expanded(tokenIds, e) {
 					e.stopPropagation();
 					$(this).parent().trigger(shiftClick);
 				});
-				const reset_init = getCombatTrackersettings().remove_init;
+				const reset_init = getCombatTrackerSettings().remove_init;
 				tokens.forEach(t =>{
 					if(t.options.combatGroup && Object.values(window.TOKEN_OBJECTS).filter(d=>d.options.combatGroup == t.options.combatGroup).length == 2 && window.TOKEN_OBJECTS[t.options.combatGroup]){
 						window.TOKEN_OBJECTS[t.options.combatGroup].delete()
@@ -1084,9 +1070,9 @@ function token_context_menu_expanded(tokenIds, e) {
 			} else {
 				clickedButton.removeClass("add-to-ct").addClass("remove-from-ct");
 				clickedButton.html(removeButtonInternals);
-				const reset_init = getCombatTrackersettings().remove_init;
+				const reset_init = getCombatTrackerSettings().remove_init;
 
-				const autoGroup = getCombatTrackersettings().autoGroup;
+				const autoGroup = getCombatTrackerSettings().autoGroup;
 
 				if(autoGroup === '1'){
 					const groupedByStat = tokens.reduce((acc, token) => {
@@ -1103,7 +1089,7 @@ function token_context_menu_expanded(tokenIds, e) {
 						let group = uuid();
 						let allHidden = true;
 						let allVisibleNames = true
-						const reset_init = getCombatTrackersettings().remove_init;
+						const reset_init = getCombatTrackerSettings().remove_init;
 						
 						groupedByStat[i].forEach(t => {
 							if(t.isPlayer()){
@@ -1200,7 +1186,7 @@ function token_context_menu_expanded(tokenIds, e) {
 					e.stopPropagation();
 					$(this).parent().trigger(shiftClick);
 				});
-				const reset_init = getCombatTrackersettings().remove_init;
+				const reset_init = getCombatTrackerSettings().remove_init;
 				tokens.forEach(t =>{
 					if(t.options.combatGroup != undefined && Object.values(window.TOKEN_OBJECTS)?.filter(d=>d.options.combatGroup == t.options.combatGroup)?.length == 2 && window.TOKEN_OBJECTS[t.options.combatGroup]){
 						window.TOKEN_OBJECTS[t.options.combatGroup].delete()
@@ -1227,7 +1213,7 @@ function token_context_menu_expanded(tokenIds, e) {
 				let group = uuid();
 				let allHidden = true;
 				let allVisibleNames = true
-				const reset_init = getCombatTrackersettings().remove_init;
+				const reset_init = getCombatTrackerSettings().remove_init;
 	
 
 				tokens.forEach(t => {
@@ -1413,27 +1399,13 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	toTopMenuButton.off().on("click", function(tokenIds){
 		tokens.forEach(token => {
-			$(".token").each(function(){	
-				let tokenId = $(this).attr('data-id');	
-				let tokenzindexdiff = window.TOKEN_OBJECTS[tokenId].options.zindexdiff;
-				if (tokenzindexdiff >= window.TOKEN_OBJECTS[token.options.id].options.zindexdiff && tokenId != token.options.id) {
-					window.TOKEN_OBJECTS[token.options.id].options.zindexdiff = tokenzindexdiff + 1;
-				}		
-			});
-			token.place_sync_persist();
+			token.moveToTop();
 		});
 	});
 
 	toBottomMenuButton.off().on("click", function(tokenIds){
 		tokens.forEach(token => {			
-			$(".token").each(function(){	
-				let tokenId = $(this).attr('data-id');	
-				let tokenzindexdiff = window.TOKEN_OBJECTS[tokenId].options.zindexdiff;
-				if (tokenzindexdiff <= window.TOKEN_OBJECTS[token.options.id].options.zindexdiff && tokenId != token.options.id) {
-					window.TOKEN_OBJECTS[token.options.id].options.zindexdiff = Math.max(tokenzindexdiff - 1, -5000);
-				}		
-			});
-			token.place_sync_persist();
+			token.moveToBottom();
 		});
 	});
 
@@ -1518,38 +1490,27 @@ function token_context_menu_expanded(tokenIds, e) {
 		let nameInput = $(`<input title="Token Name" placeholder="Token Name" name="name" type="text" />`);
 		let nameGeneratorButton = $(`<button title="Generate Random Name" type="button" class="button-refresh material-symbols-outlined">autorenew</button>`);
 		nameGeneratorButton.on('click', function() {
-			if (tokens.length > 1) {
-				tokens.forEach(token => {
-					const gender = Math.random() < 0.5 ? 'male' : 'female';
-					const firstNames = gender === 'male' ? MaleFirstNames : FemaleFirstNames;
-					const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-					const surname = Surnames[Math.floor(Math.random() * Surnames.length)];
-					const generatedName = `${firstName} ${surname}`;
-					
-					if(window.JOURNAL.notes[token.options.id]){
-						window.JOURNAL.notes[token.options.id].title = generatedName;
-						window.JOURNAL.persist();
-					}
-					token.options.name = generatedName;
-					token.place_sync_persist();
-				});
-				nameInput.val("Individual names generated");
-			} else {
+			let generatedName;
+			tokens.forEach(token => {
 				const gender = Math.random() < 0.5 ? 'male' : 'female';
 				const firstNames = gender === 'male' ? MaleFirstNames : FemaleFirstNames;
 				const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
 				const surname = Surnames[Math.floor(Math.random() * Surnames.length)];
-				const generatedName = `${firstName} ${surname}`;
+				const personality = token.options.placeType == 'personality' ? ` (${getPersonalityTrait()})` : '';
+				generatedName = `${firstName} ${surname}${personality}`;
 				
+				if(window.JOURNAL.notes[token.options.id]){
+					window.JOURNAL.notes[token.options.id].title = generatedName;
+					window.JOURNAL.persist();
+				}
+				token.options.name = generatedName;
+				token.place_sync_persist();
+			});
+				
+			if (tokens.length > 1) {
+				nameInput.val("Individual names generated");
+			} else {
 				nameInput.val(generatedName);
-				tokens.forEach(token => {
-					if(window.JOURNAL.notes[token.options.id]){
-						window.JOURNAL.notes[token.options.id].title = generatedName;
-						window.JOURNAL.persist();
-					}
-					token.options.name = generatedName;
-					token.place_sync_persist();
-				});
 			}
 		});
 		if (uniqueNames.length === 1) {
@@ -3590,6 +3551,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 		});
 		body.append(imageZoomWrapper);
 
+
 		let tokenOpacity = tokens.map(t => t.options.imageOpacity);
 		let uniqueOpacity = [...new Set(tokenOpacity)];
 		let startingOpacity = uniqueOpacity.length === 1 && uniqueOpacity[0] != undefined ? uniqueOpacity[0] : 1;
@@ -3603,6 +3565,21 @@ function build_adjustments_flyout_menu(tokenIds) {
 		});
 		body.append(opacityWrapper);
 
+		let tokFlip = tokens.map(t => t.options?.tokenFlip);
+		let uniqueTokenFlip = [...new Set(tokFlip)];
+		let startingTokenFlip = uniqueTokenFlip.length === 1 && uniqueTokenFlip[0] != undefined ? uniqueTokenFlip[0] : 0;
+		let tokenFlipWrapper = build_token_flip_input(startingTokenFlip,
+			function (newFlip) {
+				tokens.forEach(token => {
+					token.options.tokenFlip = +newFlip;
+					$(`.VTTToken[data-id='${token.options.id}']`).css({
+						"--token-flip-x": `${((+newFlip || 0) & 1) ? -1 : 1}`,
+						"--token-flip-y": `${((+newFlip || 0) & 2) ? -1 : 1}`
+					});
+					token.place_sync_persist();
+				});
+			});
+		body.append(tokenFlipWrapper);
 		//border color selections
 		let tokenBorderColors = tokens.map(t => t.options.color);
 		let initialColor = tokenBorderColors.length === 1 ? tokenBorderColors[0] : random_token_color();
@@ -4158,6 +4135,20 @@ function build_options_flyout_menu(tokenIds) {
 	});
 	body.append(resetToDefaults);
 	return body;
+}
+
+function build_token_flip_input(value, changeHandler) {
+	const flipOption = {
+		name: "TokenFlip",
+		label: "Flip Token",
+		type: "toggle",
+		options: [
+			{ value: false, label: "None", description: "No Flip" },
+			{ value: true, label: "Horizontal", description: "Horizontal" }
+		],
+		defaultValue: false
+	};
+	return build_toggle_input(flipOption, value ? true : false, (name, value) => { changeHandler(value ? 1 : 0)});
 }
 
 /**

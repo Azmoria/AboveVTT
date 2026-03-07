@@ -126,7 +126,7 @@ function token_setting_options() {
 				{ value: false, label: "Above darkness", description: "The token will appear above darkness/light" }
 			],
 			defaultValue: false,
-			menuPosition: '12',
+			menuPosition: '13',
 			player: true
 		},
 		{
@@ -168,7 +168,7 @@ function token_setting_options() {
 				{ value: false, label: 'Border', description: "The token has a border around it." }
 			],
 			defaultValue: false,
-			menuPosition: '11',
+			menuPosition: '12',
 			player: true
 		},
 		{
@@ -366,7 +366,7 @@ function avtt_settings() {
 			class: 'ui',
 			global: 1
 		},
-		{
+	/*	{
 			name: 'streamDiceRolls',
 			label: 'Stream Dice Rolls',
 			type: 'toggle',
@@ -376,7 +376,7 @@ function avtt_settings() {
 			],
 			defaultValue: false,
 			class: 'stream'
-		},
+		},*/
 		{
 			name: 'iframeStatBlocks',
 			label: 'Fallback Monster Statblocks',
@@ -1591,7 +1591,7 @@ function update_dice_streaming_feature(enabled, sendToText=gamelog_send_to_text(
 						streamid: diceplayer_id
 					});
 				}
-				else if($(this).text() == "Dungeon Master"){
+				else if ($(this).text() == "Dungeon Master" || $(this).text() == "DM"){
 					window.MB.sendMessage("custom/myVTT/showonlytodmdicestream",{
 						streamid: diceplayer_id
 					});
@@ -1609,7 +1609,7 @@ function update_dice_streaming_feature(enabled, sendToText=gamelog_send_to_text(
 
 			joinDiceRoom();
 			setTimeout(function(){
-				if(sendToText == "Dungeon Master"){
+				if (sendToText == "Dungeon Master" || sendToText == "DM"){
 					window.MB.sendMessage("custom/myVTT/showonlytodmdicestream",{
 						streamid: diceplayer_id
 					});
@@ -1676,7 +1676,6 @@ function export_current_scene(){
 		journalchapters: [],
 		soundpads: {}
 	};
-	delete DataFile.scenes[0].itemType;
 	delete DataFile.scenes[0].map;
 	for(tokenID in window.TOKEN_OBJECTS){
 		let statBlockID = window.TOKEN_OBJECTS[tokenID].options.statBlock
@@ -1712,7 +1711,6 @@ async function export_scene_context(sceneId){
 		journalchapters: [],
 		soundpads: {}
 	};
-	delete DataFile.scenes[0].itemType;
 	let tokensObject = {}
 	for(let token in scene.data.tokens){
 

@@ -223,6 +223,8 @@ class DDBApi {
   }
 
   static async fetchCampaignInfo(campaignId) {
+    if(!campaignId)
+      return;
     console.log("DDBApi.fetchCampaignInfo");
     const url = `https://www.dndbeyond.com/api/campaign/stt/active-campaigns/${campaignId}`;
     const response = await DDBApi.fetchJsonWithToken(url);
@@ -314,7 +316,7 @@ class DDBApi {
       } 
     }
     let playerUser = window.playerUsers.filter(d=> d.id == window.PLAYER_ID)[0]?.userId;
-    window.myUser = playerUser ? playerUser : 'THE_DM'; 
+    window.myUser = playerUser ? playerUser : window.CAMPAIGN_INFO.dmId; 
     return characterIds;
   }
 

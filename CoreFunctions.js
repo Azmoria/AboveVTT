@@ -4,7 +4,6 @@
  * so be thoughtful about which functions go in this file
  * */
 
-
 /** The first time we load, collect all the things that we need.
  * Remember that this is injected from both Load.js and LoadCharacterPage.js
  * If you need to add things for when AboveVTT is actively running, do that in Startup.js
@@ -20,7 +19,8 @@ $(function() {
   $("head").append('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />');
   if (is_encounters_page()) {
     window.DM = true; // the DM plays from the encounters page
-    dmAvatarUrl = $('#site-bar').attr('user-avatar') != undefined ? $('#site-bar').attr('user-avatar') : $('.site-bar .user-interactions-profile-img').attr('src');
+    dmAvatarUrl = $('#site-bar').attr('user-avatar') != undefined ? $('#site-bar').attr('user-avatar') : $('.site-bar .user-interactions-profile-img').attr('src') != undefined ? $('.site-bar .user-interactions-profile-img').attr('src') : $('img[class*="avatarImage"]').attr('src');
+    dmAvatarUrl = dmAvatarUrl || defaultAvatarUrl;
   } else if (is_campaign_page() && !is_spectator_page()) {
     // The owner of the campaign (the DM) is the only one with private notes on the campaign page
     window.DM = $(".ddb-campaigns-detail-body-dm-notes-private").length === 1;
@@ -196,7 +196,8 @@ function inject_chat_buttons() {
     Advantage: 2d20kh1 (keep highest)&#xa;
     Disadvantage: 2d20kl1 (keep lowest)&#xa;
     '/w [playername] a whisper to playername'&#xa;
-    '/dm for a shortcut to whisper THE DM'"><input id='chat-text' autocomplete="off" placeholder='Chat, /r 1d20+4..'></div>`
+    '/dm for a shortcut to whisper THE DM'&#xa;
+    '/timer Timer Title 5:00' or '/timer 5:00'"><input id='chat-text' autocomplete="off" placeholder='Chat, /r 1d20+4..'></div>`
   );
   const diceRoller = $(`
     <div class="dice-roller">
@@ -238,16 +239,16 @@ function inject_chat_buttons() {
 
   gameLog.append(chatTextWrapper, languageSelect, diceRoller);
 
-  $(".dice-roller > div img").on("click", function(e) {
-    if ($(".dice-toolbar__dropdown").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
+  $(".dice-roller > div img").on("click", async function(e) {
+    if ($(".dice-toolbar__dropdown, [class*='DiceContainer_button']").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
       // DDB dice are on the screen so let's use those. Ours will synchronize when these change.
-      if (!$(".dice-toolbar__dropdown").hasClass("dice-toolbar__dropdown-selected")) {
+      if (($(".dice-toolbar__dropdown").length > 0 && !$(".dice-toolbar__dropdown").hasClass("dice-toolbar__dropdown-selected")) || $(`[class*='DiceContainer_button']:not([class*='DiceContainer_customDiceRollOpen'])`).length>0) {
         // make sure it's open
-        $(".dice-toolbar__dropdown-die").click();
+        await $(".dice-toolbar__dropdown-die, [class*='DiceContainer_button']").click();
       }
       // select the DDB dice matching the one that the user just clicked
       let dieSize = $(this).attr("alt");
-      $(`.dice-die-button[data-dice='${dieSize}']`).click();
+      await $(`.dice-die-button[data-dice='${dieSize}'], [class*='AnchoredPopover_wrapper'] #${dieSize}`).click();
     } else {
       // there aren't any DDB dice on the screen so use our own
       const dataCount = $(this).attr("data-count");
@@ -285,11 +286,26 @@ function inject_chat_buttons() {
           ourDiceElement.parent().append(`<span class="dice-badge">${diceCount}</span>`);
         }
       })
-
+      $("[class*='AnchoredPopover_wrapper'] button[id^='d']").each(function () {
+        let dieSize = this.id;
+        let ourDiceElement = $(`.dice-roller > div img[alt='${dieSize}']`);
+        let diceCountElement = $(this).attr('data-quantity');
+        ourDiceElement.parent().find("span").remove();
+        if (diceCountElement == undefined) {
+          ourDiceElement.removeAttr("data-count");
+        } else {
+          let diceCount = parseInt(diceCountElement);
+          ourDiceElement.attr("data-count", diceCount);
+          ourDiceElement.parent().append(`<span class="dice-badge">${diceCount}</span>`);
+        }
+      })
+      if ($("[class*='AnchoredPopover_wrapper']").length>0 && $("[class*='AnchoredPopover_wrapper'] button[id^='d']").length == 0){
+        $('.dice-roller .dice-badge').remove();
+      }
 
       // make sure our roll button is shown/hidden after all animations have completed
       setTimeout(function() {
-        if ($(".dice-toolbar").hasClass("rollable")) {
+        if ($(".dice-toolbar").hasClass("rollable") || $("[class*='DiceContainer_customDiceRollOpen']").length > 0) {
           if(!$(".roll-mod-container").hasClass('show')){
             $(".roll-mod-container").addClass("show");
             $(".roll-mod-container").find('input').val(0);
@@ -298,21 +314,21 @@ function inject_chat_buttons() {
           $(".roll-mod-container").removeClass("show");
         }
       }, 0);  
-    })
+  })
 
   let watchForDicePanel = new MutationObserver((mutations) => {
-   mutations.every((mutation) => {
+   mutations.every(async (mutation) => {
       if (!mutation.addedNodes) return
 
       for (let i = 0; i < mutation.addedNodes.length; i++) {
         // do things to your newly added nodes here
         let node = mutation.addedNodes[i]
         if ((node.className == 'dice-rolling-panel' || $('.dice-rolling-panel').length>0)){
-          const mutation_target = $(".dice-toolbar__dropdown")[0];
-      const mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
-      window.rollButtonObserver.observe(mutation_target, mutation_config);
-      watchForDicePanel.disconnect();
-      return false;
+          const mutation_target = $(".dice-toolbar__dropdown, [class*='AnchoredPopover_wrapper']")[0];
+          const mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
+          window.rollButtonObserver.observe(mutation_target, mutation_config);
+          watchForDicePanel.disconnect();
+          return false;
         }
       }
       return true // must return true if doesn't break
@@ -320,7 +336,7 @@ function inject_chat_buttons() {
   });
 
   window.sendToDefaultObserver = new MutationObserver(function() {
-      localStorage.setItem(`${gameId}-sendToDefault`, gamelog_send_to_text());
+    localStorage.setItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`, gamelog_send_to_text());
   })
 
 
@@ -356,12 +372,12 @@ function inject_chat_buttons() {
   $(".dice-roller > div img").on("contextmenu", function(e) {
     e.preventDefault();
 
-    if ($(".dice-toolbar__dropdown").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
+    if ($(".dice-toolbar__dropdown, [class*='DiceContainer_button']").length > 0 && !window.EXPERIMENTAL_SETTINGS['rpgRoller']) {
       // There are DDB dice on the screen so update those buttons. Ours will synchronize when these change.
       // the only way I could get this to work was with pure javascript. Everything that I tried with jQuery did nothing
       let dieSize = $(this).attr("alt");
-      let  element = $(`.dice-die-button[data-dice='${dieSize}']`)[0];
-      let  e = element.ownerDocument.createEvent('MouseEvents');
+      let element = $(`.dice-die-button[data-dice='${dieSize}'], #${dieSize}`)[0];
+      let e = element.ownerDocument.createEvent('MouseEvents');
       e.initMouseEvent('contextmenu', true, true,
           element.ownerDocument.defaultView, 1, 0, 0, 0, 0, false,
           false, false, false, 2, null);
@@ -438,8 +454,9 @@ function inject_chat_buttons() {
           dieType = $(this).attr("alt");
         }
         if(advDis != undefined){
-          rollExpression.push(count*2 + dieType + advDis + count);
-       
+          for (let i = 0; i<count; i++){
+            rollExpression.push('2' + dieType + advDis + '1');
+          }       
         }
         else{
           rollExpression.push(count + dieType);
@@ -972,6 +989,233 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
 
   console.groupEnd()
 }
+/**
+ * Posts a message to the chat when a player connected to the server.
+ */
+function report_connection() {
+  if (!is_abovevtt_page())
+    return;
+  setTimeout(() => {
+    let msgdata = {
+      player: window.PLAYER_NAME,
+      img: window.PLAYER_IMG,
+      text: PLAYER_NAME + " has connected to the server!",
+    };
+    window.MB.inject_chat(msgdata);
+  }, 5000)
+}
+/**
+ * Notifie about player joining the game.
+ */
+function notify_player_join() {
+  if (window.DM || !is_abovevtt_page())
+    return;
+  const playerdata = {
+    abovevtt_version: window.AVTT_VERSION,
+    player_id: window.PLAYER_ID,
+    pc: read_pc_object_from_character_sheet(window.PLAYER_ID)
+  };
+
+  console.log("Sending playerjoin msg, abovevtt version: " + playerdata.abovevtt_version + ", sheet ID:" + window.PLAYER_ID);
+  whenAvailable('JOURNAL', function () { window.MB.sendMessage("custom/myVTT/playerjoin", playerdata) });
+}
+
+/**
+ * Load dice configuration from DDB.
+ */
+function init_my_dice_details() {
+  get_cobalt_token(function (token) {
+    window.ajaxQueue.addRequest({
+      type: 'GET',
+      url: "https://dice-service.dndbeyond.com/diceuserconfig/v1/get",
+      contentType: "application/json; charset=utf-8",
+      dataType: 'json', // added data type
+      beforeSend: function (xhr) {
+        xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      },
+      xhrFields: {
+        withCredentials: true
+      },
+      success: function (res) {
+        window.mydice = res
+      }
+    });
+  });
+}
+/**
+ * Attempts to convert the output of an rpgDiceRoller DiceRoll to the DDB format.
+ * If the conversion is successful, it will be sent over the websocket, and this will return true.
+ * If the conversion fails for any reason, nothing will be sent, and this will return false,
+ * @param {String} expression the dice rolling expression; ex: 1d20+4
+ * @param {Boolean} toSelf    whether this is sent to self or everyone
+ * @returns {Boolean}         true if we were able to convert and send; else false
+ */
+//currently used for flat value rolls
+
+function send_ddb_dice_message(expression, displayName, imgUrl, rollType = "roll", damageType, actionType = "custom", sendTo = "") {
+  let diceRoll = new DiceRoll(expression);
+  diceRoll.action = actionType;
+  diceRoll.rollType = rollType;
+  diceRoll.name = displayName == true ? 'THE DM' : displayName;
+  diceRoll.avatarUrl = imgUrl;
+  // diceRoll.entityId = monster.id;
+  // diceRoll.entityType = monsterData.id;
+
+  console.log("with values", expression, displayName, imgUrl, rollType, damageType, actionType, sendTo)
+
+
+  try {
+    expression = expression.replace(/\s+/g, ''); // remove all whitespace
+
+    const supportedDieTypes = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
+
+    let roll = new rpgDiceRoller.DiceRoll(expression);
+
+    // rpgDiceRoller doesn't give us the notation of each roll so we're going to do our best to find and match them as we go
+    let choppedExpression = expression;
+    let notationList = [];
+    for (let i = 0; i < roll.rolls.length; i++) {
+      let currentRoll = roll.rolls[i];
+      if (typeof currentRoll === "string") {
+        let idx = choppedExpression.indexOf(currentRoll);
+        let previousNotation = choppedExpression.slice(0, idx);
+        notationList.push(previousNotation);
+        notationList.push(currentRoll);
+        choppedExpression = choppedExpression.slice(idx + currentRoll.length);
+      }
+    }
+    console.log("chopped expression", choppedExpression)
+    notationList.push(choppedExpression); // our last notation will still be here so add it to the list
+
+    if (roll.rolls.length != notationList.length) {
+      console.warn(`Failed to convert expression to DDB roll; expression ${expression}`);
+      console.groupEnd()
+      return false;
+    }
+
+    let convertedDice = [];       // a list of objects in the format that DDB expects
+    let allValues = [];           // all the rolled values
+    let convertedExpression = []; // a list of strings that we'll concat for a string representation of the final math being done
+    let constantsTotal = 0;       // all the constants added together
+    for (let i = 0; i < roll.rolls.length; i++) {
+      let currentRoll = roll.rolls[i];
+      if (typeof currentRoll === "object") {
+        let currentNotation = notationList[i];
+        let currentDieType = supportedDieTypes.find(dt => currentNotation.includes(dt)); // we do it this way instead of splitting the string so we can easily clean up things like d20kh1, etc. It's less clever, but it avoids any parsing errors
+        if (!supportedDieTypes.includes(currentDieType)) {
+          console.warn(`found an unsupported dieType ${currentNotation}`);
+          console.groupEnd()
+          return false;
+        }
+        if (currentNotation.includes("kh") || currentNotation.includes("kl")) {
+          let cleanerString = currentRoll.toString()
+            .replace("[", "(")    // swap square brackets with parenthesis
+            .replace("]", ")")    // swap square brackets with parenthesis
+            .replace("d", "")     // remove all drop notations
+            .replace(/\s+/g, ''); // remove all whitespace
+          convertedExpression.push(cleanerString);
+        } else {
+          convertedExpression.push(currentRoll.value);
+        }
+        let dice = currentRoll.rolls.map(d => {
+          allValues.push(d.value);
+          console.groupEnd()
+          return { dieType: currentDieType, dieValue: d.value };
+        });
+
+        convertedDice.push({
+          "dice": dice,
+          "count": dice.length,
+          "dieType": currentDieType,
+          "operation": 0
+        })
+      } else if (typeof currentRoll === "string") {
+        convertedExpression.push(currentRoll);
+      } else if (typeof currentRoll === "number") {
+        convertedExpression.push(currentRoll);
+        if (i > 0) {
+          if (convertedExpression[i - 1] == "-") {
+            constantsTotal -= currentRoll;
+          } else if (convertedExpression[i - 1] == "+") {
+            constantsTotal += currentRoll;
+          } else {
+            console.warn(`found an unexpected symbol ${convertedExpression[i - 1]}`);
+            console.groupEnd()
+            return false;
+          }
+        } else {
+          constantsTotal += currentRoll;
+        }
+      }
+    }
+    if(sendTo == ''){
+      sendTo = gamelog_send_to_text().trim().replace('/\s/gi', '');
+    }
+    sendTo = sendTo.toLowerCase();
+    
+    let ddbJson = {
+      id: uuid(),
+      dateTime: `${Date.now()}`,
+      gameId: `${window.gameId}`,
+      userId: `${window.myUser}`,
+      source: "web",
+      persist: true,
+      messageScope: sendTo === "everyone" ? "gameId" : "userId",
+      messageTarget: sendTo === "everyone" ? `${window.gameId}` : sendTo === "dungeonmaster" || sendTo === "dm" ? `${window.CAMPAIGN_INFO.dmId}` : `${window.myUser}`,
+      entityId: `${window.myUser}`,
+      entityType: "user",
+      eventType: "dice/roll/fulfilled",
+      data: {
+        action: actionType,
+        setId: window.mydice.data.setId,
+        context: {
+          entityId: `${window.myUser}`,
+          entityType: "user",
+          messageScope: sendTo === "everyone" ? "gameId" : "userId",
+          messageTarget: sendTo === "everyone" ? `${window.gameId}` : sendTo === "dungeonmaster" || sendTo === "dm"  ? `${window.CAMPAIGN_INFO.dmId}` : `${window.myUser}`,
+          name: displayName,
+          avatarUrl: imgUrl
+        },
+        rollId: uuid(),
+        rolls: [
+          {
+            diceNotation: {
+              set: convertedDice,
+              constant: constantsTotal
+            },
+            diceNotationStr: expression,
+            rollType: rollType,
+            rollKind: expression.includes("kh") ? "advantage" : expression.includes("kl") ? "disadvantage" : "",
+            result: {
+              constant: constantsTotal,
+              values: allValues,
+              total: roll.total,
+              text: convertedExpression.join("")
+            }
+          }
+        ]
+      }
+    };
+    if (window.MB?.ws?.readyState && window.MB.ws.readyState == window.MB.ws.OPEN) {
+      window.MB.ws.send(JSON.stringify(ddbJson));
+      console.groupEnd()
+      return true;
+    } else { // TRY TO RECOVER
+      get_cobalt_token(function (token) {
+        window.MB.loadWS(token, function () {
+          // TODO, CONSIDER ADDING A SYNCMEUP / SCENE PAIR HERE
+          window.MB.ws.send(JSON.stringify(ddbJson));
+        });
+      });
+      console.groupEnd()
+      return true; // we can't guarantee that this actually worked, unfortunately
+    }
+  } catch (error) {
+    console.warn(`failed to send expression as DDB roll; expression = ${expression}`, error);
+    console.groupEnd()
+    return false;
+  }
+}
 
 function general_statblock_formating(input){
   input = input.replace(/&nbsp;/g,' ')
@@ -1014,6 +1258,7 @@ function general_statblock_formating(input){
   return input;
         
 }
+
 function process_monitored_logs() {
   const logs = [...console.concerningLogs, ...console.otherLogs].sort((a, b) => a.timeStamp < b.timeStamp ? 1 : -1);
   let processedLogs = [];
@@ -1274,7 +1519,8 @@ function get_cobalt_token(callback) {
 }
 function removeError() {
   $("#above-vtt-error-message").remove();
-  remove_loading_overlay(); // in case there was an error starting up, remove the loading overlay, so they're not completely stuck
+  if(typeof remove_loading_overlay == "function")
+    remove_loading_overlay(); // in case there was an error starting up, remove the loading overlay, so they're not completely stuck
   delete window.logSnapshot;
 }
 
@@ -1543,6 +1789,44 @@ function showTempMessage(messageString){
   }, 1000);
 
 }
+function convertMmSsToMs(text) {
+  const [minutes, seconds] = text.split(':').map(Number); //
+  const totalMilliseconds = (minutes * 60 + seconds) * 1000; //
+  return totalMilliseconds;
+}
+function convertMsToMmSs(duration) {
+  return  `${`${Math.floor(duration / 60000)}`.padStart(2, '0')}:${`${Math.floor((duration % 60000) / 1000)}`.padStart(2, '0')}`
+}
+function create_gamelog_timer(message, duration = 60000, startTime = Date.now()){
+  let timerId;
+  const startTimeString = convertMsToMmSs(duration);
+  const timerBox = $(`<div class='chatTimer' data-start='${startTime}'><span class='timerMessage'>${message}</span><span class='timerBar'>${startTimeString}</span></div>`);
+  const closeButton = $(`<span class='timerCloseButton'>&#10006;</span>`);
+  closeButton.on('click', function(){
+    clearInterval(timerId);
+    timerBox.remove();
+  });
+  timerBox.append(closeButton);
+  $(".glc-game-log > [class*='-GameLog']").before(timerBox);
+  timerId = setInterval(function(){
+    const elapsed = Date.now() - startTime;
+    const remaining = duration - elapsed;
+    if(remaining <= 0){
+      clearInterval(timerId);
+      setTimeout(function(){
+        timerBox.remove();
+      }, 5000)
+      timerBox.find('.timerBar').css('color', 'red');
+    } else {
+      const timerExists = $(`.chatTimer[data-start="${startTime}"]`).length > 0;
+      if(!timerExists){
+        $(".glc-game-log > [class*='-GameLog']").before(timerBox);
+      }
+      const timeRemainingString = convertMsToMmSs(remaining);
+      timerBox.find('.timerBar').text(timeRemainingString);
+    }
+  }, 1000);
+}
 /** The string "THE DM" has been used in a lot of places.
  * This prevents typos or case sensitivity in strings.
  * @return {String} "THE DM" */
@@ -1677,6 +1961,10 @@ function find_pc_by_player_id(idOrSheet, useDefault = true) {
   const regex = new RegExp(regexStr, 'gi');
   const pc = window.pcs.find(pc => pc.sheet.match(regex) || pc.sheet == idOrSheet);
   if (pc) {
+    const unusedPlayerData = ['attacks', 'attunedItems', 'campaign', 'campaignSetting', 'classes'];
+    for (let i = 0; i < unusedPlayerData.length; i++) {
+      delete pc[unusedPlayerData[i]];
+    }
     return pc;
   }
   if (useDefault) {
@@ -1687,7 +1975,7 @@ function find_pc_by_player_id(idOrSheet, useDefault = true) {
 
 async function rebuild_window_pcs() {
   const campaignCharacters = await DDBApi.fetchCampaignCharacterDetails(window.gameId);
-  window.pcs = campaignCharacters.map(characterData => {
+  window.pcs = await campaignCharacters.map(characterData => {
     // we are not making a shortcut for `color` because the logic is too complex. See color_from_pc_object for details
     return {
       ...characterData,
@@ -1851,7 +2139,10 @@ async function harvest_game_id() {
     // we didn't find it on the page so hit the DDB API, and try to pull it from there
     const characterId = window.location.pathname.split("/").pop();
     window.characterData = await DDBApi.fetchCharacter(characterId);
-    return window.characterData.campaign.id.toString();
+    if (!window.characterData?.campaign){
+      return false;
+    }
+    return window.characterData?.campaign?.id?.toString();
   }
 
   throw new Error(`harvest_game_id failed to find gameId on ${window.location.href}`);
@@ -1862,7 +2153,11 @@ function set_game_id(gameId) {
 }
 
 async function harvest_campaign_secret() {
+
   if (typeof window.gameId !== "string" || window.gameId.length <= 1) {
+    if (window.gameId === false){
+      return
+    }
     throw new Error("harvest_campaign_secret requires gameId to be set. Make sure you call harvest_game_id first");
   }
 

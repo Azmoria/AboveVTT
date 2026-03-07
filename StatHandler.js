@@ -99,7 +99,7 @@ class StatHandler {
 				let roll = new rpgDiceRoller.DiceRoll(expression);
 				console.log(expression + "->" + roll.total);
 				let total = parseFloat(Math.floor(roll.total) + stat/100).toFixed(2);
-				let combatSettingData = getCombatTrackersettings();
+				let combatSettingData = getCombatTrackerSettings();
 				if(combatSettingData['tie_breaker'] !='1'){
 					total = parseInt(total);
 				}
@@ -116,7 +116,7 @@ class StatHandler {
 				let roll = new rpgDiceRoller.DiceRoll(expression);
 				console.log(expression + "->" + roll.total);
 				let total = parseFloat(roll.total + data.stats[1].value/100).toFixed(2);
-				let combatSettingData = getCombatTrackersettings();
+				let combatSettingData = getCombatTrackerSettings();
 				if(combatSettingData['tie_breaker'] !='1'){
 					total = parseInt(total);
 				}
@@ -124,14 +124,26 @@ class StatHandler {
 			}, open5eSlug);
 		}
 		else if(monsterid =='customStat'){
-			let modifier = (window.TOKEN_OBJECTS[tokenId]?.options?.customInit != undefined) ? parseInt(window.TOKEN_OBJECTS[tokenId].options.customInit) : (window.TOKEN_OBJECTS[tokenId]?.options?.customStat != undefined && window.TOKEN_OBJECTS[tokenId]?.options?.customStat[1]?.mod != undefined) ? parseInt(window.TOKEN_OBJECTS[tokenId].options.customStat[1].mod) : 0;
-			let expression = (!isNaN(modifier)) ? dice + modifier : '0';
-			let roll = new rpgDiceRoller.DiceRoll(expression);
-			let decimalAdd = (window.TOKEN_OBJECTS[tokenId]?.options?.customInit != undefined || (window.TOKEN_OBJECTS[tokenId]?.options?.customStat != undefined && window.TOKEN_OBJECTS[tokenId]?.options?.customStat[1]?.mod != undefined)) ? ((modifier*2)+10)/100 : 0
-			console.log(expression + "->" + roll.total);
-			let total = parseFloat(roll.total + decimalAdd).toFixed(2);
-			let combatSettingData = getCombatTrackersettings();
-			if(combatSettingData['tie_breaker'] !='1'){
+			const currentToken = window.TOKEN_OBJECTS[tokenId];
+			const options = currentToken?.options;
+			const customInitStatic = options?.customInitStatic;
+			const customInitMod = options?.customInit;
+			const statMod = options?.customStat[1]?.mod || 0;
+			let total;
+			if(!customInitMod && customInitStatic != undefined){
+				let decimalAdd = statMod ? ((parseInt(statMod) * 2) + 10) / 100 : 0
+				total = parseFloat(parseInt(customInitStatic) + decimalAdd).toFixed(2);
+			}
+			else {
+				let modifier = (customInitMod != undefined) ? parseInt(customInitMod) : (statMod != undefined) ? parseInt(statMod) : 0;
+				let expression = (!isNaN(modifier)) ? dice + modifier : '0';
+				let roll = new rpgDiceRoller.DiceRoll(expression);
+				let decimalAdd = (window.TOKEN_OBJECTS[tokenId]?.options?.customInit != undefined || (window.TOKEN_OBJECTS[tokenId]?.options?.customStat != undefined && window.TOKEN_OBJECTS[tokenId]?.options?.customStat[1]?.mod != undefined)) ? ((modifier * 2) + 10) / 100 : 0
+				console.log(expression + "->" + roll.total);
+				total = parseFloat(roll.total + decimalAdd).toFixed(2);
+			}
+			let combatSettingData = getCombatTrackerSettings();
+			if (combatSettingData['tie_breaker'] != '1') {
 				total = parseInt(total);
 			}
 			callback(total);
@@ -149,7 +161,7 @@ class StatHandler {
 				let roll = new rpgDiceRoller.DiceRoll(expression);
 				console.log(expression + "->" + roll.total);
 				let total = parseFloat(roll.total + stat.data.stats[1].value/100).toFixed(2);
-				let combatSettingData = getCombatTrackersettings();
+				let combatSettingData = getCombatTrackerSettings();
 				if(combatSettingData['tie_breaker'] !='1'){
 					total = parseInt(total);
 				}

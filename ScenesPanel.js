@@ -776,7 +776,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 			}else{
 				$("#scene_selector_toggle").show();
 				$("#tokens").show();
-				window.WIZARDING = false;
+				
 				window.CURRENT_SCENE_DATA = {
 					...window.CURRENT_SCENE_DATA,
 					upsq: $('input[name="upsq"]').val(),
@@ -802,7 +802,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 
 		$("#scene_selector_toggle").show();
 		$("#tokens").show();
-		window.WIZARDING = false;
+		
 		window.CURRENT_SCENE_DATA = {
 			...window.CURRENT_SCENE_DATA,
 			fpsq: "5",
@@ -816,7 +816,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 
 	let grid_10 = function() {
 
-			window.WIZARDING = false;
+			
 			let subdivided = $('input[name="grid_subdivided"]').val() == 1;
 			$("#scene_selector_toggle").show();
 			$("#tokens").show();
@@ -835,7 +835,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	}
 
 	let grid_15 = function() {
-		window.WIZARDING = false;
+		
 		let subdivided = $('input[name="grid_subdivided"]').val() == 1;
 		$("#scene_selector_toggle").show();
 		$("#tokens").show();
@@ -855,7 +855,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 
 
 	let grid_20 = function() {
-		window.WIZARDING = false;
+		
 		let subdivided = $('input[name="grid_subdivided"]').val() == 1;
 		$("#scene_selector_toggle").show();
 		$("#tokens").show();
@@ -876,7 +876,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	cancel.click(function() {
 		$('[id="aligner1"]').remove();
 		$('[id="aligner2"]').remove();
-		window.WIZARDING = false;
+		
 		window.ScenesHandler.scenes[window.ScenesHandler.current_scene_id] = copiedSceneData;
 		window.ScenesHandler.scene = copiedSceneData;
 		window.CURRENT_SCENE_DATA = copiedSceneData;
@@ -1210,6 +1210,7 @@ function edit_scene_dialog(scene_id) {
 	
 		const {hpps, vpps, offsetx, offsety, grid_color, grid_line_width, grid_subdivided, grid} = await get_edit_form_data()
 		// redraw grid with new information
+		window.CURRENT_SCENE_DATA.grid = grid;
 		if(grid === "1" && window.CURRENT_SCENE_DATA.scale_check){
 			let conversion = window.CURRENT_SCENE_DATA.scale_factor * window.CURRENT_SCENE_DATA.conversion
 			redraw_grid(parseFloat(hpps*conversion), parseFloat(vpps*conversion), offsetx*conversion, offsety*conversion, grid_color, grid_line_width, grid_subdivided )
@@ -1331,12 +1332,12 @@ function edit_scene_dialog(scene_id) {
 	let darknessValue = scene.darkness_filter || 0;
 	let darknessFilterRange = $(`<input name="darkness_filter" class="darkness-filter-range" type="range" value="${darknessValue}" min="0" max="100" step="1"/>`);
 	let darknessNumberInput = $(`<input name='darkness_filter_number' class='styled-number-input' type='number' min='0' max='100' value='${darknessValue}'/>`)
-	
+
 	darknessFilterRange.on('input change', function(){
 		$("#darkness_layer").toggleClass("smooth-transition", true);
 		let darknessFilterRangeValue = parseInt(darknessFilterRange.val());
    	 	let darknessPercent = 100 - darknessFilterRangeValue;
-   	 	if(window.CURRENT_SCENE_DATA.id == window.ScenesHandler.scenes[scene_id].id) {
+   	 	if(window.CURRENT_SCENE_DATA.id == scene.id) {
 	   	 	$('#VTT').css('--darkness-filter', darknessPercent + "%");
    		}
    		setTimeout(function(){
@@ -1350,7 +1351,7 @@ function edit_scene_dialog(scene_id) {
 		darknessFilterRange.val(darknessNumberInput.val());
 		let darknessFilterRangeValue = parseInt(darknessFilterRange.val());
    	 	let darknessPercent = 100 - darknessFilterRangeValue;
-   	 	if(window.CURRENT_SCENE_DATA.id == window.ScenesHandler.scenes[scene_id].id) {
+		if (window.CURRENT_SCENE_DATA.id == scene.id) {
 	   	 	$('#VTT').css('--darkness-filter', darknessPercent + "%");
    		}
    		setTimeout(function(){
@@ -1358,10 +1359,7 @@ function edit_scene_dialog(scene_id) {
    		}, 400);  		
 	});
 
-	darknessFilterRange.on('mouseup', function(){
-   	 	let darknessFilterRangeValue = parseInt(darknessFilterRange.val());
-   	 	scene.darkness_filter = darknessFilterRangeValue;
-	});
+
 
 	form.append(form_row('darknessFilter',
 						'Line of Sight/Darkness Opacity',
@@ -1401,18 +1399,35 @@ function edit_scene_dialog(scene_id) {
 		if ($(event.currentTarget).hasClass("rc-switch-checked")) {
 			// it was checked. now it is no longer checked
 			$(event.currentTarget).removeClass("rc-switch-checked");
-			if(window.ScenesHandler.current_scene_id == scene_id){
+			if (window.CURRENT_SCENE_DATA.id == scene.id){
 				window.CURRENT_SCENE_DATA.snap = "0";	
 			}	
 		} else {
 			// it was not checked. now it is checked
 			$(event.currentTarget).removeClass("rc-switch-unknown");
 			$(event.currentTarget).addClass("rc-switch-checked");
-			if(window.ScenesHandler.current_scene_id == scene_id){
+			if (window.CURRENT_SCENE_DATA.id == scene.id){
 				window.CURRENT_SCENE_DATA.snap = "1";
 			}	
 		}
-	})));
+	}))); 
+	form.append(form_row('alphaNumGrid', 'Alphanumeric Grid Labels', form_toggle("alphaNumGrid", null, false, function (event) {
+		if ($(event.currentTarget).hasClass("rc-switch-checked")) {
+			$(event.currentTarget).removeClass("rc-switch-checked");
+			if (window.CURRENT_SCENE_DATA.id == scene.id) {
+				window.CURRENT_SCENE_DATA.alphaNumGrid = "0";
+			}
+		} else {
+			$(event.currentTarget).removeClass("rc-switch-unknown");
+			$(event.currentTarget).addClass("rc-switch-checked");
+			if (window.CURRENT_SCENE_DATA.id == scene.id) {
+				window.CURRENT_SCENE_DATA.alphaNumGrid = "1";
+			}
+		}
+		redraw_alphanum_grid();
+	}))); 
+	form.find('#alphaNumGrid_row').attr('title', 'When enabled adds alphanumeric grid labels to the scene.')
+
 	form.find('#snapToGrid_row').attr('title', 'When enabled snaps the tokens to the grid. Otherwise tokens are able to be placed freely. Hold ctrl to when moving a token to temporarily override this.')
 
 
@@ -1523,6 +1538,8 @@ function edit_scene_dialog(scene_id) {
 		const max = parseFloat($(this).attr('max'));
 		const percentage = Math.round((val - min) / (max - min) * 100);
 		particleCount.text(percentage + '%');
+		window.CURRENT_SCENE_DATA.weatherIntensity = val;
+		set_weather();
 	});
 
 	weatherSelect.on('change', function() {
@@ -1538,6 +1555,9 @@ function edit_scene_dialog(scene_id) {
 			particleCount.text(percentage + '%');
 			intensityRow.show();
 		}
+		window.CURRENT_SCENE_DATA.weather = selectedWeather;
+		window.CURRENT_SCENE_DATA.weatherIntensity = intensitySlider.val();
+		set_weather();
 	});
 
 	if (weatherValue === 0 || weatherValue === '0') {
@@ -1627,7 +1647,7 @@ function edit_scene_dialog(scene_id) {
 	wizard.click(
 		async function() {
 		
-
+			window.LOADING = true;
 			const formData = await get_edit_form_data();
 			for (key in formData) {
 				scene[key] = formData[key];
@@ -1678,13 +1698,11 @@ function edit_scene_dialog(scene_id) {
 	cancel.click(function() {
 		// redraw or clear grid based on scene data
 		// discarding any changes that have been made to live modification of grid
-		if (scene.id === window.CURRENT_SCENE_DATA.id){
-			if(window.CURRENT_SCENE_DATA.grid === "1"){
-				redraw_grid()
+		if (scene.id === window.CURRENT_SCENE_DATA.id && !window.LOADING){
+			const msg = {
+				data: {...scene}
 			}
-			else{
-				clear_grid()
-			}
+			window.MB.handleScene(msg);
 		}
 		$("#sources-import-main-container").remove();
 		$(".ddb-classes-page-stylesheet").remove();
@@ -2037,7 +2055,20 @@ function init_scenes_panel() {
 
 	scenesPanel.updateHeader("Scenes");
 	add_expand_collapse_buttons_to_header(scenesPanel);
-
+	let hideMapFromPlayers = $(`<button class="token-row-button hide-button ${window.AVTT_CAMPAIGN_INFO?.hidePlayersScene == 1 ? 'active' : ''}" title="Hide Scene from Players"><span class="material-icons"><span class="material-symbols-outlined">group_off</span></span></button>`);
+	hideMapFromPlayers.on("click", function (clickEvent) {
+		const data = { ...window.AVTT_CAMPAIGN_INFO };
+		const button = $(clickEvent.currentTarget);
+		button.toggleClass("active");
+		if (button.hasClass("active")) {
+			data.hidePlayersScene = 1
+		} else {
+			delete data.hidePlayersScene;
+		}
+		AboveApi.setCampaignData(data);
+		window.MB.sendMessage("custom/myVTT/campaignData", data);
+	});
+	scenesPanel.header.find('.expand-collapse-wrapper').prepend(hideMapFromPlayers);
 	let searchInput = $(`<input name="scene-search" type="search" style="width:96%;margin:2%" placeholder="search scenes">`);
 	searchInput.off("input").on("input", mydebounce(() => {
 		let textValue = scenesPanel.header.find("input[name='scene-search']").val();
@@ -2087,10 +2118,7 @@ function init_scenes_panel() {
 
 	let headerWrapper = $(`<div class="scenes-panel-add-buttons-wrapper"></div>`);
 	headerWrapper.append(`<span class='reorder-explanation'>Drag items to move them between folders</span>`);
-	headerWrapper.append(searchInput);
-	headerWrapper.append(addFolderButton);
-	headerWrapper.append(addSceneButton);
-	headerWrapper.append(reorderButton);
+	headerWrapper.append(searchInput, addFolderButton, addSceneButton, reorderButton);
 	scenesPanel.header.append(headerWrapper);
 	headerWrapper.find(".reorder-explanation").hide();
 
@@ -2318,9 +2346,6 @@ async function redraw_scene_list(searchTerm) {
 						window.JOURNAL.display_note(item.id);
 					})
 
-					
-
-
 
 					const noteId = item.id;
 					let hoverNoteTimer;
@@ -2328,8 +2353,8 @@ async function redraw_scene_list(searchTerm) {
 					conditionContainer.on({
 						'mouseover': function (e) {
 							hoverNoteTimer = setTimeout(function () {
-								build_and_display_sidebar_flyout(e.clientY, function (flyout) {
-									let noteHover = `<div>
+								build_and_display_sidebar_flyout(e.clientY, async function (flyout) {
+									let noteHover = `<div style="max-height: calc(100vh - 60px);height: fit-content;">
 										<div class="tooltip-header">
 											<div class="tooltip-header-icon">
 											
@@ -2341,7 +2366,7 @@ async function redraw_scene_list(searchTerm) {
 											Note
 											</div>
 										</div>
-										<div class="tooltip-body note-text" style="max-height:calc(100vH - 100px)">
+										<div class="tooltip-body note-text" style="max-height:calc(100vh - 130px); height: fit-content;">
 											<div class="tooltip-body-description">
 												<div class="tooltip-body-description-text note-text">
 													${window.JOURNAL.notes[item.id].text}
@@ -2351,49 +2376,14 @@ async function redraw_scene_list(searchTerm) {
 									</div>`
 									flyout.addClass("prevent-sidebar-modal-close"); // clicking inside the tooltip should not close the sidebar modal that opened it
 									flyout.addClass('note-flyout');
-									flyout.css('max-height', 'calc(100vH - 50px)')
 									const tooltipHtml = $(noteHover);
-									window.JOURNAL.translateHtmlAndBlocks(tooltipHtml, noteId);
+									await window.JOURNAL.translateHtmlAndBlocks(tooltipHtml, noteId);
 									add_journal_roll_buttons(tooltipHtml);
 									window.JOURNAL.add_journal_tooltip_targets(tooltipHtml);
 									add_stat_block_hover(tooltipHtml, sceneId);
 									add_aoe_statblock_click(tooltipHtml, sceneId);
 
-									$(tooltipHtml).find('.add-input').each(function () {
-										let numberFound = $(this).attr('data-number');
-										const spellName = $(this).attr('data-spell');
-										const remainingText = $(this).hasClass('each') ? '' : `${spellName} slots remaining`
-										const track_ability = function (key, updatedValue) {
-											if (window.JOURNAL.notes[noteId].abilityTracker === undefined) {
-												window.JOURNAL.notes[noteId].abilityTracker = {};
-											}
-											const asNumber = parseInt(updatedValue);
-											window.JOURNAL.notes[noteId].abilityTracker[key] = asNumber;
-											window.JOURNAL.persist();
-											debounceSendNote(noteId, window.JOURNAL.notes[noteId])
-										}
-										if (window.JOURNAL.notes[noteId].abilityTracker?.[spellName] >= 0) {
-											numberFound = window.JOURNAL.notes[noteId].abilityTracker[spellName]
-										}
-										else {
-											track_ability(spellName, numberFound)
-										}
-
-										let input = createCountTracker(window.JOURNAL.notes[noteId], spellName, numberFound, remainingText, "", track_ability);
-										const playerDisabled = $(this).hasClass('player-disabled');
-										if (!window.DM && playerDisabled) {
-											input.prop('disabled', true);
-										}
-										const partyLootTable = $(this).closest('.party-item-table');
-										if (partyLootTable.hasClass('shop') && numberFound > 0) {
-											$(this).closest('tr').find('td>.item-quantity-take-input').val(1);
-										}
-										else {
-											$(this).closest('tr').find('td>.item-quantity-take-input').val(numberFound);
-										}
-										$(this).find('p').remove();
-										$(this).after(input)
-									})
+									$(tooltipHtml).find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId})})
 									flyout.append(tooltipHtml);
 									let sendToGamelogButton = $(`<a class="ddbeb-button" href="#">Send To Gamelog</a>`);
 									sendToGamelogButton.css({ "float": "right" });
@@ -2408,7 +2398,14 @@ async function redraw_scene_list(searchTerm) {
 										right: '350px',
 										width: '400px'
 									})
+									let flyoutTop = e.clientY;
+									let flyoutHeight = flyout.height() + 25;
+									let bottom = (e.clientY + flyoutHeight);
 
+									if (bottom > window.innerHeight) {
+										flyoutTop = flyoutTop - (bottom - window.innerHeight) - 25;
+									}
+									flyout.css('top', flyoutTop);
 									const buttonFooter = $("<div></div>");
 									buttonFooter.css({
 										height: "40px",
@@ -2536,8 +2533,6 @@ function avttScenesSafeDecode(value) {
 		return value;
 	}
 }
-
-
 
 function avttScenesNormalizeRelativePath(path) {
 	if (typeof path !== "string") {
@@ -2968,7 +2963,7 @@ function register_scene_row_context_menu() {
 							build_import_loading_indicator('Preparing Scenes Export File');
 							const listItemArray = [];
 							for (let i = 0; i < selectedItems.length; i++) {
-								let selectedRow = $(selectedItems[i]);s
+								let selectedRow = $(selectedItems[i]);
 								let selectedItem = find_sidebar_list_item(selectedRow);
 								if (selectedItem.isTypeScene())
 									listItemArray.push(selectedItem);

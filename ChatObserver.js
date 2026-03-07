@@ -19,12 +19,28 @@ class ChatObserver {
                     return;
                 }
                 let slashCommandMatch = value.match(diceRollCommandRegex);
+                const timerCommandRegex = /^\/timer\s([\w\s\d]+\s)?(\d+):(\d+)/gi; 
+                let timerCommandMatch = timerCommandRegex.exec(value);
                 if (slashCommandMatch !== null) {
                     if (self.#parseSlashCommand(value)) {
                         self.#didSubmit(input, value);
                     } else {
                         self.#shake(input);
                     }
+                } else if(timerCommandMatch !== null){
+                    const message = timerCommandMatch[1]?.trim() || "";
+                    const minutes = parseInt(timerCommandMatch[2]);
+                    const seconds = parseInt(timerCommandMatch[3]);
+                    const duration = (minutes * 60 + seconds) * 1000;
+                    const startTime = Date.now();
+                    window.MB.sendMessage("custom/myVTT/createTimer", {
+                        type: "gamelog",
+                        message,
+                        duration,
+                        startTime
+                    });
+                    create_gamelog_timer(message, duration, startTime);
+                    self.#didSubmit(input, value);
                 } else {
                     self.#sendChatMessage(value);
                     self.#didSubmit(input, value);
@@ -66,11 +82,9 @@ class ChatObserver {
         if (didSend === false) {
             // it was too complex so try to send it through rpgDiceRoller
             let expression = text.replace(diceRollCommandRegex, "").match(allowedExpressionCharactersRegex)?.[0];
-            didSend = send_rpg_dice_to_ddb(expression, window.pc?.name, window.pc?.image);
+            didSend = send_ddb_dice_message(expression, window.pc?.name, window.pc?.image);
         }
         return didSend;
-        
-
     }
 
     async #sendChatMessage(text) {
@@ -90,7 +104,7 @@ class ChatObserver {
 
         };
 
-        if(data.img.startsWith('above-bucket-not-a-url')){
+        if(data.img?.startsWith('above-bucket-not-a-url')){
             data.img = await getAvttStorageUrl(data.img, true);
         }
 

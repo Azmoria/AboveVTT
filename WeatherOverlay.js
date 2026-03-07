@@ -1,26 +1,82 @@
 class WeatherOverlay {
     constructor(canvas, lightCanvas, type = 'rain', intensity = 120) {
-        
-        this.offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height);;
-        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+        this.offscreenCanvas = new OffscreenCanvas(0,0);
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');          
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext('2d');          
         this.lightCanvas = lightCanvas;
         this.lightCtx = lightCanvas.getContext('2d');  
-        this.type = type;
-        this.intensity = intensity;
         this.particles = [];
         this.animationId = null;
         this.width = canvas.width;
         this.height = canvas.height;
-        this._initParticles();
+        this.setType(type, intensity);
+    }
+    resizeCtx(current, canvas, nonzero) {
+        if(nonzero) {
+            if(canvas.width != this.width || canvas.height != this.height) {
+                canvas.width = this.width;
+                canvas.height = this.height;
+            $(canvas).css({
+                'transform-origin': 'top left',
+                'transform': 'scale(var(--scene-scale))'
+            });
+            } else {
+                current.clearRect(0, 0, this.width, this.height);
+            }
+        } else {
+            canvas.width = canvas.height = 0;
+        }
+    }
+    stop() {
+        if (this.animationId) {        //stop
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
     }
     setType(type, intensity) {
+        this.stop();
         this.type = type;
-        if (intensity !== undefined) {
-            this.intensity = intensity;
+        const weatherData = getWeatherTypes()[this.type];
+        this.intensity = intensity || weatherData?.default || 120;
+        //start or optimize canvas away
+        const weatherExists = (this.type && this.type != '0');
+        this.resizeCtx(this.ctx, this.canvas, weatherExists);
+        this.resizeCtx(this.offscreenCtx, this.offscreenCanvas, weatherExists);
+        this.resizeCtx(this.lightCtx, this.lightCanvas, weatherExists && weatherData?.lit);
+        
+        if(weatherExists) {
+            this._initParticles();
+            this._animate();
+            
+            if (this.type === 'fog') {
+                $(this.canvas).css({
+                    filter: `blur(${ window.CURRENT_SCENE_DATA.hpps }px`
+                })
+            }
+            else if (this.type === 'faerieLight' || this.type === 'fireflies') {
+                $(this.canvas).css({
+                    filter: `blur(1px)`
+                })
+            }
+            else {
+                $(this.canvas).css({
+                    filter: ``
+                })
+            }
+            
+            if (weatherData?.lit) {
+                $(this.lightCanvas).css({
+                    filter: `blur(${window.CURRENT_SCENE_DATA.hpps / window.CURRENT_SCENE_DATA.scale_factor}px`
+                })
+            }
+            else{
+                $(this.lightCanvas).css({
+                    filter: ``
+                })
+            }
+            
         }
-        this._initParticles();
     }
     
     setIntensity(intensity) {
@@ -29,16 +85,31 @@ class WeatherOverlay {
     }
 
     setSize(width, height) {
+        console.log("WEATHERSIZE", width, height);
         this.width = width;
         this.height = height;
-        this.offscreenCanvas.width = width;
-        this.offscreenCanvas.height = height;
         this._initParticles();
     }
 
     _initParticles() {
         this.particles = [];
         const count = this.intensity !== undefined ? this.intensity : 120;
+        const weatherTypes = getWeatherTypes();
+        const data = weatherTypes[this.type];
+        if (data != undefined){
+
+            const defaultIntensity = data.default;
+
+            const intensityMultiplier = this.intensity > defaultIntensity
+                ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
+                : 1;
+            this.intensityMultiplier = intensityMultiplier;
+            const maxIntensity = data.max;
+            const angleMultiplier = Math.max(0, Math.min(1, (this.intensity - defaultIntensity) / (maxIntensity - defaultIntensity)));
+            const maxAngleDegrees = 25;
+            this.angleRadians = (angleMultiplier * maxAngleDegrees) * (Math.PI / 180);
+            this.horizontalOffset = Math.tan(this.angleRadians) * this.height;
+        }
 
         if (this.type === 'fog' || this.type === 'embers' || this.type === 'cherryBlossoms') {
             const angle = Math.random() * Math.PI * 2;
@@ -52,20 +123,11 @@ class WeatherOverlay {
         const fadeInFrames = 60;
 
         if (this.type === 'rain' || this.type === 'lightning') {
-            const weatherTypes = getWeatherTypes();
-            const data = weatherTypes['rain'];
-            const defaultIntensity = data.default;
-            const maxIntensity = data.max;
-            const angleMultiplier = Math.max(0, Math.min(1, (this.intensity - defaultIntensity) / (maxIntensity - defaultIntensity)));
-            const maxAngleDegrees = 25;
-            const angleRadians = (angleMultiplier * maxAngleDegrees) * (Math.PI / 180);
-            const horizontalOffset = Math.tan(angleRadians) * this.height;
-            
             for (let i = 0; i < count; i++) {
                 const id = i + '_' + Math.floor(Math.random() * 1000000);
                 const endX = Math.random() * this.width;
                 const endY = Math.random() * this.height;
-                const startX = endX - horizontalOffset;
+                const startX = endX - this.horizontalOffset;
                 const startY = endY - this.height * (0.5 + Math.random() * 0.5);
                 const wind = -0.7 + Math.random() * 1.4;
                 const z = Math.random();
@@ -117,12 +179,7 @@ class WeatherOverlay {
                 });
             }
         } else if (this.type === 'snow') {
-            const weatherTypes = getWeatherTypes();
-            const snowData = weatherTypes['snow'];
-            const defaultIntensity = snowData ? snowData.default : 320;
-            const speedMultiplier = this.intensity > defaultIntensity 
-                ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
-                : 1;
+
             
             for (let i = 0; i < count; i++) {
                 const groundX = Math.random() * this.width;
@@ -137,12 +194,12 @@ class WeatherOverlay {
                     z: ratio,
                     r: 2 + Math.random() * 4,
                     alpha: 0.8 + Math.random() * 0.2,
-                    drift: 1 + Math.random() * 100, 
-                    speed: (0.0001 + Math.random() * 0.0002) * speedMultiplier, 
+                    drift: 1 + Math.random() * 100 * this.intensityMultiplier, 
+                    speed: (0.0001 + Math.random() * 0.0002) * this.intensityMultiplier, 
                     phase: Math.random() * Math.PI * 2,
-                    angle: Math.random() * Math.PI * 2,
-                    spin: -0.01 + Math.random() * 0.02,
-                    wind: 0.001 + Math.random() * 0.025,
+                    angle: Math.random() * Math.PI * 2 * this.intensityMultiplier,
+                    spin: -0.01 + Math.random() * 0.02 * this.intensityMultiplier,
+                    wind: 0.001 + Math.random() * 0.025 * this.intensityMultiplier * this.intensityMultiplier,
                     fadeIn: 0,
                     fadeInFrames: fadeInFrames
                 });
@@ -163,12 +220,7 @@ class WeatherOverlay {
                 });
             }
         } else if (this.type === 'embers') {
-            const weatherTypes = getWeatherTypes();
-            const data = weatherTypes[this.type];
-            const defaultIntensity = data.default;
-            const intensityMultiplier = this.intensity > defaultIntensity 
-                ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
-                : 1;
+            
             for (let i = 0; i < count; i++) {
                 let baseX = Math.random() * (this.width + 40) - 20;
                 let baseY = Math.random() * (this.height + 40) - 20;
@@ -232,13 +284,6 @@ class WeatherOverlay {
                 });
             }
         } else if (this.type === 'faerieLight' ||  this.type === 'fireflies') {
-            const weatherTypes = getWeatherTypes();
-            const data = weatherTypes[this.type];
-            const defaultIntensity = data.default;
-            const intensityMultiplier = this.intensity > defaultIntensity 
-                ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
-                : 1;
-
             for (let i = 0; i < count; i++) {
                 const r = 1 + Math.random() * 2;
                 this.particles.push({
@@ -381,49 +426,7 @@ class WeatherOverlay {
         }
     }
 
-    start() {
-        if (!this.animationId) {
-            this._animate();
-            if (this.type === 'fog') {
-                $(this.canvas).css({
-                    filter: `blur(${window.CURRENT_SCENE_DATA.hpps / window.CURRENT_SCENE_DATA.scale_factor}px`
-                })
-            }
-            else if (this.type === 'faerieLight' || this.type === 'fireflies') {
-                $(this.canvas).css({
-                    filter: `blur(1px)`
-                })
-            }
-            else {
-                $(this.canvas).css({
-                    filter: ``
-                })
-            }
-
-            if (this.type === 'lightning') {
-                $(this.lightCanvas).css({
-                    filter: `blur(${window.CURRENT_SCENE_DATA.hpps / window.CURRENT_SCENE_DATA.scale_factor}px`
-                })
-            }
-            else{
-                $(this.lightCanvas).css({
-                    filter: ``
-                })
-            }
-        }
-    }
-
     
-    stop(){
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
-        }
-        this.offscreenCtx.clearRect(0, 0, this.width, this.height);
-        this.ctx.clearRect(0, 0, this.width, this.height);
-        this.lightCtx.clearRect(0, 0, this.width, this.height);   
-    }
-
     _animate = () => {
         const now = Date.now();
         if (!this._lastFrameTime) this._lastFrameTime = now;
@@ -509,13 +512,6 @@ class WeatherOverlay {
     }
 
     _drawFireflies() {
-        const weatherTypes = getWeatherTypes();
-        const data = weatherTypes[this.type];
-        const defaultIntensity = data.default;
-        const intensityMultiplier = this.intensity > defaultIntensity 
-            ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
-            : 1;
-
         const t = Date.now() * 0.001;
         for (let p of this.particles) {
             const blink = 0.5 + 0.5 * Math.sin(t * p.blinkSpeed + p.blinkPhase);
@@ -556,12 +552,6 @@ class WeatherOverlay {
     }
 
     _drawEmbers() {
-        const weatherTypes = getWeatherTypes();
-        const data = weatherTypes[this.type];
-        const defaultIntensity = data.default;
-        const intensityMultiplier = this.intensity > defaultIntensity 
-            ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 3
-            : 1;
         for (let p of this.particles) {
             this.offscreenCtx.save();
             this.offscreenCtx.globalAlpha = p.alpha * (1 - p.life / p.maxLife);
@@ -727,10 +717,10 @@ class WeatherOverlay {
     }
 
     _drawLightning() {
-        const t = Date.now() * 0.002;
+       
         if (!this._lightningTimer || this._lightningTimer <= 0) {
             this._lightningAlpha = 0.18 + Math.random() * 0.10;
-            this._lightningTimer = 360 + Math.floor(Math.random() * 360);
+            this._lightningTimer = (360 / this.intensityMultiplier + Math.floor(Math.random() * 360));
             this._lightningFlashFrames = 10 + Math.floor(Math.random() * 8);
             const angle = Math.random() * Math.PI * 2;
             const length = this.width * (0.7 + Math.random() * 0.5);
@@ -751,10 +741,10 @@ class WeatherOverlay {
             this.lightCtx.globalAlpha = 0.5;
             this.lightCtx.beginPath();
             this.lightCtx.ellipse(
-                this._lightningStrike.x + Math.cos(this._lightningStrike.angle) * this._lightningStrike.length * 0.5,
-                this._lightningStrike.y + Math.sin(this._lightningStrike.angle) * this._lightningStrike.length * 0.5,
-                glowRadiusX,
-                glowRadiusY,
+                (this._lightningStrike.x + Math.cos(this._lightningStrike.angle) * this._lightningStrike.length * 0.5) / window.CURRENT_SCENE_DATA.scale_factor,
+                (this._lightningStrike.y + Math.sin(this._lightningStrike.angle) * this._lightningStrike.length * 0.5) / window.CURRENT_SCENE_DATA.scale_factor,
+                glowRadiusX / window.CURRENT_SCENE_DATA.scale_factor,
+                glowRadiusY / window.CURRENT_SCENE_DATA.scale_factor,
                 this._lightningStrike.angle,
                 0,
                 Math.PI * 2
@@ -807,15 +797,6 @@ class WeatherOverlay {
     }
 
     _drawRain() {
-        const t = Date.now() * 0.001;
-        const weatherTypes = getWeatherTypes();
-        const data = weatherTypes[this.type];
-        const defaultIntensity = data.default;
-        const maxIntensity = data.max;
-        const angleMultiplier = Math.max(0, Math.min(1, (this.intensity - defaultIntensity) / (maxIntensity - defaultIntensity)));
-        const maxAngleDegrees = 25;
-        const angleRadians = (angleMultiplier * maxAngleDegrees) * (Math.PI / 180);
-
         for (let p of this.particles) {
             if (p.splash && p.start == true) {
                 this.offscreenCtx.save();
@@ -858,8 +839,8 @@ class WeatherOverlay {
                 p.x = (1 - p.z) * p.startX + p.z * p.groundX + windOffset;
                 p.y = (1 - p.z) * p.startY + p.z * p.groundY;
                 const streakLen = 18 + 22 * (1 - p.z);
-                const endX = p.x + Math.sin(angleRadians) * streakLen;
-                const endY = p.y + Math.cos(angleRadians) * streakLen;
+                const endX = p.x + Math.sin(this.angleRadians) * streakLen;
+                const endY = p.y + Math.cos(this.angleRadians) * streakLen;
                 this.offscreenCtx.save();
                 this.offscreenCtx.globalAlpha = 0.2 + (2 * (1 - p.z) * fade*.8);
                 this.offscreenCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
@@ -881,10 +862,10 @@ class WeatherOverlay {
                         splash.fadeIn = 0;
                         splash.start = true;
                     }
-                    const horizontalOffset = Math.tan(angleRadians) * this.height;
+
                     const groundX = Math.random() * this.width;
                     const groundY = Math.random() * this.height;
-                    p.startX = groundX - horizontalOffset;
+                    p.startX = groundX - this.horizontalOffset;
                     p.startY = groundY - this.height * (0.5 + Math.random() * 0.5);
                     p.groundX = groundX;
                     p.groundY = groundY;
@@ -932,13 +913,6 @@ class WeatherOverlay {
             this.offscreenCtx.stroke();
             this.offscreenCtx.restore();
             if (p.y >= p.groundY) {
-                const weatherTypes = getWeatherTypes();
-                const snowData = weatherTypes['snow'];
-                const defaultIntensity = snowData ? snowData.default : 320;
-                const intensityMultiplier = this.intensity > defaultIntensity 
-                    ? 1 + Math.pow((this.intensity - defaultIntensity) / defaultIntensity, 1.5) * 7
-                    : 1;
-                
                 const groundX = Math.random() * this.width;
                 const groundY = (1 + Math.random() * 0.25) * this.height;
                 const startY = groundY - (1.25 * this.height);
@@ -950,12 +924,12 @@ class WeatherOverlay {
                 p.z = ratio;
                 p.r = 2 + Math.random() * 4;
                 p.alpha = 0.8 + Math.random() * 0.2;
-                p.drift = 1 + Math.random() * 100;
-                p.speed = (0.0001 + Math.random() * 0.0002) * intensityMultiplier;
+                p.drift = 1 + Math.random() * 100 * this.intensityMultiplier;
+                p.speed = (0.0001 + Math.random() * 0.0002) * this.intensityMultiplier;
                 p.phase = Math.random() * Math.PI * 2;
-                p.angle = Math.random() * Math.PI * 2;
+                p.angle = Math.random() * Math.PI * 2 * this.intensityMultiplier;
                 p.spin = -0.01 + Math.random() * 0.02;
-                p.wind = (0.001 + Math.random() * 0.025) * intensityMultiplier;
+                p.wind = (0.001 + Math.random() * 0.025) * this.intensityMultiplier * this.intensityMultiplier;
                 p.fadeIn = 1;
             }
         }
@@ -1007,28 +981,21 @@ class WeatherOverlay {
     }
 }
 
-function set_weather(){
-    const currentWeather = window.CURRENT_SCENE_DATA.weather || 'none';
-    const weatherTypes = getWeatherTypes();
-    const weatherData = weatherTypes[currentWeather];
-    const defaultIntensity = weatherData ? weatherData.default : 120;
-    const weatherIntensity = window.CURRENT_SCENE_DATA.weatherIntensity !== undefined ? window.CURRENT_SCENE_DATA.weatherIntensity : defaultIntensity;
-    
+function ensure_weather() {
     if(window.WeatherOverlay == undefined){
         const weatherCanvas = $('#weather_overlay');
         const weatherLightCanvas = $('#weather_light');
-        window.WeatherOverlay = new WeatherOverlay(weatherCanvas[0], weatherLightCanvas[0], currentWeather, weatherIntensity);
+        window.WeatherOverlay = new WeatherOverlay(weatherCanvas[0], weatherLightCanvas[0]);
     }
-
-    if(!currentWeather || currentWeather == 'none' || currentWeather == '0'){
-        window.WeatherOverlay.stop();
-        window.WeatherOverlay.ctx.clearRect(0, 0, window.WeatherOverlay.width, window.WeatherOverlay.height);
-        return;
-    }
-         
-    window.WeatherOverlay.stop();
-    window.WeatherOverlay.setType(window.CURRENT_SCENE_DATA.weather, weatherIntensity);
-    window.WeatherOverlay.start();
+}
+function set_weather(){
+    ensure_weather();
+    window.WeatherOverlay.setType(window.CURRENT_SCENE_DATA.weather || 'none', window.CURRENT_SCENE_DATA.weatherIntensity);
+}
+function set_weather_size(w, h){
+    ensure_weather();
+    window.WeatherOverlay.setSize(w, h);
+    set_weather();
 }
 
 function getWeatherTypes() {
@@ -1038,7 +1005,7 @@ function getWeatherTypes() {
         'fog': { type: 'Fog', min: 0, default: 10, max: 20 },
         'embers': { type: 'Embers', min: 0, default: 40, max: 80 },
         'cherryBlossoms': { type: 'Cherry Blossoms', min: 0, default: 40, max: 80 },
-        'lightning': { type: 'Lightning', min: 0, default: 60, max: 120 },
+        'lightning': { type: 'Lightning', min: 0, default: 60, max: 120, lit: true },
         'faerieLight': { type: 'Faerie Light', min: 0, default: 23, max: 46 },
         'fireflies': { type: 'Fireflies', min: 0, default: 28, max: 56 },
         'leaves': { type: 'Fall Leaves', min: 0, default: 32, max: 64 },

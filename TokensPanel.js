@@ -897,7 +897,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                     if (ui.helper.attr("data-shape") && ui.helper.attr("data-style")) {
                         src = build_aoe_img_name(ui.helper.attr("data-style"), ui.helper.attr("data-shape"));
                     }
-                    create_and_place_token(draggedItem, hidden, src, event.pageX, event.pageY, true);
+                    create_and_place_token(draggedItem, hidden, src, event.pageX, event.pageY, true, undefined, undefined, undefined, true);
                 }
                 else{
                     const listItemArray = [];
@@ -1106,7 +1106,7 @@ function update_pc_token_rows() {
  */
 
 
-async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined) {
+async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined, ignoreOffset=false) {
 
 
     if (listItem === undefined) {
@@ -1114,7 +1114,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
         return;
     }
 
-    if (listItem.isTypeFolder() || listItem.isTypeEncounter()) {{tokenStyleSelect: "definitelyNotAToken"}
+    if (listItem.isTypeFolder() || listItem.isTypeEncounter()) {
 
         let tokensToPlace = [];
 
@@ -1242,7 +1242,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             options.color = `#${color}`;
             switch (options['placeType']) {
                 case 'personality':
-                    let personailityTrait = getPersonailityTrait()
+                    let personailityTrait = getPersonalityTrait()
                     console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
@@ -1328,7 +1328,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             options.color = `#${color}`;
             switch (options['placeType']) {
                 case 'personality':
-                    let personailityTrait = getPersonailityTrait()
+                    let personailityTrait = getPersonalityTrait()
                     console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
@@ -1395,7 +1395,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             switch (options['placeType']) {
            
                 case 'personality':
-                    let personailityTrait = getPersonailityTrait()
+                    let personailityTrait = getPersonalityTrait()
                     console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
@@ -1433,7 +1433,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             options.color = `#${color}`;
             switch (options['placeType']) {
                 case 'personality':
-                    let personailityTrait = getPersonailityTrait()
+                    let personailityTrait = getPersonalityTrait()
                     console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
@@ -1507,16 +1507,20 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 temp: 0
             };
         }
-        let newStatBlockInit = searchText.matchAll(/Initiative[\s\S]*?[\s>]([+-][0-9]+)/gi).next()
+        let newStatBlockInit = searchText.matchAll(/Initiative[\s\S]*?([\s>]([+-][0-9]+)|[\s>(](\d+)\)?)/gi).next()
 
         if(newStatBlockInit.value != undefined){
-            if(newStatBlockInit.value[1] != undefined)
-                options.customInit = newStatBlockInit.value[1];
+            options.customInit = newStatBlockInit.value[2];
+            options.customInitStatic = newStatBlockInit.value[3]; 
         }        
 
         const newInit = $(searchText).find('.custom-initiative.custom-stat').text();
         if(newInit){
-            options.customInit = newInit
+            const match = newInit.matchAll(/([+-][0-9]+)|(\d+)/gi).next()
+            if(match.value != undefined){
+                options.customInit = match.value[1];
+                options.customInitStatic = match.value[2]; 
+            }
         }
 
         let newAC = $(searchText).find('.custom-ac.custom-stat').text();
@@ -1677,12 +1681,12 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
     // TODO: figure out if we still need to do this, and where they are coming from
     delete options.undefined;
     delete options[""];
-    console.log("create_and_place_token about to place token with options", options, hidden);
+    console.log("create_and_place_token about to place token with options", options, hidden, mapPoint, eventPageX, eventPageY, disableSnap);
 
     if (eventPageX === undefined || eventPageY === undefined) {
         place_token_in_center_of_view(options);
     } else if(mapPoint==false){
-        let mapPosition = convert_point_from_view_to_map(eventPageX, eventPageY, disableSnap);
+        let mapPosition = convert_point_from_view_to_map(eventPageX, eventPageY, disableSnap, ignoreOffset);
         place_token_at_map_point(options, mapPosition.x, mapPosition.y);
     }
     else{
@@ -3005,6 +3009,14 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     });
     inputWrapper.append(imageZoomWrapper);
 
+    let startingTokenFlip = targetOptions.targetFlip || 0;
+    let tokenFlipWrapper = build_token_flip_input(startingTokenFlip, function (tokenFlip) { 
+        customization.setTokenOption("tokenFlip", tokenFlip);
+        persist_token_customization(customization);
+        decorate_modal_images(sidebarPanel, listItem, placedToken);  
+    });
+    inputWrapper.append(tokenFlipWrapper);
+     
     let startingOpacity = targetOptions.imageOpacity || 1;
     let opacityWrapper = build_token_num_input(startingOpacity, tokens,  'Image Opacity', 0, 1, 0.1, function (opacity) {
         customization.setTokenOption("imageOpacity", opacity);
@@ -4268,14 +4280,13 @@ function register_custom_token_image_context_menu() {
             }
             items.copy = {
                 name: "Copy Url",
-                callback: function (itemKey, opt, e) {
-                      
-                        let selectedItem = $(opt.$trigger[0]);
-                        let imgSrc = selectedItem.find(".token-image").attr("src");
-                        if(tokenChangeImage){
-                            imgSrc = selectedItem.attr("src");
-                        }
-                        copy_to_clipboard(imgSrc); 
+                callback: function (itemKey, opt, e) {          
+                    let selectedItem = $(opt.$trigger[0]);
+                    let imgSrc = selectedItem.find(".token-image").attr("data-src");
+                    if(tokenChangeImage){
+                        imgSrc = selectedItem.attr("data-src");
+                    }
+                    copy_to_clipboard(imgSrc); 
                 }
             };
             items.sendToGamelog = {
@@ -5122,7 +5133,7 @@ function convert_open5e_monsterData(monsterData){
 
         return monsterData;
 }
-function getPersonailityTrait(){
+function getPersonalityTrait(){
     let tokenPersonality = {
         1: "Accessible",
         2: "Active",

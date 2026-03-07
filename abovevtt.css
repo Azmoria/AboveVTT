@@ -79,11 +79,17 @@ div#hide_interface_button [data-name]:after {
     right: 40px;
     top: 15px;
 }
-canvas.dice-rolling-panel__container{
+canvas.dice-rolling-panel__container,
+#character-tools-target>canvas{
     max-width: calc(100% - var(--sidebar-width, 340px)) !important;
     z-index: 160000 !important;
+    visibility: visible;
 }
-
+.hide-button.active{
+    color: #fff;
+    background-color: #c53131;
+}
+#hidden-scenes-message,
 .abovevttTempMessage{
     display:block;
     position:fixed;
@@ -106,6 +112,14 @@ canvas.dice-rolling-panel__container{
     text-align:center;
     text-transform: uppercase;
     font-weight:bold;
+}
+#hidden-scenes-message{
+    background: #000d;
+    border-radius:5px;
+    width: fit-content;
+    max-width: calc(100% - 600px);
+    min-width: 400px;
+    padding:5px;
 }
 .percentageLoaded{
     height: 10px;
@@ -363,8 +377,8 @@ button .ddbc-tab-options__header-heading .menu-option{
     max-height: 100%;
     border: solid black 1px;
     overflow: hidden auto;
-    height: calc(100% - 100px);
-    max-height: fit-content;
+    height: fit-content;
+    max-height: calc(100% - 100px);
 }
 span.button-text{
     width:fit-content;
@@ -924,17 +938,24 @@ select#doorTypeSelectUVTT{
     background-image: none;
     border: none;
 }
-
+#fog_overlay {
+    opacity: 0.5;
+}
 .body-rpgcharacter-sheet #fog_overlay,
 .avtt-spectator-sheet #fog_overlay {
     filter: drop-shadow(0px 0px 2px #000) blur(1px); /*fill in fog gaps on player view*/
-  
+    opacity: 1;
+}
+#groupRotationGrabber,
+#rotationGrabber {
+    scale: min(4, max(1, calc(0.5 / var(--window-zoom))))
 }
 #fog_overlay,
 #draw_overlay_under_fog_darkness,
 #draw_overlay{
   pointer-events:none;
 }
+
 #elev_overlay{
     opacity: 0.5;
 }
@@ -2381,7 +2402,7 @@ padding-top:10px;
     background: #F58231;
 }
 
-:is(.token, .folder-item-list) .note-condition.condition-img {
+:is(.token, .folder) .note-condition.condition-img {
     background: #e4c700;
 }
 
@@ -3485,7 +3506,19 @@ body .note-visibility-toggle-container {
     z-index: 23;
     filter: blur(calc(3px / var(--scene-scale)));
 }
-
+.alphaNumGrid{
+   fill: rgb(255, 255, 255);
+   stroke: rgb(0, 0, 0); 
+   stroke-width: max(5, var(--stroke-width, 5)); 
+   text-decoration: none; 
+   stroke-linecap:butt;
+   stroke-linejoin:round;
+   paint-order:stroke;
+   stroke-opacity:1; 
+   font-size: max(5px, var(--font-size, 25px));
+   text-anchor: middle;
+   dominant-baseline: middle;
+}
 .body-rpgcharacter-sheet #raycastingCanvas,
 .avtt-spectator-sheet #raycastingCanvas{
     opacity: 1;
@@ -6873,7 +6906,19 @@ div#selectedTokensBorderRotationGrabberConnector,
     position: absolute;
     right: 55px;
     width: 20px;
-    height: 20px
+    height: 20px;
+    top:0px;
+}
+.combat-settings-header input {
+    border-radius: 5px;
+    width: 45px;
+}
+#round_number_label .ctTimer {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    float: right;
+    right: 5px;
 }
 #combat_tracker_title_bar_settings span{
     height: 20px;
@@ -8450,6 +8495,9 @@ button#changeTokenImage:before{
 .sidebar-modal{
     overscroll-behavior: contain;
 }
+[class*='styles_gameLogPane'] *{
+    overscroll-behavior: auto;
+}
 .VTTToken:not(.freeform) .hpvisualbar:before{
     display: var(--token-hpbar-display);
     transition: none;
@@ -8467,7 +8515,7 @@ button#changeTokenImage:before{
 .VTTToken:not(.freeform):not(.hasbase) .hpvisualbar:before{
     --mask-size:calc(100% - 7px);
     border-radius: 50%;
-    transform: scale(var(--token-scale)) rotate(var(--token-rotation));
+    transform: scale(var(--token-scale)) rotate(var(--token-rotation)) scaleX(var(--image-flip-x, 1));
     height: 100%;
     width: 100%;
     top: 0px;
@@ -10522,6 +10570,26 @@ button.journal-view-button.journal-button img {
     border: 1px solid #d8e1e8; 
     border-radius: 3px;
 }
+.chatTimer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position:relative;
+    width: calc(100% - 40px);
+    span.timerMessage {
+        font-weight: bold;
+        font-size: 16px;
+        max-width: 80%;
+    }
+    span.timerBar {
+        font-size: 20px;
+    }
+    .timerCloseButton{
+        position:absolute;
+        top: 5px;
+        right: 5px;
+    }
+}
 
 .custom-stat-block input.injected-input {
     margin-left: 5px;
@@ -11052,10 +11120,14 @@ float: right;
     display: flex;
 }
 
-.dice-rolling-panel .dice-toolbar{
+.dice-rolling-panel .dice-toolbar,
+.dice-rolling-panel [class*='DiceContainer_button']{
     bottom: 35px !important;
 }
-
+[data-floating-ui-portal].hidden,
+.roll-mod-container.hidden{
+    visibility:hidden;
+}
 @keyframes bubble {
      0%{
         --opacity: 0;
@@ -12108,7 +12180,7 @@ div#playlistFields {
 }
 
 
-.stat-block .monster-header+p {
+p.monster-header+p {
     break-before: avoid
 }
 
@@ -12171,7 +12243,7 @@ div#playlistFields {
 .stat-block .stats+p {
     margin-top: 10px
 }
-.stat-block :is(p.monster-header, .monster-header) {
+:is(p.monster-header, .monster-header) {
     padding-top: 4px;
     letter-spacing: .35px;
     font-weight: 500;
@@ -13473,7 +13545,7 @@ button#displayedDiceFormulaExit:hover {
     padding-top: 0
 }
 
-:is(.tooltip) .stat-block .monster-header {
+:is(.tooltip) .monster-header {
     padding-top: 4px;
     letter-spacing: .35px;
     font-weight: 500;
@@ -14453,6 +14525,12 @@ button#displayedDiceFormulaExit:hover {
 .sidebar-panel-content.avtt-drop-target::after {
     top: 89px;
 }
+
+#VTT.hide-players *{
+    visibility:hidden !important;
+    pointer-events:none !important;
+}
+
 /***** Icon UI *****/
 
 .mobileAVTTUI #VTTWRAPPER ~ div.ddbc-tab-options--layout-pill>button, 

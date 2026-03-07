@@ -76,36 +76,12 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
     container.find(".avtt-stat-block-container").remove(); // in case we're re-rendering with better data
     container.append(html);
     if(customStatBlock){
-      window.JOURNAL.translateHtmlAndBlocks(html)
+      await window.JOURNAL.translateHtmlAndBlocks(html);
       add_journal_roll_buttons(html, tokenId);
       window.JOURNAL.add_journal_tooltip_targets(html);
 
       
-      $(container).find('.add-input').each(function(){
-        let numberFound = $(this).attr('data-number');
-        const spellName = $(this).attr('data-spell');
-        const remainingText = $(this).hasClass('each') ? '' : `${spellName} slots remaining`
-
-        if (token.options.abilityTracker?.[spellName]>= 0){
-          numberFound = token.options.abilityTracker[spellName]
-        } else{
-          token.track_ability(spellName, numberFound)
-        }
-        let input = createCountTracker(token, spellName, numberFound, remainingText, "");
-        const playerDisabled = $(this).hasClass('player-disabled');
-        if (!window.DM && playerDisabled) {
-          input.prop('disabled', true);
-        }
-        const partyLootTable = $(this).closest('.party-item-table');
-        if (partyLootTable.hasClass('shop') && numberFound > 0) {
-          $(this).closest('tr').find('td>.item-quantity-take-input').val(1);
-        }
-        else {
-          $(this).closest('tr').find('td>.item-quantity-take-input').val(numberFound);
-        }
-        $(this).find('p').remove();
-        $(this).after(input)
-      })
+      $(container).find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {token})});
       let imageUrl = parse_img(token.options.imgsrc);
 
       if(token.options.imgsrc.startsWith('above-bucket-not-a-url')){

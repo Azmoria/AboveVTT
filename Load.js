@@ -29,7 +29,9 @@ if (isPlainCharacterPage) {
 	window.scripts = [
 		// External Dependencies
 		{ src: "jquery-3.6.0.min.js" },
-		{ src: "jquery.contextMenu.js" },		
+		{ src: "jquery.contextMenu.js" },	
+		{ src: "purify.min.js" },	
+		{ src: "ajaxQueue/ajaxQueueIndex.js", type: "module" },
 		// AboveVTT Files
 		{ src: "CoreFunctions.js" }, // Make sure CoreFunctions executes first
 		{ src: "DDBApi.js" },
@@ -102,6 +104,7 @@ if (isPlainCharacterPage) {
 		{ src: "mousetrap.1.6.5.min.js" },
 		{ src: "peerjs.min.js" },
 		{ src: "fuse.min.js" },
+		{ src: "ajaxQueue/ajaxQueueIndex.js", type: "module" },
 		// AboveVTT Files
 		{ src: "environment.js" },
 		{ src: "CoreFunctions.js" }, // Make sure CoreFunctions executes before anything else
@@ -124,7 +127,7 @@ if (isPlainCharacterPage) {
 		{ src: "SidebarPanel.js" },
 		{ src: "StatHandler.js" },
 		{ src: "Token.js" },
-		{ src: "constants/Names.js" },
+		{ src: "constants/names.js" },
 		{ src: "TokenMenu.js" },
 		{ src: "ChatObserver.js" },
 		{ src: "DiceContextMenu/DiceContextMenu.js" },
@@ -135,7 +138,6 @@ if (isPlainCharacterPage) {
 		{ src: "PeerCommunication.js" },
 		{ src: "peerVideo.js"},
 		{ src: "peerDice.js"},		
-		{ src: "ajaxQueue/ajaxQueueIndex.js", type: "module" },
 		{ src: "DiceRoller.js" },
 		{ src: "DMScreen.js" },
 		{ src: "Main.js" },
