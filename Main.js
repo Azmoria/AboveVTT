@@ -2827,6 +2827,35 @@ function init_zoom_buttons() {
 	}
 	zoom_section.append(selected_token_vision);
 
+	if(is_spectator_page()){
+		const lockView = $(`<div id='lock_view_button' class='ddbc-tab-options--layout-pill'><div class='ddbc-tab-options__header-heading hasTooltip button-icon' data-name='Lock View (Shift+L)'><span class='material-symbols-outlined md-16 button-icon'>visibility_lock</span></div></div>`);
+		zoom_section.append(lockView);
+		lockView.off('pointerdown.lockView').on('pointerdown.lockView', (e) =>{
+			const button = $(e.currentTarget);
+			const enabled = button.find('.ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active')
+			button.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active')
+			if(!enabled){
+				window.lockViewPos = {
+					scrollX: window.scrollX,
+					scrollY: window.scrollY,
+					zoom: window.ZOOM
+				}
+				let resetTimeoutId;
+				function resetPos(){
+					if(resetTimeoutId)
+						clearTimeout(resetTimeoutId);
+					resetTimeoutId = setTimeout(function(){
+						change_zoom(window.lockViewPos.zoom);
+						window.scrollTo({top: window.lockViewPos.scrollY, left: window.lockViewPos.scrollX, behavior: "smooth"});
+					}, 2000);
+				}
+				$(window).off('scroll.resetToLockedPos').on('scroll.resetToLockedPost', resetPos);
+			}else{
+				delete window.lockViewPos;
+				$(window).off('scroll.resetToLockedPos')
+			}
+		})
+	}
 
 	let zoom_center = $("<div id='zoom_fit' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='fit screen (0)'><div class='ddbc-tab-options__header-heading'><span class='material-icons button-icon'>fit_screen</span></div></div>");
 	zoom_center.click(reset_zoom);
