@@ -2828,7 +2828,8 @@ function init_zoom_buttons() {
 	zoom_section.append(selected_token_vision);
 
 	if(is_spectator_page()){
-		const lockView = $(`<div id='lock_view_button' class='ddbc-tab-options--layout-pill'><div class='ddbc-tab-options__header-heading hasTooltip button-icon' data-name='Lock View (Shift+L)'><span class='material-symbols-outlined md-16 button-icon'>visibility_lock</span></div></div>`);
+		//decide if we want a hotkey for this
+		const lockView = $(`<div id='lock_view_button' class='ddbc-tab-options--layout-pill hideable'><div class='ddbc-tab-options__header-heading hasTooltip button-icon' data-name='Lock View (Shift+K)'><span class='material-symbols-outlined md-16 button-icon'>visibility_lock</span></div></div>`);
 		zoom_section.append(lockView);
 		lockView.off('pointerdown.lockView').on('pointerdown.lockView', (e) =>{
 			const button = $(e.currentTarget);
@@ -2849,7 +2850,7 @@ function init_zoom_buttons() {
 						window.scrollTo({top: window.lockViewPos.scrollY, left: window.lockViewPos.scrollX, behavior: "smooth"});
 					}, 2000);
 				}
-				$(window).off('scroll.resetToLockedPos').on('scroll.resetToLockedPost', resetPos);
+				$(window).off('scroll.resetToLockedPos').on('scroll.resetToLockedPos', resetPos);
 			}else{
 				delete window.lockViewPos;
 				$(window).off('scroll.resetToLockedPos')
