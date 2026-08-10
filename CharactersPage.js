@@ -75,7 +75,7 @@ const debounce_add_extras = mydebounce(() => {
 
 const sendCharacterUpdateEvent = mydebounce(() => {
   if (window.DM) return;
-  console.log("sendCharacterUpdateEvent")
+  noisy_log("sendCharacterUpdateEvent")
   const pcData = {...recentCharacterUpdates};
   recentCharacterUpdates = {};
   if (is_abovevtt_page()) {
@@ -106,14 +106,145 @@ const buffsDebuffs = {
       "dmg": "0",
       "save": "-d4",
       "check": "0",
-      "type": "spell"
+      "type": "spell",
+	  "condition": "Baned",
   },
   "Bless": {
       "tohit": "+d4",
       "dmg": "0",
       "save": "+d4",
       "check": "0",
-      "type": "spell"
+      "type": "spell",
+	  "condition": "Blessed",
+  },
+  
+  "Exhaustion": {
+    "condition": "Exhaustion",
+    "multiOptions": {
+      "-2": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-2',
+      },
+      "-4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-4',
+      },
+      "-6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-6',
+      },
+      "-8": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-8',
+      },
+      "-10": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-10',
+      }
+    },
+    "type": "2024condition",
+  },
+  "Blinded": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Blinded",
+  },
+  "Frightened": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Frightened",
+  },
+  "Invisible": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": ".ct-combat__summary-group--initiative button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Invisible"
+  },
+  "Poisoned": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Poisoned",
+  },
+  "Prone": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Prone",
+  },
+  "Restrained" :{
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "save": '.ddbc-saving-throws-summary__ability--dex' 
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Restrained",
   },
   "Rage": {
     "multiOptions": {
@@ -156,6 +287,7 @@ const buffsDebuffs = {
     },
     "type": "class",
     "class": "barbarian",
+    "condition": "Rage",
   },
   "Elemental Cleaver": {
     "multiOptions": {
@@ -187,10 +319,15 @@ const buffsDebuffs = {
   },
   "Great Weapon Master (2024)": {
     "tohit": "0",
-    "dmg": "+PB",
+    "dmg": "0",
     "save": "0",
     "check": "0",
     "type": "feat",
+    "replace": /(.)$/gi,//last character
+    "replaceType": {
+      "dmg": '[class*="styles_attack"]:has(.ddbc-note-components__component:contains("Heavy"))' //looks for Heavy trait in item note
+    },
+    "newRoll": '$1+PB', //add proficiency
   },
   "Reroll damage 1's": {
     "tohit": "0",
@@ -199,7 +336,7 @@ const buffsDebuffs = {
     "check": "0",
     "replace": /(\d+d\d+)/gi,
     "replaceType": {
-      "damage": 'button' 
+      "dmg": 'button' 
     },
     "newRoll": '$1ro<2',//reroll 1
     "type": "feat",
@@ -215,6 +352,22 @@ const buffsDebuffs = {
     },
     "newRoll": '$1ro<2',//reroll 1
     "type": "feat",
+  },
+  "Triage Expert": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /(\d+)(d\d+)/i,
+    "replaceType": {
+      "heal": 'button'
+    },
+    "newRoll": function(m){
+      const match = m.match(/(\d+)(d\d+)/i)
+      return `${1+parseInt(match[1])}${match[2]}kh${parseInt(match[1])}`
+    },
+    "type": "feat",
+ 
   },
   "Call the Hunt": {
     "tohit": "0",
@@ -576,6 +729,330 @@ const buffsDebuffs = {
     "newRoll": '1d20+10',
     "type": "spell",
   },
+  "Mark of Detection":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Finding":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Handling":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Healing":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Hospitality":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Making":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Passage":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Scribing":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Sentinel":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Shadow":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Storm":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Warding":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0", 
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
   "Great Weapon Fighting": {
     "multiOptions": {
       "2024": { 
@@ -585,7 +1062,7 @@ const buffsDebuffs = {
         "check": "0",
         "replace": /^(\d+d\d+)/gi,//find first roll
         "replaceType": {
-          "damage": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
+          "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
         },
         "newRoll": '$1min3',//replace with original roll with minimum roll of 3
       },
@@ -596,7 +1073,7 @@ const buffsDebuffs = {
         "check": "0",
         "replace": /^(\d+d\d+)/gi,//find first roll
         "replaceType": {
-            "damage": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
+            "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
         },
         "newRoll": '$1ro<3',//reroll 1 & 2
       },
@@ -610,7 +1087,7 @@ var rollBuffPins = [];
 
 /** @param changes {object} the changes that were observed. EX: {hp: 20} */
 function character_sheet_changed(changes) {
-    console.log("character_sheet_changed", changes);
+    noisy_log("character_sheet_changed", changes);
     recentCharacterUpdates = {...recentCharacterUpdates, ...changes};
     sendCharacterUpdateEvent();
 }
@@ -837,7 +1314,7 @@ function read_temp_hp(container = $(document)) {
   }
   if (container.find(`.ct-status-summary-mobile__hp--has-temp`).length) {
     if(container.find('.ct-health-manager__health-item--temp').length){
-        return parseInt(('.ct-health-manager__health-item--temp .ct-health-manager__input').val()); // if hp side panel is open check this for temp hp
+        return parseInt($('.ct-health-manager__health-item--temp .ct-health-manager__input').val()); // if hp side panel is open check this for temp hp
       }
     // DDB doesn't display the temp value on mobile layouts so just set it to 1, so we can at least show that there is temp hp. See `read_current_hp` for the other side of this
     return 1;
@@ -905,14 +1382,41 @@ async function init_characters_pages(container = $(document)) {
 }
 
 const debounceConvertToRPGRoller =  mydebounce(() => {convertToRPGRoller()}, 20)
+function rollDiceButton(e, button){
+
+  let rollData = {}
+  rollData = getRollData(button);
+  if (!rollData.expression.match(allDiceRegex) && window.EXPERIMENTAL_SETTINGS['rpgRoller'] != true) {
+    return;
+  }
 
 
-const debounceRemoveRPGRoller =  mydebounce(() => {
-    $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('click.rpg-roller'); 
-    $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('contextmenu.rpg-roller')
-    delete window.EXPERIMENTAL_SETTINGS['rpgRoller'];
-}, 20)
 
+  if (/^1d20/g.test(rollData.expression)) {
+    if (e.altKey) {
+      if (e.shiftKey) {
+        rollData.expression = rollData.expression.replace(/^1d20/g, '3d20kh1');
+      }
+      else if ((!isMac() && e.ctrlKey) || e.metaKey) {
+        rollData.expression = rollData.expression.replace(/^1d20/g, '3d20kl1');
+      }
+    }
+    else if (e.shiftKey) {
+      rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kh1');
+    }
+    else if ((!isMac() && e.ctrlKey) || e.metaKey) {
+      rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kl1');
+    }
+  }
+
+  if (rollData.rollTitle == 'Initiative' && $(`[aria-label="Has advantage on initiative"]`).length) {
+    rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kh1');
+  }
+
+
+  window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType, undefined, undefined, undefined, undefined, undefined, rollData.damageType, rollData.spellSave));
+
+}
 
 function convertToRPGRoller(){
     let urlSplit = window.location.href.split("/");
@@ -920,28 +1424,30 @@ function convertToRPGRoller(){
       window.PLAYER_ID = urlSplit[urlSplit.length - 1].split('?')[0];
     }
 
+
+
     $(`.integrated-dice__container:not('.above-combo-roll'):not('.above-aoe'):not(.avtt-roll-formula-button)`).off('contextmenu.rpg-roller').on('contextmenu.rpg-roller', function(e){
+         
           if ($(this).parent().hasClass('ct-reset-pane__hitdie-manager-dice') || $(this).prev().text().trim().match(/^death saves$/gi))// allow hit dice and death saves roll to go through ddb for auto heals - maybe setup our own message by put to https://character-service.dndbeyond.com/character/v5/life/hp/damage-taken later
             return;
           let rollData = {} 
-          if($(this).hasClass('avtt-roll-formula-button')){
-             rollData = DiceRoll.fromSlashCommand($(this).attr('data-slash-command'))
+          const button = $(this);
+          if(button.hasClass('avtt-roll-formula-button')){
+             rollData = DiceRoll.fromSlashCommand(button.attr('data-slash-command'))
              rollData.modifier = `${Math.sign(rollData.calculatedConstant) == 1 ? '+' : ''}${rollData.calculatedConstant}`
           }
           else{
-             rollData = getRollData(this)
+            rollData = getRollData(button[0])
           }
 
           e.stopPropagation();
           e.preventDefault();
 
-          
-          
           if (rollData.rollType === "damage") {
-            damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType)
+            damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
               .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
           } else {
-            standard_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType)
+            standard_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG)
               .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
           }
     })
@@ -956,46 +1462,11 @@ function convertToRPGRoller(){
         $(this).toggleClass('disadvantageHover', false)
       }
     })
-   $('.integrated-dice__container.above-vtt-visited-damage:has([class*="styles_signed"])').off('mouseleave.color').on('mouseleave.color', function(e){
+    $('.integrated-dice__container.above-vtt-visited-damage:has([class*="styles_signed"])').off('mouseleave.color').on('mouseleave.color', function(e){
       $(this).toggleClass('advantageHover', false)
       $(this).toggleClass('disadvantageHover', false)
     })
-    $(`.integrated-dice__container:not('.above-combo-roll'):not('.above-aoe'):not(.avtt-roll-formula-button)`).off('click.rpg-roller').on('click.rpg-roller', function(e){
-      if ($(this).parent().hasClass('ct-reset-pane__hitdie-manager-dice') || $(this).prev().text().trim().match(/^death saves$/gi))// allow hit dice and death saves roll to go through ddb for auto heals - maybe setup our own message by put to https://character-service.dndbeyond.com/character/v5/life/hp/damage-taken later
-        return;
-
-      let rollData = {} 
-      rollData = getRollData(this);
-      if(!rollData.expression.match(allDiceRegex) && window.EXPERIMENTAL_SETTINGS['rpgRoller'] != true){
-        return;
-      }
-      e.stopImmediatePropagation();
-
-
-      if (/^1d20/g.test( rollData.expression)) {
-        if(e.altKey){
-          if(e.shiftKey){
-            rollData.expression = rollData.expression.replace(/^1d20/g, '3d20kh1');
-          }
-           else if((!isMac() && e.ctrlKey) || e.metaKey){
-            rollData.expression = rollData.expression.replace(/^1d20/g, '3d20kl1');
-          }
-         }
-         else if(e.shiftKey){
-          rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kh1');
-         }  
-         else if((!isMac() && e.ctrlKey) || e.metaKey){
-            rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kl1');
-         }
-      }
-
-      if(rollData.rollTitle == 'Initiative' && $(`[aria-label="Has advantage on initiative"]`).length){
-        rollData.expression = rollData.expression.replace(/^1d20/g, '2d20kh1');
-      }
-
-     
-      window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType));
-    });
+    
 }
 
 const debounceObserverSetup = mydebounce(function(){
@@ -1005,6 +1476,7 @@ const debounceObserverSetup = mydebounce(function(){
 /** actions to take on the character sheet when AboveVTT is NOT running */
 async function init_character_sheet_page() {
   if (!is_characters_page() || is_characters_builder_page()) return;
+
   init_my_dice_details();
   // check for name and image
   set_window_name_and_image(function() {
@@ -1014,7 +1486,7 @@ async function init_character_sheet_page() {
     observe_character_theme_change();
     observe_character_image_change();
     $(document).off('keydown.keypressAdv keyup.keypressAdv').on('keydown.keypressAdv keyup.keypressAdv', function(e) {
-      let target = $('.ddbc-combat-attack__icon.above-vtt-visited:hover, .ct-spells-spell__action.above-vtt-visited:hover, .integrated-dice__container.above-vtt-visited-damage:has([class*="styles_signed"]):hover')
+      let target = $('.integrated-dice__container.above-vtt-visited-damage:has([class*="styles_signed"]):hover, .ddbc-combat-attack__icon.above-vtt-visited:hover, .ct-spells-spell__action.above-vtt-visited:hover')
       if(e.shiftKey){
         $(target).toggleClass('advantageHover', true)
       }
@@ -1035,14 +1507,8 @@ async function init_character_sheet_page() {
 
   if(!is_abovevtt_page()){
     tabCommunicationChannel.addEventListener ('message', (event) => {
-      if(event.data.msgType == 'setupObserver'){
-        if(event.data.tab == undefined && event.data.rpgRoller != true && window.self==window.top){
-          $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('click.rpg-roller'); 
-          $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('contextmenu.rpg-roller')
-        }else{
-          convertToRPGRoller();
-        }
-
+      if(event.data.msgType == 'setupObserver'){   
+        convertToRPGRoller();
         window.EXPERIMENTAL_SETTINGS['rpgRoller'] = event.data.rpgRoller;
         if(window.sendToTab != false || event.data.tab == undefined){
           window.sendToTab = (window.self != window.top) ? event.data.iframeTab : event.data.tab;     
@@ -1052,8 +1518,6 @@ async function init_character_sheet_page() {
         }
       }
       if(event.data.msgType =='removeObserver'){
-        $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('click.rpg-roller'); 
-        $(`.integrated-dice__container:not('.above-aoe'):not(.avtt-roll-formula-button)`).off('contextmenu.rpg-roller')
         delete window.EXPERIMENTAL_SETTINGS['rpgRoller'];
         window.sendToTabRPGRoller = undefined;
         window.sendToTab = undefined;
@@ -1106,6 +1570,7 @@ function init_character_list_page_without_avtt() {
     window.location_href_observer.disconnect();
     delete window.location_href_observer;
   }
+
   window.location_href_observer = new MutationObserver(function(mutationList, observer) {
     if (oldHref !== document.location.href) {
       if(is_characters_builder_page()){
@@ -1133,7 +1598,7 @@ function init_character_list_page_without_avtt() {
       
       }
       else if (!is_characters_list_page() && !is_characters_builder_page()) {
-        console.log("Detected location change from", oldHref, "to", document.location.href);
+        noisy_log("Detected location change from", oldHref, "to", document.location.href);
         window.oldHref = document.location.href;
         init_characters_pages();
       }
@@ -1159,8 +1624,8 @@ function inject_dice_roll(element, clear=true) {
   else{
     const slashCommands = [...element.text().matchAll(multiDiceRollCommandRegex)];
     if (slashCommands.length === 0) return;
+    noisy_log("inject_dice_roll slashCommands", slashCommands);
 
-    console.debug("inject_dice_roll slashCommands", slashCommands);
     let updatedInnerHtml = element.text().replace(/\/</gi, '<');
     for (const command of slashCommands) {
       let originalCommand = command[0];
@@ -1172,7 +1637,7 @@ function inject_dice_roll(element, clear=true) {
           command[1] = 'r';
         }
         const diceRoll = DiceRoll.fromSlashCommand(command[0], window.PLAYER_NAME, window.PLAYER_IMG, "character", window.PLAYER_ID); // TODO: add gamelog_send_to_text() once that's available on the characters page without avtt running
-        updatedInnerHtml = updatedInnerHtml.replace(originalCommand, `<button class='avtt-roll-formula-button integrated-dice__container ${iconRoll ? 'abovevtt-icon-roll' : ''}' title="${diceRoll.action?.toUpperCase() ?? "CUSTOM"}: ${diceRoll.rollType?.toUpperCase() ?? "ROLL"}" data-slash-command="${command[0]}">${diceRoll.expression}</button>`);
+        updatedInnerHtml = updatedInnerHtml.replace(originalCommand, `<button class='avtt-roll-formula-button integrated-dice__container ${iconRoll ? 'abovevtt-icon-roll' : ''}' title="${diceRoll.action?.toUpperCase() ?? "CUSTOM"}: ${diceRoll.rollType?.toUpperCase() ?? "ROLL"}" data-slash-command="${command[0]?.replace(/[><\s]+$|^[<>\s]+/gi, '')}">${diceRoll.expression}</button>`);
       } catch (error) {
         console.warn("inject_dice_roll failed to parse slash command. Removing the command to avoid infinite loop", command, command[0]);
         updatedInnerHtml = updatedInnerHtml.replace(originalCommand, '');
@@ -1181,7 +1646,7 @@ function inject_dice_roll(element, clear=true) {
     if(clear == true){
       element.empty();
     }
-    console.debug("inject_dice_roll updatedInnerHtml", updatedInnerHtml);
+    noisy_log("inject_dice_roll updatedInnerHtml", updatedInnerHtml);
     element.append(updatedInnerHtml);
   }
 
@@ -1198,7 +1663,7 @@ function inject_dice_roll(element, clear=true) {
       let rollData = getRollData(this);
       
 
-      window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType));
+      window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType, undefined, undefined, undefined, undefined, undefined, rollData.damageType, rollData.spellSave));
     }
    
   });
@@ -1216,7 +1681,7 @@ function inject_dice_roll(element, clear=true) {
       
       
       if (rollData.rollType === "damage") {
-        damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG)
+        damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
           .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
       } else {
         standard_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG)
@@ -1282,23 +1747,34 @@ function register_buff_row_context_menu() {
 
   })
 }
+function click_condition(conditionName, setToggle = true, callback, addtionalCSS = ''){
+  $('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}${addtionalCSS}</style>`);
+  $('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
+  setTimeout(function () {
+    if(typeof setToggle == "boolean" || conditionName !== 'Exhaustion'){
+      setToggle = typeof setToggle === "boolean" ? setToggle : Boolean(parseInt(setToggle));
+      $(`.ct-sidebar__inner .ct-condition-manage-pane__condition-name:contains('${conditionName}') ~ .ct-condition-manage-pane__condition-toggle>[class*='styles_toggle'][aria-pressed="${!setToggle}"]`).click();
+    }
+    else{
+      $(`[class*='styles_progressBar']>[class*='styles_bar']:nth-of-type(${setToggle/-2+1})`).click();
+    }    
+  }, 30)
+  setTimeout(function () {
+    if(is_abovevtt_page()) $(`#switch_gamelog`).click();
+    else $(document.body).click();
+    if(callback) callback();
+    $('#condition-click').remove();
+  }, 40)	
+}
 function rebuild_buffs(fullBuild = false){
   window.rollBuffs = JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
   const buffDebuffKeys=Object.keys(buffsDebuffs);
-  for(let i in window.rollBuffs){
-    if(Array.isArray(window.rollBuffs[i])){
-      if(!buffDebuffKeys.includes(window.rollBuffs[i][0])){
-        window.rollBuffs.splice(i, 1);
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-      }
-    }
-    else{
-      if(!buffDebuffKeys.includes(window.rollBuffs[i])){
-        window.rollBuffs.splice(i, 1);
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-      }
-    }
-  }
+  const originalLength = window.rollBuffs.length;
+  window.rollBuffs = window.rollBuffs.filter(buff =>
+    Array.isArray(buff) ? buffDebuffKeys.includes(buff[0]) : buffDebuffKeys.includes(buff)
+  );
+  if(window.rollBuffs.length !== originalLength)
+    localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
   rollBuffFavorites = JSON.parse(localStorage.getItem('rollFavoriteBuffs' + window.PLAYER_ID)) || [];
   rollBuffPins = JSON.parse(localStorage.getItem('rollBuffPins' + window.PLAYER_ID)) || [];
   let avttBuffSelect;
@@ -1323,6 +1799,7 @@ function rebuild_buffs(fullBuild = false){
     </ul>      
     <ul id='spellBuffs'><li>Spells</li></ul>
     <ul id='featBuffs'><li>Feats</li></ul>
+    <ul id='2024conditionBuffs'><li>Conditions</li></ul>
   `
   if(fullBuild){
     avttBuffSelect = $(`<div id="avtt-buff-options" class="dropdown-check-list">
@@ -1336,18 +1813,23 @@ function rebuild_buffs(fullBuild = false){
     avttBuffSelect = $(`#avtt-buff-options`);
     avttBuffSelect.find('.avttBuffItems').html(innerBuffHtml)
   }
-
-  const avttBuffItems = avttBuffSelect.find('.avttBuffItems')
-  avttBuffSelect.off('click.clickHandle').on('click.clickHandle', '.clickHandle', function(){
+  const toggleBuffMenuVisiblity = function(){
     avttBuffSelect.toggleClass('visible')
     if(avttBuffSelect.hasClass('visible')){
-      $(document).on('click.blurHandle', function(e){
-        if($(e.target).closest('#avtt-buff-options, .context-menu-list').length == 0){
-          avttBuffSelect.toggleClass('visible', false)
-          $(document).off('click.blurHandle');
-        }
-      })  
+      //set a timeout here to allow other automated clicks such as clicking the gamelog after setting a condition to finish before adding the close event
+      setTimeout(function(){
+        $(document).on('click.blurHandle', function(e){
+          if($(e.target).closest('#avtt-buff-options, .context-menu-list').length == 0){
+            avttBuffSelect.toggleClass('visible', false)
+            $(document).off('click.blurHandle');
+          }
+        })
+      }, 250)
     }
+  }
+  const avttBuffItems = avttBuffSelect.find('.avttBuffItems')
+  avttBuffSelect.off('click.clickHandle').on('click.clickHandle', '.clickHandle', function(){
+    toggleBuffMenuVisiblity();
   })
   avttBuffSelect.off('click.headers').on('click.headers', 'ul>ul', function(e){
     e.stopPropagation();
@@ -1402,6 +1884,40 @@ function rebuild_buffs(fullBuild = false){
          window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
         }
         localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
+        $(this).blur();
+        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
+          let setOnOff = 'removeCondition';
+          let condition = buffsDebuffs[i].condition;
+          const value = $(this).val();
+          if( value != '0'){
+            setOnOff = 'addCondition';
+          }
+          const menuOpen = avttBuffSelect.hasClass('visible');
+          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
+                  display: block !important;
+                  position: absolute !important;
+                  background: var(--theme-background-solid) !important;
+                  z-index: 200 !important;
+              }` : '';
+          if(STANDARD_CONDITIONS.includes(condition)){
+              click_condition(condition, value, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
+          }
+          else if (is_abovevtt_page()) {        
+            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
+            if (!pc) return;
+            const token = window.all_token_objects[pc.sheet];
+            if (!token) return;
+            token[setOnOff](condition);
+            token.place_sync_persist();
+          } else {
+            tabCommunicationChannel.postMessage({
+              msgType: setOnOff, 
+              characterId: window.PLAYER_ID,
+              text: condition, 
+              sendTo: window.sendToTab
+            })
+          }
+        }
       })
       row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
         e.preventDefault();
@@ -1467,6 +1983,39 @@ function rebuild_buffs(fullBuild = false){
          window.rollBuffs = window.rollBuffs.filter(d => d != i); 
         }
         localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
+        $(this).blur();
+        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
+          let setOnOff = 'removeCondition';
+          let condition = buffsDebuffs[i].condition;
+          if($(this).is(':checked')){
+            setOnOff = 'addCondition';
+          }
+          const menuOpen = avttBuffSelect.hasClass('visible');
+          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
+                  display: block !important;
+                  position: absolute !important;
+                  background: var(--theme-background-solid) !important;
+                  z-index: 200 !important;
+              }` : '';
+          if(STANDARD_CONDITIONS.includes(condition)){
+            click_condition(condition, setOnOff == 'addCondition' ? true : false, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
+          } else if (is_abovevtt_page()) {
+            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
+            if (!pc) return;
+            const token = window.all_token_objects[pc.sheet];
+            if (!token) return;
+
+            token[setOnOff](condition);
+            token.place_sync_persist();
+          } else {
+            tabCommunicationChannel.postMessage({
+              msgType: setOnOff, 
+              characterId: window.PLAYER_ID,
+              text: condition, 
+              sendTo: window.sendToTab
+            })
+          }
+        }
       })
       row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
         e.preventDefault();
@@ -1532,49 +2081,50 @@ function observe_character_sheet_changes(documentToObserve) {
   if (window.character_sheet_observer) {
     window.character_sheet_observer.disconnect();
   }
+  if(window.sendToDefaultObserver)
+    window.sendToDefaultObserver.disconnect();
   window.sendToDefaultObserver = new MutationObserver(function () {
     localStorage.setItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`, gamelog_send_to_text());
   })
-  let watchForNewDicePanel = new MutationObserver((mutations) => {
+
+ if(window.charWatchForNewDicePanel)
+    window.charWatchForNewDicePanel.disconnect();
+  window.charWatchForNewDicePanel = new MutationObserver((mutations) => {
     mutations.every(async (mutation) => {
       if (!mutation.addedNodes) return
 
       for (let i = 0; i < mutation.addedNodes.length; i++) {
-        if (watchForNewDicePanel.done)
+        if (window.charWatchForNewDicePanel.done)
           continue;
         let node = mutation.addedNodes[i]
         if ((node.className == 'dice-rolling-panel' || $('.dice-rolling-panel').length > 0)) {
           if ($('[data-floating-ui-portal]').length>0){
-            watchForNewDicePanel.done = 1;
-            watchForNewDicePanel.disconnect();
+            window.charWatchForNewDicePanel.done = 1;
+            window.charWatchForNewDicePanel.disconnect();
             $('[data-floating-ui-portal], .roll-mod-container').addClass('hidden');
             await $("[class*='DiceContainer_button']").click(); // initialize dice panel so first roll doesn't fail
             setTimeout(async () => {
               $("[class*='DiceContainer_button']").click();//close dice panel
-
               setTimeout(() => {
                 $('[data-floating-ui-portal], .roll-mod-container').removeClass('hidden');
                 $('[data-floating-ui-portal]').off('click.waiting').on('click.waiting', `[data-dd-action-name="Roll Dice Popup > Roll Dice"]`, function () {
                   window.diceRoller.setWaitingForRoll();
                 })
-                $("[class*='DiceContainer_button']").off('click.toggle').on('click.toggle', async function () {
-                  const ddb3dDiceShareToggle = localStorage.getItem('isShared3dDiceEnabled') !== null && window.myUser != undefined ? JSON.parse(localStorage.getItem('isShared3dDiceEnabled')).state?.[window.myUser] : true;
-                  setTimeout(() => {$(`#shared3dDiceToggleSwitch[aria-checked='${!ddb3dDiceShareToggle}']`).click()}, 60);
-                })
-
               }, 200)
             }, 200);
-            watchForNewDicePanel.disconnect();
+            window.charWatchForNewDicePanel.disconnect();
             return false;
           }
-
         }
       }
       return true // must return true if doesn't break
     })
   });
-  watchForNewDicePanel.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
-  let gamelogObserver = new MutationObserver((mutations) => {
+  window.charWatchForNewDicePanel.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
+  
+  if(window.charGamelogObserver)
+    window.charGamelogObserver.disconnect();
+  window.charGamelogObserver = new MutationObserver((mutations) => {
     mutations.every((mutation) => {
       if (!mutation.addedNodes) return
       for (let i = 0; i < mutation.addedNodes.length; i++) {
@@ -1591,8 +2141,10 @@ function observe_character_sheet_changes(documentToObserve) {
     })
   });
 
-  gamelogObserver.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
+  window.charGamelogObserver.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
 
+  if(window.character_sheet_observer)
+    window.character_sheet_observer.disconnect();
   window.character_sheet_observer = new MutationObserver(function(mutationList, observer) {
     if(window.DRAGGING || (typeof arrowKeysHeld !== 'undefined' && (arrowKeysHeld[0] || arrowKeysHeld[1] || arrowKeysHeld[2] || arrowKeysHeld[3])))
       return;
@@ -1616,136 +2168,8 @@ function observe_character_sheet_changes(documentToObserve) {
         clearInterval(iframeInterval);
         clearTimeout(iframeTimeout);
         iframe.toggleClass('abovevtt-visited', true)
-        const iframeDoc = contents?.[0];
-
-        let loadingOverlay = iframeDoc.createElement('div');
-        loadingOverlay.setAttribute("id", "loading_overlay");
-        (iframeDoc.body || iframeDoc.documentElement).appendChild(loadingOverlay);
-
-        let loadingBg = iframeDoc.createElement('div');
-        loadingBg.setAttribute("id", "loading_overlay_bg");
-        loadingOverlay.appendChild(loadingBg);
-        loadingBg.setAttribute("class", "player");
-
-
-        let l = iframeDoc.createElement('div');
-        l.setAttribute("style", "display:none;");
-        l.setAttribute("id", "extensionpath");
-        l.setAttribute("data-path", window.EXTENSION_PATH);
-        (iframeDoc.body || iframeDoc.documentElement).appendChild(l);
-
-        console.log("avtt: create version div....");
-        let avttVersion = iframeDoc.createElement('div');
-        avttVersion.setAttribute("style", "display:none;");
-        avttVersion.setAttribute("id", "avttversion");
-        avttVersion.setAttribute("data-version", $('div#avttversion').attr('data-version'));
-        (iframeDoc.body || iframeDoc.documentElement).appendChild(avttVersion);
-
-        // load stylesheets
-        let loadStyle = [
-          "abovevtt.css",
-          "jquery-ui.min.css",
-          "jquery.ui.theme.min.css",
-          "jquery.contextMenu.css",
-          "color-picker.min.css",
-          "spectrum-2.0.8.min.css",
-          "magnific-popup.css",
-          "DiceContextMenu/DiceContextMenu.css"
-        ]
-        let scripts = [
-          // External Dependencies
-          { src: "jquery-3.6.0.min.js" },
-          { src: "jquery-ui.min.js" },
-          { src: "jquery.csv.js" },
-          //{ src: "jquery.ui.widget.min.js" },
-          //{ src: "jquery.ui.mouse.min.js" },
-          { src: "jquery.ui.touch-punch.js" },
-          { src: "jquery.contextMenu.js" },
-          { src: "jquery.magnific-popup.min.js" },
-          { src: "spectrum-2.0.8.min.js" },
-          // { src: "jquery.ajax.queue.js" },
-          { src: "purify.min.js" },
-          { src: "rpg-dice-roller.bundle.min.js" },
-          { src: "color-picker.js" },
-          { src: "mousetrap.1.6.5.min.js" },
-          { src: "peerjs.min.js" },
-          { src: "fuse.min.js" },
-          { src: "ajaxQueue/ajaxQueueIndex.js", type: "module" },
-          // AboveVTT Files
-          { src: "environment.js" },
-          { src: "CoreFunctions.js" }, // Make sure CoreFunctions executes before anything else
-          { src: "avttS3Upload.js" },
-          { src: "AboveApi.js" },
-          { src: "DDBApi.js" },
-          { src: "AOETemplates.js" },
-          { src: "Text.js" },
-          { src: "CombatTracker.js" },
-          { src: "EncounterHandler.js" },
-          { src: "Fog.js" },
-          { src: "Journal.js" },
-          { src: "KeypressHandler.js" },
-          { src: "MessageBroker.js" },
-          { src: "MonsterDice.js" },
-          { src: "PlayerPanel.js" },
-          { src: "ScenesHandler.js" },
-          { src: "ScenesPanel.js" },
-          { src: "Settings.js" },
-          { src: "SidebarPanel.js" },
-          { src: "StatHandler.js" },
-          { src: "Token.js" },
-          { src: "TokenMenu.js" },
-          { src: "ChatObserver.js" },
-          { src: "DiceContextMenu/DiceContextMenu.js" },
-          { src: "TokensPanel.js" },
-          { src: "TokenCustomization.js" },
-          { src: "built-in-tokens.js" },
-          { src: "PeerManager.js" },
-          { src: "PeerCommunication.js" },
-          { src: "peerVideo.js" },
-          { src: "peerDice.js" },
-          { src: "DiceRoller.js" },
-          { src: "DMScreen.js" },
-          { src: "Main.js" },
-          { src: "MonsterStatBlock.js" },
-          // AboveVTT files that execute when loaded  
-          { src: "onedrive/onedrivemsal.js" },
-          { src: "onedrive/onedrivepicker.js" },
-          { src: "audio/index.js", type: "module" },
-          { src: "WeatherOverlay.js" },
-          { src: "CharactersPage.js" },
-
-        ]
-        if (dm) {
-          scripts.push({ src: "SceneData.js" });
-        }
-        scripts.push({ src: "Startup.js", type: "module" })
-        loadStyle.forEach(function (value, index, array) {
-          let l = iframeDoc.createElement('link');
-          l.href = `${window.EXTENSION_PATH}${value}`;
-          l.rel = "stylesheet";
-          console.log(`attempting to append ${value}`);
-          (iframeDoc.head || iframeDoc.documentElement).appendChild(l);
-        });
-
-        let injectScript = function () {
-          if (scripts.length === 0) {
-            return;
-          }
-          let nextScript = scripts.shift();
-          let s = iframeDoc.createElement('script');
-          s.src = `${window.EXTENSION_PATH}${nextScript.src}`;
-          if (nextScript.type !== undefined) {
-            s.setAttribute('type', nextScript.type);
-          }
-          console.log(`attempting to append ${nextScript.src}`);
-          s.onload = function () {
-            console.log(`finished injecting ${nextScript.src}`);
-            injectScript();
-
-          };
-          (iframeDoc.head || iframeDoc.documentElement).appendChild(s);
-        }
-        injectScript();
+        // use installer set up by Load.js
+        window.AVTT_INJECT(dm ? "vtt-dm" : "vtt-player", contents?.[0]);
 
       }, 1000);
 
@@ -1756,23 +2180,12 @@ function observe_character_sheet_changes(documentToObserve) {
      
      
     })
-    // console.log("character_sheet_observer", mutationList);
+    noisy_log("character_sheet_observer", mutationList);
 
-    // initial injection of our buttons
-    const notes = documentToObserve.find(".ddbc-note-components__component:not('.above-vtt-dice-visited')");
-    notes.each(function() {
-      // console.log("character_sheet_observer iterating", mutationList);
-      try {
-        inject_dice_roll($(this));
-        $(this).addClass("above-vtt-dice-visited"); // make sure we only parse this element once
-      } catch (error) {
-        console.log("inject_dice_roll failed to process element", error);
-      }
-    });
 
 
     if(is_abovevtt_page()){
-      if($('.dice-rolling-panel').length == 0 && window.diceWarning == undefined){
+      if($('.dice-rolling-panel, [data-floating-ui-portal]').length == 0 && window.diceWarning == undefined){
         showDiceDisabledWarning();
       }
       else if($('.dice-rolling-panel').length > 0){
@@ -1780,39 +2193,7 @@ function observe_character_sheet_changes(documentToObserve) {
       }
     }
     
-    let rollMenu = $("ul[role='menu']:has(div:contains('DM')):not(:has([value='trueSelf']))");
-    if (rollMenu.length > 0) {
-      const selfLi = $(`<li class="MuiButtonBase-root MuiMenuItem-root tss-3a46y9-menuItemRoot MuiMenuItem-root tss-3a46y9-menuItemRoot ddb-character-app-1e9xnb1" tabindex="-1" role="menuitem" value="trueSelf">
-                    <div class="MuiListItemIcon-root tss-67466g-listItemIconRoot ddb-character-app-17lvc79">
-                        <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ddb-character-app-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
-                          <path d="M12 5.9C13.16 5.9 14.1 6.84 14.1 8C14.1 9.16 13.16 10.1 12 10.1C10.84 10.1 9.9 9.16 9.9 8C9.9 6.84 10.84 5.9 12 5.9ZM12 14.9C14.97 14.9 18.1 16.36 18.1 17V18.1H5.9V17C5.9 16.36 9.03 14.9 12 14.9ZM12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4ZM12 13C9.33 13 4 14.34 4 17V20H20V17C20 14.34 14.67 13 12 13Z" fill="currentColor"></path>
-                        </svg>
-                    </div>
-                    <div class="MuiListItemText-root tss-1us1e8t-listItemTextRoot ddb-character-app-1tsvksn">Self</div>
-                    <div class="MuiListItemIcon-root tss-67466g-listItemIconRoot ddb-character-app-17lvc79">
-                    </div>
-                  </li>`);
-      rollMenu.append(selfLi);
-      const storedLastSendTo = localStorage.getItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`);
-      const sendTo = storedLastSendTo != null ? storedLastSendTo : gamelog_send_to_text();
-      const row = rollMenu.find(`li:contains(${sendTo})`);
-      const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg')
-      row.find('div:last-of-type').append(checkbox);
-      const button = $('[class*="-SendToLabel"]~button');
-      button.empty();
-      const svg = row.find('div:first-of-type>svg')[0];
-      const newHtml = `<span class="MuiButton-icon MuiButton-startIcon MuiButton-iconSizeMedium ddb-character-app-1l6c7y9">
-              ${svg.outerHTML}
-            </span>
-            ${row.text()}
-            <span class="MuiButton-icon MuiButton-endIcon MuiButton-iconSizeMedium ddb-character-app-pt151d">
-              <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ddb-character-app-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M7 10L12 15L17 10H7Z" fill="currentColor"></path>
-              </svg>
-            </span>`
-      button.html(newHtml);
-    }
-    rollMenu = $("ul[role='menu']:has(div:contains('Everyone'))"); 
+    let rollMenu = $("ul[role='menu']:has(div:contains('Everyone'))");
     rollMenu.off('click.selectSendTo').on('click.selectSendTo', 'li', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1830,10 +2211,50 @@ function observe_character_sheet_changes(documentToObserve) {
               </svg>
             </span>`
       button.html(newHtml);
-      const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg')
-      self.find('div:last-of-type').append(checkbox);
+      const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg:not(.avtt-checkbox-fix)')
+      const newCheckbox = $('.avtt-checkbox-fix').length > 0 ? $('.avtt-checkbox-fix') : checkbox.clone().addClass('avtt-checkbox-fix');
+      self.find('div:last-of-type').append(newCheckbox);
       setTimeout(() => { self.closest('[role="presentation"]').find('[class*="MuiBackdrop-invisible"]').click() }, 250);
     })
+    if (rollMenu.find(".avtt-checkbox-fix").length == 0){
+      const storedLastSendTo = localStorage.getItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`);
+      const sendTo = storedLastSendTo != null ? storedLastSendTo : gamelog_send_to_text();
+      const row = rollMenu.find(`li:contains(${sendTo})`);
+      const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg:not(.avtt-checkbox-fix)')
+      const newCheckbox = $('.avtt-checkbox-fix').length > 0 ? $('.avtt-checkbox-fix') : checkbox.clone().addClass('avtt-checkbox-fix');
+      row.find('div:last-of-type').append(newCheckbox);
+    }
+    rollMenu = $("ul[role='menu']:has(div:contains('DM')):not(:has([value='trueSelf']))");
+    if (rollMenu.length > 0) {
+      const selfLi = $(`<li class="MuiButtonBase-root MuiMenuItem-root tss-3a46y9-menuItemRoot MuiMenuItem-root tss-3a46y9-menuItemRoot ddb-character-app-1e9xnb1" tabindex="-1" role="menuitem" value="trueSelf">
+                    <div class="MuiListItemIcon-root tss-67466g-listItemIconRoot ddb-character-app-17lvc79">
+                        <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ddb-character-app-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+                          <path d="M12 5.9C13.16 5.9 14.1 6.84 14.1 8C14.1 9.16 13.16 10.1 12 10.1C10.84 10.1 9.9 9.16 9.9 8C9.9 6.84 10.84 5.9 12 5.9ZM12 14.9C14.97 14.9 18.1 16.36 18.1 17V18.1H5.9V17C5.9 16.36 9.03 14.9 12 14.9ZM12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4ZM12 13C9.33 13 4 14.34 4 17V20H20V17C20 14.34 14.67 13 12 13Z" fill="currentColor"></path>
+                        </svg>
+                    </div>
+                    <div class="MuiListItemText-root tss-1us1e8t-listItemTextRoot ddb-character-app-1tsvksn">Self</div>
+                    <div class="MuiListItemIcon-root tss-67466g-listItemIconRoot ddb-character-app-17lvc79">
+                    </div>
+                  </li>`);
+      rollMenu.append(selfLi);
+      const storedLastSendTo = localStorage.getItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`);
+      const sendTo = storedLastSendTo != null ? storedLastSendTo : gamelog_send_to_text();
+      const row = rollMenu.find(`li:contains(${sendTo})`);
+      const button = $('[class*="-SendToLabel"]~button');
+      button.empty();
+      const svg = row.find('div:first-of-type>svg')[0];
+      const newHtml = `<span class="MuiButton-icon MuiButton-startIcon MuiButton-iconSizeMedium ddb-character-app-1l6c7y9">
+              ${svg.outerHTML}
+            </span>
+            ${row.text()}
+            <span class="MuiButton-icon MuiButton-endIcon MuiButton-iconSizeMedium ddb-character-app-pt151d">
+              <svg class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium ddb-character-app-vubbuv" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M7 10L12 15L17 10H7Z" fill="currentColor"></path>
+              </svg>
+            </span>`
+      button.html(newHtml);
+    }
+ 
     if(is_abovevtt_page() || window.self != window.top || window.sendToTab != undefined){
       const icons = documentToObserve.find(".ddbc-note-components__component--aoe-icon:not('.above-vtt-visited')");
       if (icons.length > 0) {
@@ -1846,19 +2267,21 @@ function observe_character_sheet_changes(documentToObserve) {
           const spellContainer = $(this).closest('.ct-spells-spell')
           const name = spellContainer.find(".ddbc-spell-name, [class*='styles_spellName']").first().text()
           let color = "default"
-          const feet = $(this).prev().find("[class*='styles_numberDisplay'] span:first-of-type").text();
+          let feet = $(this).prev().find("[class*='styles_numberDisplay'] span:first-of-type").text();
           const dmgIcon = $(this).closest('.ct-spells-spell').find('.ddbc-damage-type-icon');
           if (dmgIcon.length == 1){
             color = dmgIcon.attr('class').split(' ').filter(d => d.startsWith('ddbc-damage-type-icon--'))[0].split('--')[1];
           }
           let shape = $(this).find('svg').first().attr('class').split(' ').filter(c => c.startsWith('ddbc-aoe-type-icon--'))[0].split('--')[1];
           shape = window.top.sanitize_aoe_shape(shape)
+
           button.attr("title", "Place area of effect token")
           button.attr("data-shape", shape);
           button.attr("data-style", color);
           button.attr("data-size", feet);
           button.attr("data-name", name);
 
+              
           // Players need the token side panel for this to work for them.
           // adjustments will be needed in enable_Draggable_token_creation when they do to make sure it works correctly
           // set_full_path(button, `${RootFolder.Aoe.path}/${shape} AoE`)
@@ -1866,13 +2289,21 @@ function observe_character_sheet_changes(documentToObserve) {
           button.css("border-width","1px");
           button.click(function(e) {
             e.stopPropagation();
+
             // hide the sheet, and drop the token. Don't reopen the sheet because they probably  want to position the token right away
             if(is_abovevtt_page() || window.self != window.top){
+              const circleIsSquare = window.top.get_avtt_setting_value('circleIsSquare');
+              let newShape = shape;
+              let newFeet = feet;
+              if(circleIsSquare && shape == 'circle'){
+                newShape = 'square';
+                newFeet *= 2;
+              }
               window.top.hide_player_sheet();
               window.top.minimize_player_sheet();
 
-
-              let options = window.top.build_aoe_token_options(color, shape, feet / window.top.CURRENT_SCENE_DATA.fpsq, name)
+      
+              let options = window.top.build_aoe_token_options(color, newShape, newFeet / window.top.CURRENT_SCENE_DATA.fpsq, name)
               if(name == 'Darkness' || name == 'Maddening Darkness' ){
                 options = {
                   ...options,
@@ -1903,7 +2334,7 @@ function observe_character_sheet_changes(documentToObserve) {
           
           return button;
         });
-        console.log(`${icons.length} aoe spells discovered`);
+        noisy_log(`${icons.length} aoe spells discovered`);
       }    
     }
     
@@ -1911,15 +2342,15 @@ function observe_character_sheet_changes(documentToObserve) {
     const snippets = documentToObserve.find(`
       .ddbc-snippet__content p:not('.above-vtt-visited'), 
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) p:not(.above-vtt-visited),
-      .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div[class*='ct-item-detail__customize']:nth-child(4) p:not(.above-vtt-visited),
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) tr:not(.above-vtt-visited),
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) div[class*='--damage']:not([class*='__modifier']):not(.ct-customize-data-editor__property--damagetypeid):not(.above-vtt-visited),
       .ct-sidebar__inner [class*='styles_content']>div:first-of-type>div:not([class*='styles_gameLogPane']):not([class*='ct-preferences-pane']):last-of-type>div>div:not(.ct-item-detail__customize):not([class*='__intro']) span:not([class*='button']):not([class*='casting']):not([class*='__modifier']):not([class*='Checkbox_inputContainer']):not(.above-vtt-visited),
-      [class*='spell-damage-group'] span[class*='__value']:not(.above-vtt-visited)
+      [class*='spell-damage-group'] span[class*='__value']:not(.above-vtt-visited), 
+      .ct-sidebar__inner .ct-item-detail__description:not(.above-vtt-visited), 
+      .ct-item-detail [class*='styles_value__']:not('.above-vtt-visited')
     `);
   
     if(add_journal_roll_buttons && snippets.length > 0){
-
       snippets.addClass("above-vtt-visited");
       snippets.find('.ddbc-snippet__tag, .ddbc-tooltip[data-origintal-tile]').each(function(){   
         const curr = $(this);
@@ -1935,14 +2366,24 @@ function observe_character_sheet_changes(documentToObserve) {
         const curr = $(this);
         if (curr.has('>button').length > 0 
           || curr.closest(`[class*='styles_sidebar'] [class*='styles_pane']>[class*='styles_content']>div:not(.sidebar-panel-content), [class*='styles_content']>div>div:not(.sidebar-panel-content)`).has('input[type="search"], .ct-preferences-pane').length > 0 
-          || curr.closest('.ct-spell-manage-pane').length>0
-          || curr.closest('.ct-custom-action-pane').length>0)
+          || curr.closest('.ct-spell-manage-pane').length > 0 
+          || curr.closest('[class*="styles_mark__"]').length>0)
           return; // do not adjust side bar when it includes a search such as adding extras as it causes crashing
-        add_journal_roll_buttons(curr);
-        add_aoe_statblock_click(curr, `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
+        add_journal_roll_buttons(curr, `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
       })
     } 
- 
+     // initial injection of our buttons
+    const notes = documentToObserve.find(".ddbc-note-components__component:not('.above-vtt-dice-visited')");
+    notes.each(function() {
+      noisy_log("character_sheet_observer iterating", mutationList);
+      try {
+        inject_dice_roll($(this));
+        $(this).addClass("above-vtt-dice-visited"); // make sure we only parse this element once
+      } catch (error) {
+        console.log("inject_dice_roll failed to process element", error);
+      }
+    });
+
     // for buttons text that changes based on input, such as damage change from adjusting spell level in the sidebar
     const manualSetRollbuttons = documentToObserve.find(`.ct-spell-caster__modifier-amount:not(.above-vtt-visited)`) 
     if(manualSetRollbuttons.length > 0){
@@ -1957,7 +2398,7 @@ function observe_character_sheet_changes(documentToObserve) {
 
         e.stopImmediatePropagation();
         
-        window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType), undefined, undefined, undefined, undefined, rollData.damageType);
+        window.diceRoller.roll(new DiceRoll(rollData.expression, rollData.rollTitle, rollData.rollType), undefined, undefined, undefined, rollData.spellSave, rollData.damageType);
 
       };
 
@@ -1977,7 +2418,7 @@ function observe_character_sheet_changes(documentToObserve) {
         
         
         if (rollData.rollType === "damage") {
-          damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType)
+          damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
             .present(e.clientY, e.clientX) 
         } else {
           standard_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG)
@@ -2088,26 +2529,16 @@ function observe_character_sheet_changes(documentToObserve) {
     }
 
 
-    const spellDamageButtons = documentToObserve.find(`.ddbc-spell-damage-effect .integrated-dice__container:not('.above-vtt-visited-spell-damage'),  [class*='styles_attack']:has([class*='__save-value']) [class*='attack__damage'] .integrated-dice__container:not('.above-vtt-visited-spell-damage')`)
+    const spellDamageButtons = documentToObserve.find(`.ddbc-spell-damage-effect .integrated-dice__container:not('.above-vtt-visited-spell-damage'),  
+        [class*='styles_attack']:has([class*='__save-value']) [class*='attack__damage'] .integrated-dice__container:not('.above-vtt-visited-spell-damage')`)
     if(spellDamageButtons.length > 0){
       $(spellDamageButtons).addClass("above-vtt-visited-spell-damage");
-      spellDamageButtons.off('click.spellSave').on('click.spellSave', function(e){
-        let spellSave = $(this).closest('.ddbc-combat-attack, .ct-spells-spell').find(`[class*='__save']`);   
-        let spellSaveText;
-        if(spellSave.length>0){
-          spellSaveText = `${spellSave.find('[class*="__save-label"]').text().toUpperCase()} DC${spellSave.find('[class*="__save-value"]').text()}`;
-        } 
-        window.diceRoller.setPendingSpellSave(spellSaveText);
-      })
     } 
 
 
     const damageButtons = documentToObserve.find(`.ddb-note-roll:not('.above-vtt-visited-damage'), .integrated-dice__container:not('.above-vtt-visited-damage')`)
     if(damageButtons.length > 0){
       $(damageButtons).addClass("above-vtt-visited-damage");
-      damageButtons.off('click.damageType').on('click.damageType', function(e){
-        window.diceRoller.getDamageType(this);
-      })
     } 
 
 
@@ -2310,7 +2741,7 @@ function observe_character_sheet_changes(documentToObserve) {
         e.stopImmediatePropagation();
         let versatileRoll = window.CHARACTER_AVTT_SETTINGS.versatile;
                      
-        let rollButtons = $(this).parent().find(`.integrated-dice__container:not('.avtt-roll-formula-button'):not('.above-vtt-visited'):not('.above-vtt-dice-visited'):not('.above-aoe'), .integrated-dice__container.abovevtt-icon-roll`);
+        let rollButtons = $(this).parent().find(`.integrated-dice__container.abovevtt-icon-roll, .integrated-dice__container:not('.avtt-roll-formula-button'):not('.above-vtt-visited'):not('.above-vtt-dice-visited'):not('.above-aoe')`);
         let spellSave = $(this).parent().find(`[class*='__save']`);   
         let spellSaveText;
         if(spellSave.length>0){
@@ -2318,18 +2749,20 @@ function observe_character_sheet_changes(documentToObserve) {
         }    
 
         for(let i = 0; i<rollButtons.length; i++){  
-          let isVersatileDamage = $(rollButtons[i]).parent().hasClass('ddb-combat-item-attack__damage--is-versatile')
+          let isVersatileDamage = $(rollButtons[i]).closest('.ddb-combat-item-attack__damage--is-versatile').length>0
+          let damageLookIndex = i;
           if(isVersatileDamage && versatileRoll =='1'){
-            if($(rollButtons[i]).parent().find('.integrated-dice__container:first-of-type')[0] != rollButtons[i])
+            if ($(rollButtons[i]).parent().parent().find('.integrated-dice__container:first-of-type')[0] != rollButtons[i])
               continue;
           }
           else if(isVersatileDamage && versatileRoll =='2'){
-            if($(rollButtons[i]).parent().find('.integrated-dice__container:first-of-type')[0] == rollButtons[i])
+            damageLookIndex = i-1;
+            if ($(rollButtons[i]).parent().parent().find('.integrated-dice__container:first-of-type')[0] == rollButtons[i])
               continue;
           }           
           let data = getRollData(rollButtons[i]);
           
-          let damageTypeText = window.diceRoller.getDamageType(rollButtons[i]);
+          let damageTypeText = window.diceRoller.getDamageType(rollButtons[damageLookIndex]);
           let diceRoll;
 
           if(data.expression != undefined){
@@ -2385,6 +2818,83 @@ function observe_character_sheet_changes(documentToObserve) {
                   font-size:16px;
                   margin-right: 2px;
                   cursor: pointer;
+              }
+              body {
+                  --crit-success: #0a0;
+                  --crit-fail: #a00;
+                  --crit-mixed: #4768ff;
+              }
+
+              body.color-blind-avtt {
+                  --crit-success: #ffff00;
+              }
+
+                [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] .aboveDiceTotal,
+                [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] .aboveDiceTotal {
+                    color: var(--crit-success) !important;
+                }
+
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] .aboveDiceTotal,
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] span,
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] span,
+                .color-blind-avtt [class*="glc-game-log"] .crit-success div[class*='DiceMessage_TotalContainer'] .aboveDiceTotal {
+                    --text-shadow-color: color-mix(in srgb, #000 100%, var(--crit-success) 50%);
+                    text-shadow: 1px 1px var(--text-shadow-color), -1px -1px var(--text-shadow-color), -1px 1px var(--text-shadow-color), 1px -1px var(--text-shadow-color), 2px 2px 2px var(--text-shadow-color);
+                }
+
+                [class*="glc-game-log"] .crit-fail div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-fail div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-fail div[class*="TotalContainer-Flex"] .aboveDiceTotal,
+                [class*="glc-game-log"] .crit-fail div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-fail div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-fail div[class*='DiceMessage_TotalContainer'] .aboveDiceTotal {
+                    color: var(--crit-fail) !important;
+                }
+
+                [class*="glc-game-log"] .crit-mixed div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-mixed div[class*="TotalContainer-Flex"] span,
+                [class*="glc-game-log"] .crit-mixed div[class*="TotalContainer-Flex"] .aboveDiceTotal,
+                [class*="glc-game-log"] .crit-mixed div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-mixed div[class*='DiceMessage_TotalContainer'] span,
+                [class*="glc-game-log"] .crit-mixed div[class*='DiceMessage_TotalContainer'] .aboveDiceTotal {
+                    color: var(--crit-mixed) !important;
+                }
+
+                [class*="glc-game-log"] div[class*="TotalContainer-Flex"] .custom-spell-save-text span,
+                [class*="glc-game-log"] div[class*='DiceMessage_TotalContainer'] .custom-spell-save-text span {
+                    color: #716f6f !important;
+                    font-size: 10px;
+                    font-weight: bold;
+                    line-height: 10px;
+                    text-wrap: nowrap;
+                }
+
+                [class*="glc-game-log"] div[class*='DiceMessage_TotalContainer'] .custom-spell-save-text {
+                    line-height: 13px;
+                }
+
+                [class*="glc-game-log"] div[class*='DiceMessage_TotalContainer']>div[class*='DiceMessage_Total'] {
+                    position: relative;
+                    align-self: stretch;
+                    display: flex;
+                    -webkit-box-align: center;
+                    align-items: center;
+                    flex-direction: column;
+                    -webkit-box-pack: center;
+                    justify-content: center;
+                }
+
+                .glc-game-log>div>div[class*="-Title"] {
+                    margin-bottom: 7px;
+                }
+              ul[role='menu'] svg:has([d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]):not(.avtt-checkbox-fix){
+                  display:none;
               }
               [data-floating-ui-portal].hidden,
               .roll-mod-container.hidden{
@@ -2660,7 +3170,9 @@ function observe_character_sheet_changes(documentToObserve) {
                 background: #ced9e0 !important;
               }
 
-
+              .ct-sidebar__inner [class*='styles_creatureBlock'] [class*='styles_statTable'] .avtt-roll-button {
+                  padding: 0px 2px !important;
+              }
               .ct-sidebar__inner [class*='ddbc-creature-block'] .avtt-roll-button,
               .ct-sidebar__inner [class*='styles_creatureBlock'] .avtt-roll-button,
               .ct-sidebar__inner [class*='styles_creatureBlock'] .avtt-aoe-button,
@@ -2798,7 +3310,6 @@ function observe_character_sheet_changes(documentToObserve) {
 
         if(is_abovevtt_page()){
            
-            // console.log(`sidebar inserted: ${event.target.classList}`);
           if (mutationTarget.is('.ct-sidebar__pane-content, .ct-sidebar__inner [class*="styles_content"]>div')){
              // The user clicked on something that shows details. Open the sidebar and show it
             show_sidebar(false); 
@@ -2843,6 +3354,7 @@ function observe_character_sheet_changes(documentToObserve) {
 
             break;
           case "childList":
+            const firstAddedNode = $(mutation.addedNodes[0]);
             const firstRemoved = $(mutation.removedNodes[0]);
             if (mutationTarget.hasClass('ct-conditions-summary')) { // conditions update from sidebar
               const conditionsSet = read_conditions(documentToObserve);
@@ -2851,7 +3363,7 @@ function observe_character_sheet_changes(documentToObserve) {
               let maxhp = parseInt(firstRemoved.find(`.ct-health-summary__hp-number, [aria-label*='Max Hit'], [class*='styles_maxContainer']`).text());
               send_character_hp(maxhp);
             }else if (
-              ($(mutation.addedNodes[0]).hasClass('ct-health-summary__hp-number')) ||
+              (firstAddedNode.hasClass('ct-health-summary__hp-number')) ||
               (firstRemoved.hasClass('ct-health-summary__hp-item-input') && mutationTarget.hasClass('ct-health-summary__hp-item-content')) ||
               (firstRemoved.hasClass('ct-health-summary__deathsaves-label') && mutationTarget.hasClass('ct-health-summary__hp-item')) ||
               mutationTarget.hasClass('ct-health-summary__deathsaves') ||
@@ -2870,8 +3382,10 @@ function observe_character_sheet_changes(documentToObserve) {
               send_senses();
             } else if (mutationTarget.hasClass("ct-speed-manage-pane")) {
               send_movement_speeds(documentToObserve, mutationTarget);
-            } else if($(mutation.addedNodes[0]).hasClass('ct-extra-row') || ($(mutation.addedNodes[0]).hasClass('ct-content-group') && $('.ct-extra-row').length>0)){
+            } else if(firstAddedNode.hasClass('ct-extra-row') || (firstAddedNode.hasClass('ct-content-group') && $('.ct-extra-row').length>0)){
               debounce_add_extras();
+            } else if (firstAddedNode.is('[class*="-Line-Notation"]') && mutationTarget.closest("[data-avtt-expression]").length>0){
+              replace_gamelog_message_expressions(mutationTarget.closest("[data-avtt-expression]"))
             }
 
             // TODO: check for class or something. We don't need to do this on every mutation
@@ -2949,11 +3463,12 @@ function observe_character_sheet_changes(documentToObserve) {
 
 function observe_non_sheet_changes(documentToObserve) {
 
-
+  if(window.non_sheet_observer)
+    window.non_sheet_observer.disconnect();
   window.non_sheet_observer = new MutationObserver(function(mutationList, observer) {
     if(window.DRAGGING || (typeof arrowKeysHeld !== 'undefined' && (arrowKeysHeld[0] || arrowKeysHeld[1] || arrowKeysHeld[2] || arrowKeysHeld[3])))
       return;
-    mutationList.forEach(mutation => {
+    mutationList.every(mutation => {
       try {
         let mutationTarget = $(mutation.target);
         //Remove beyond20 popup and swtich to gamelog
@@ -2969,9 +3484,11 @@ function observe_non_sheet_changes(documentToObserve) {
           }
           
           window.MB.reprocess_chat_message_history();
+          return false;
         }
+        return true;
       }
-      catch{
+      catch(error){
         console.warn("non_sheet_observer failed to parse mutation", error, mutation);
       }
     })
@@ -3019,7 +3536,7 @@ function set_window_name_and_image(callback) {
     window.PLAYER_IMG = get_higher_res_url($(".ddbc-character-avatar__portrait").css("background-image").slice(4, -1).replace(/"/g, "")) || get_higher_res_url($(".ddbc-character-avatar__portrait").attr('src')) || defaultAvatarUrl;
   } catch {}
 
-  if (typeof window.PLAYER_NAME !== "string" || window.PLAYER_NAME.length <= 1 || typeof window.PLAYER_IMG !== "string" || window.PLAYER_IMG.length <= 1) {
+  if (typeof window.PLAYER_NAME !== "string" || window.PLAYER_NAME.length < 1 || typeof window.PLAYER_IMG !== "string" || window.PLAYER_IMG.length < 1) {
     // try again
     if (!window.set_window_name_and_image_attempts) {
       window.set_window_name_and_image_attempts = 1;
@@ -3155,15 +3672,15 @@ function inject_join_button_on_character_list_page() {
 function observe_character_theme_change() {
   if (window.theme_observer) window.theme_observer.disconnect();
   window.theme_observer = new MutationObserver(function(mutationList, observer) {
-    // console.log("theme_observer mutationList", mutationList);
-    mutationList.forEach(mutation => {
-      // console.log("theme_observer mutation", mutation, mutation.addedNodes, mutation.addedNodes.length);
+    noisy_log("theme_observer mutationList", mutationList);
+    mutationList.every(mutation => {
+      noisy_log("theme_observer mutation", mutation, mutation.addedNodes, mutation.addedNodes.length);
       if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-        mutation.addedNodes.forEach(node => {
-          // console.log("theme_observer node", node);
-          if (node.innerHTML && node.innerHTML.includes("--dice-color")) {
-            // console.log("theme_observer is calling find_and_set_player_color", mutation, node);
-            const newColor = node.innerHTML.match(/#(?:[0-9a-fA-F]{3}){1,2}/)?.[0];
+        const shouldContinue = Array.from(mutation.addedNodes).every(node => {
+          noisy_log("theme_observer node", node);
+          if (node.textContent && node.textContent.includes("--theme-color")) {
+            noisy_log("theme_observer is calling find_and_set_player_color", mutation, node);
+            const newColor = node.textContent.match(/#(?:[0-9a-fA-F]{3}){1,2}/)?.[0];
             if (newColor) {
               update_window_color(newColor);
               if(window.PeerManager != undefined)
@@ -3175,27 +3692,29 @@ function observe_character_theme_change() {
                   }
                 }
               });
+              return false;
             }
           }
+          return true;
         });
+        return shouldContinue;
       }
     });
   });
-  window.theme_observer.observe(document.documentElement, { childList: true });
+  const toolsTarget = document.getElementById("character-tools-target");
+  window.theme_observer.observe(toolsTarget, { childList: true, subtree: true });
 }
 
 function observe_character_image_change() {
   if (window.character_image_observer) window.character_image_observer.disconnect();
   window.character_image_observer = new MutationObserver(function(mutationList, observer) {
-    mutationList.forEach(mutation => {
       try {
         // This should be just fine, but catch any parsing errors just in case
-        const updatedUrl = get_higher_res_url($(mutation.target).attr("src"));
+        const updatedUrl = get_higher_res_url($(".ddbc-character-avatar__portrait").attr("src"));
         window.PLAYER_IMG = updatedUrl;
         character_sheet_changed({avatarUrl: updatedUrl,
                                 image: updatedUrl});
       } catch { }
-    });
   });
   window.character_image_observer.observe(document.querySelector(".ddbc-character-avatar__portrait"), { attributeFilter: ["src"] });
 }

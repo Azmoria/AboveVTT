@@ -9,7 +9,8 @@ window.diceCurrentPeers = [];
 const diceStreamThrottle = throttle((callback) =>{requestAnimationFrame(callback)}, 1000/16)
 
 function setDiceRemoteStream(stream, peerId) {
-
+    if(diceplayer_id.includes('newDice') && peerId.includes('newDice'))
+        return;
     let video = $(`.remote-dice-video#${peerId}`);
     video.remove();
 
@@ -25,7 +26,7 @@ function setDiceRemoteStream(stream, peerId) {
     let dicecanvas=$(`<canvas width='${video[0].videoWidth}' height='${video[0].videoHeight}' class='streamer-canvas' />`);
     dicecanvas.attr("id","streamer-canvas-"+peerId);
     //dicecanvas.css("opacity",0.5);
-    let sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : 340;
+    let sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : get_sidebar_width();
  
     dicecanvas.css({
         "position": "fixed",
@@ -55,7 +56,7 @@ function setDiceRemoteStream(stream, peerId) {
     
     video.off('resize.dice').on("resize.dice", function(){
         let videoAspectRatio = video[0].videoWidth / video[0].videoHeight
-        sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : 340;
+        sidebarWidth = $("#hide_rightpanel").hasClass("point-left") ? 0 : get_sidebar_width();
 
         if (video[0].videoWidth > video[0].videoHeight)
         {
@@ -119,12 +120,15 @@ function revealDiceVideo(streamerid) {
 }
 
 function joinDiceRoom(room = window.gameId) {
-    console.log("Joining Dice Room")
+    noisy_log("Joining Dice Room")
     diceroom_id = DICEPRE + room + DICESUF;
     diceplayer_id = DICEPRE + window.PLAYER_ID + DICESUF;
   
     if(window.DM)
         diceplayer_id = diceroom_id;
+    if($("[class*='DiceContainer_button']").length > 0){
+        diceplayer_id = diceplayer_id + 'newDice';
+    }
     if(window.diceVideoPeer != null){
         window.diceVideoPeer.disconnect();
         window.diceVideoPeer.destroy();
@@ -134,7 +138,7 @@ function joinDiceRoom(room = window.gameId) {
         window.diceVideoConnectedPeers = [diceplayer_id];
     }
     window.diceVideoPeer.on('open', (id) => {
-        console.log("Connected with Id: " + id)
+        noisy_log("Connected with Id: " + id)
         diceplayer_id = id;   
         getDiceMedia();
     })
@@ -162,11 +166,10 @@ function joinDiceRoom(room = window.gameId) {
     })    
 }
 function getDiceMedia(){
-    let diceRollPanel = $(".dice-rolling-panel__container");
+    let diceRollPanel = $(".dice-rolling-panel__container, canvas[style*='z-index: 99999999;']:not([id]):not([class])");
     window.MYMEDIASTREAM = diceRollPanel[0].captureStream(30)
 
-
-    if(window.currentPeers.length == 0){
+    if(window.diceCurrentPeers.length == 0){
         window.MB.sendMessage("custom/myVTT/diceVideoPeerConnect", {id: diceplayer_id});  
     }
     else{

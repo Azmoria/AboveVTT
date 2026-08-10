@@ -27,102 +27,6 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			$("#darkness_layer").css('visibility', 'visible');
 		};
 
-		let grid_10 = function() {
-			$("#wizard_popup").empty().append("Do you want me to subdivide the map grid in 2 so you can get correct token size? <button id='grid_divide'>Yes</button> <button id='grid_nodivide'>No</button>");
-
-			$("#grid_divide").click(function() {
-				
-				$("#scene_selector_toggle").show();
-				$("#tokens").show();
-				$("#wizard_popup").empty().append("You're good to go! AboveVTT is now super-imposing a grid that divides the original grid map in half. If you want to hide this grid just edit the manual grid data.");
-				window.CURRENT_SCENE_DATA = {
-					...window.CURRENT_SCENE_DATA,
-					hpps: window.CURRENT_SCENE_DATA.hpps/2,
-					vpps: window.CURRENT_SCENE_DATA.vpps/2,
-					upsq: "ft",
-					fpsq: "5",
-					grid_subdivided: "1"
-				}
-				consider_upscaling(window.CURRENT_SCENE_DATA);
-				$("#exitWizard").remove();
-				$("#wizard_popup").delay(5000).animate({ opacity: 0 }, 4000, function() {
-					$("#wizard_popup").remove();
-				});
-				window.ScenesHandler.persist_current_scene();
-				$("#light_container").css('visibility', 'visible');
-				$("#darkness_layer").css('visibility', 'visible');
-			});
-
-			$("#grid_nodivide").click(function() {
-				
-				$("#scene_selector_toggle").show();
-				$("#tokens").show();
-				window.CURRENT_SCENE_DATA= {
-					...window.CURRENT_SCENE_DATA,
-					upsq: "ft",
-					fpsq: "10",
-					grid_subdivided: "0",
-					snap: "1",
-					grid: "0"
-				}
-				consider_upscaling(window.CURRENT_SCENE_DATA);
-				window.ScenesHandler.persist_current_scene();
-				$("#exitWizard").remove();
-				$("#wizard_popup").empty().append("You're good to go! Medium token will match the original grid size");
-				$("#wizard_popup").delay(5000).animate({ opacity: 0 }, 4000, function() {
-					$("#wizard_popup").remove();
-				});
-				$("#light_container").css('visibility', 'visible');
-				$("#darkness_layer").css('visibility', 'visible');
-			});
-		}
-
-		let grid_15 = function() {
-			
-			$("#scene_selector_toggle").show();
-			$("#tokens").show();
-			$("#wizard_popup").empty().append("You're good to go! Token will be of the correct scale. We don't currently support overimposing a grid in this scale..'");
-			window.CURRENT_SCENE_DATA = {
-				...window.CURRENT_SCENE_DATA,
-				hpps: window.CURRENT_SCENE_DATA.hpps/3,
-				vpps: window.CURRENT_SCENE_DATA.vpps/3,
-				upsq: "ft",
-				fpsq: "5",
-				grid_subdivided: "0"
-			}
-			consider_upscaling(window.CURRENT_SCENE_DATA);
-			$("#wizard_popup").delay(5000).animate({ opacity: 0 }, 4000, function() {
-				$("#wizard_popup").remove();
-			});
-			window.ScenesHandler.persist_current_scene();
-			$("#exitWizard").remove();
-			$("#light_container").css('visibility', 'visible');
-			$("#darkness_layer").css('visibility', 'visible');
-		}
-
-
-		let grid_20 = function() {
-			
-			$("#scene_selector_toggle").show();
-			$("#tokens").show();
-			$("#wizard_popup").empty().append("You're good to go! Token will be of the correct scale.");
-			window.CURRENT_SCENE_DATA = {
-				...window.CURRENT_SCENE_DATA,
-				hpps: window.CURRENT_SCENE_DATA.hpps/4,
-				vpps: window.CURRENT_SCENE_DATA.vpps/4,
-				upsq: "ft",
-				fpsq: "5",
-				grid_subdivided: "0"
-			}
-			consider_upscaling(window.CURRENT_SCENE_DATA);
-			$("#wizard_popup").delay(5000).animate({ opacity: 0 }, 4000, function() {
-				$("#wizard_popup").remove();
-			});
-			window.ScenesHandler.persist_current_scene();
-			$("#exitWizard").remove();
-			$("#light_container").css('visibility', 'visible');
-			$("#darkness_layer").css('visibility', 'visible');
-		}
 
 		let align_grid = function(square = false, just_rescaling = true, copiedSceneData) {
 
@@ -270,7 +174,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 						offsetx += ppsx/1.5 * Math.sin(a)*difference
 				}
 				
-				console.log("ppsx " + ppsx + "ppsy " + ppsy + "offsetx " + offsetx + "offsety " + offsety)
+				noisy_log("ppsx " + ppsx + "ppsy " + ppsy + "offsetx " + offsetx + "offsety " + offsety)
 				window.CURRENT_SCENE_DATA.hpps = Math.abs(ppsx);
 				window.CURRENT_SCENE_DATA.vpps = Math.abs(ppsy);
 				window.CURRENT_SCENE_DATA.offsetx = Math.abs(offsetx);
@@ -298,20 +202,12 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 					width = 2;
 				else
 					width = 1;
-				const dash = [30, 5]
-				const color = "rgba(255, 0, 0,0.5)";
+				const dash = [30, 5];
+				const color = "rgba(255, 0, 0, 1)";
 				// nulls will take the window.current_scene_data from above
 				window.CURRENT_SCENE_DATA.gridType = $('#gridType input:checked').val();
-				if(window.CURRENT_SCENE_DATA.gridType == 1){
-					redraw_grid(null,null,null,null,color,width,null,dash)
-				}
-				else if(window.CURRENT_SCENE_DATA.gridType == 2){
-					redraw_hex_grid(null,null,null,null,color,width,null,dash,false)
-				}
-				else if(window.CURRENT_SCENE_DATA.gridType == 3){
-					redraw_hex_grid(null,null,null,null,color,width,null,dash,true)
-				}
-				
+				window.CURRENT_SCENE_DATA.gridOver = 1;
+				redraw_grid(null,null,null,null,color,width,null,dash)
 			};
 
 			let click2 = {
@@ -339,9 +235,9 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 					if ($('#gridType input:checked').val() != 1) {
 						
-							let left = parseInt($("#aligner1").css('left')) + parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))
-							left = (parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : left
-							let top = (parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : Math.round((event.clientY - click2.y + original.top) / zoom);
+							let left = parseInt($("#aligner1")[0].style.left) + parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))
+							left = (parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : left
+							let top = (parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : Math.round((event.clientY - click2.y + original.top) / zoom);
 					
 							ui.position = {
 								left: left,
@@ -353,14 +249,14 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 							let left;
 							let top;
 							if(ui.position.top - parseInt($("#aligner1").css('top')) > ui.position.left - parseInt($("#aligner1").css('left'))){
-								left = parseInt($("#aligner1").css('left')) + parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))
-								left = (parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : left
-								top = (parseInt($(event.target).css("top")) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : Math.round((event.clientY - click2.y + original.top) / zoom);
+								left = parseInt($("#aligner1")[0].style.left) + parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))
+								left = (parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : left
+								top = (parseInt(event.target.style.top) - parseInt($("#aligner1").css('top'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : Math.round((event.clientY - click2.y + original.top) / zoom);
 							}
 							else {
-								top = parseInt($("#aligner1").css('top')) + parseInt($(event.target).css("left")) - parseInt($("#aligner1").css('left'))
-								top = (parseInt($(event.target).css("left")) - parseInt($("#aligner1").css('left'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : top
-								left = (parseInt($(event.target).css("left")) - parseInt($("#aligner1").css('left'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : Math.round((event.clientX - click2.x + original.left) / zoom);						
+								top = parseInt($("#aligner1")[0].style.top) + parseInt(event.target.style.left) - parseInt($("#aligner1").css('left'))
+								top = (parseInt(event.target.style.left) - parseInt($("#aligner1").css('left'))) < 25 ? parseInt($("#aligner1").css('top')) + 25 : top
+								left = (parseInt(event.target.style.left) - parseInt($("#aligner1").css('left'))) < 25 ? parseInt($("#aligner1").css('left')) + 25 : Math.round((event.clientX - click2.x + original.left) / zoom);						
 							}
 
 
@@ -470,7 +366,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 
 		if (!scene.hpps) { // THIS IS OLD DATA FROM < 0.0.20!!! WE NEED TO COMPLETE WHAT IS MISSING and TRY TO FIX IT :()
-			console.log("converting pre 0.0.20 scene.... Good lock to you, oh brave adventurer")
+			noisy_log("converting pre 0.0.20 scene.... Good lock to you, oh brave adventurer")
 			scene.hpps = Math.round((6000.0 / scene.scale));
 			scene.vpps = scene.hpps;
 			scene.offsetx = 0;
@@ -515,9 +411,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		scene['scaleY'] = (60.0 / parseInt(scene['vpps'])); // for backward compatibility, this will be horizonat sca
 
 		$("#tokens").show();
-		$("#grid_overlay").show();
 		$(".alphaNumGrid").remove();
-
 
 		window.FOG_OF_WAR = true;
 		window.REVEALED = [[0, 0, 0, 0, 2, 0]].concat(self.scene.reveals);
@@ -546,7 +440,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		load_scenemap(map_url, map_is_video, window.CURRENT_SCENE_DATA.width, window.CURRENT_SCENE_DATA.height, window.CURRENT_SCENE_DATA.UVTTFile, async function() {
 			$("#scene_map").off("load");
 			delete window.LOADING;
-			await reset_canvas();
+			const continueLoading = await reset_canvas();
+			if(!continueLoading) return;
 			await set_default_vttwrapper_size()
 			align_grid(false, false, copiedSceneData);
 			window.WeatherOverlay.stop();
@@ -556,7 +451,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 	}
 
 	display_scene_properties(scene_id) {
-		console.log('inizio....');
+		noisy_log('inizio....');
 		let self = this;
 		let scene = this.scenes[scene_id];
 		let container = $("#scene_properties");
@@ -578,7 +473,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		let scraped_sources={};
 
 		f.on("load", function(event) {
-			console.log('iframe pronto..');
+			noisy_log('iframe pronto..');
 			let iframe = $(event.target);
 			iframe.contents().find("[class*='SourceCard_sourceTitle']").each(function(idx) {
 				let ddbtype=$(this).closest(".sources-listing").attr('id'); // get Sourcebooks of Adventures
@@ -587,7 +482,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 				let keyword = url.replaceAll(/https:\/\/www\.dndbeyond\.com|^\/?sources\/|/gi, '');
 
 				if (keyword in self.sources){ // OBJECT ALREADY EXISTS... evito di riscrivere per non perdere i dati
-					scraped_sources[keyword]=self.sources.keyword;
+					scraped_sources[keyword]=self.sources[keyword];
 					return;
 				}
 				scraped_sources[keyword] = {
@@ -608,7 +503,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 							return ((scraped_sources[a].title == scraped_sources[b].title) ? 0 : ((scraped_sources[a].title > scraped_sources[b].title) ? 1 : -1));
 						}
 						else {
-							return (a.ddbtype == "Adventures") ? 1 : -1;
+							return (scraped_sources[a].ddbtype == "Adventures") ? 1 : -1;
 						}
 					}
 				)
@@ -623,7 +518,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 	build_chapters(keyword, callback) {
 		let self = this;
-		console.log('scansiono ' + keyword);
+		noisy_log('scansiono ' + keyword);
 		//let target_list = $("#" + $(event.target).attr('data-target'));
 		//let adventure_url = 'https://www.dndbeyond.com/sources/' + keyword;
 		let adventure_url="https://www.dndbeyond.com/"+self.sources[keyword].url;
@@ -635,7 +530,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		// EVITO DI RISCANSIONARE UN OGGETTO CHE HO GIA'
 		if (Object.keys(self.sources[keyword].chapters).length > 0) {
-			console.log('no.... non scansiono')
+			noisy_log('no.... non scansiono')
 			callback();
 			return;
 		}
@@ -648,10 +543,10 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		f.on("load", function(event) {
 			let iframe = $(event.target);
-			console.log('caricato ' + window.frames['scraper'].location.href);
+			noisy_log('caricato ' + window.frames['scraper'].location.href);
 
 			if (window.frames['scraper'].location.href != adventure_url) {
-				console.log('rilevato cambio url');
+				noisy_log('rilevato cambio url');
 				let title = "Single Chapter";
 				let url = window.frames['scraper'].location.href;
 				let ch_keyword = url.replace('https://www.dndbeyond.com', '').replace('/sources/' + keyword + "/", '').replace('/sources/' + keyword.replace('dnd/', '') + "/", '')
@@ -700,7 +595,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		//let chapter_url='https://www.dndbeyond.com/sources/'+source_keyword+'/'+chapter_keyword;
 		let chapter_url = self.sources[source_keyword].chapters[chapter_keyword].url;
-		console.log("checking for scenes in " + chapter_url);
+		noisy_log("checking for scenes in " + chapter_url);
 
 		if (self.sources[source_keyword].chapters[chapter_keyword].type != 'dnb') {
 			callback();
@@ -732,7 +627,9 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 				dm_map_usable: "0",
 				thumb: thumb,
 				tokens: {},
-			});		
+			});
+			callback();
+			return;
 		}
 
 		let f = $("<iframe src='" + chapter_url + "'></iframe>");
@@ -746,7 +643,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			if(iframe.contents().length == 0){
 				let notOwned = true;
 				iframe.remove();
-				console.log('Book failed to load - probably do not own it');
+				noisy_log('Book failed to load - probably do not own it');
 				callback(notOwned);
 				return;
 			}
@@ -957,13 +854,13 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 			}
 
 			iframe.remove();
-			console.log('INVOKO CALLBACK');
+			noisy_log('INVOKO CALLBACK');
 			callback();
 		});
 	}
 
 	create_update_token(options, noScale = false ) {
-		console.log("create_update_token");
+		noisy_log("create_update_token");
 		let self = this;
 		let id = options.id;
 		if(!noScale)
@@ -972,10 +869,6 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 
 		if (!(id in window.TOKEN_OBJECTS)) {
 			window.TOKEN_OBJECTS[id] = new Token(options);
-
-			window.TOKEN_OBJECTS[id].sync = mydebounce(function(options) {
-				window.MB.sendMessage('custom/myVTT/token', options);
-			}, 300);
 		}
 
 		if(options.repositionAoe != undefined){
@@ -990,12 +883,12 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		}
 		
 		window.TOKEN_OBJECTS[id].place(0);
-		window.TOKEN_OBJECTS[id].sync($.extend(true, {}, options));
+		window.TOKEN_OBJECTS[id].sync();
 
 	}
 
 
-	persist_scene(scene_index,isnew=false){ // CLOUD ONLY FUNCTION
+	async persist_scene(scene_index,isnew=false){ // CLOUD ONLY FUNCTION
 		let sceneData=Object.assign({},this.scenes[scene_index]);
 		if(!sceneData.scale_check){
 
@@ -1019,7 +912,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		
 		if(isnew)
 			sceneData.isnewscene=true;
-
+		sceneData = await normalize_scene_urls([sceneData]);
+		sceneData = sceneData[0];
 		this.scenes[scene_index] = sceneData;
 
 		window.MB.sendMessage("custom/myVTT/update_scene",sceneData);
@@ -1029,7 +923,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		}     
 	}
 
-	persist_current_scene(dontswitch=false){
+	async persist_current_scene(dontswitch=false){
 		let scene_index = window.ScenesHandler.scenes.findIndex(s => s.id === window.CURRENT_SCENE_DATA.id);
 		window.ScenesHandler.scenes[scene_index] = window.CURRENT_SCENE_DATA;
 		window.ScenesHandler.scene = window.CURRENT_SCENE_DATA;
@@ -1044,6 +938,8 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		}
 
 		sceneData.isnewscene=false;
+		sceneData = await normalize_scene_urls([sceneData]);
+		sceneData = sceneData[0];
 		window.MB.sendMessage("custom/myVTT/update_scene",sceneData,dontswitch);
 		const currentPlayerScenes = Object.values(window.splitPlayerScenes);
 		if(window.DM && dontswitch == false && currentPlayerScenes.includes(sceneData.id)){
@@ -1059,6 +955,7 @@ class ScenesHandler { // ONLY THE DM USES THIS OBJECT
 		window.MB.sendMessage("custom/myVTT/delete_scene",{ id: sceneId });
 		let sceneIndex = window.ScenesHandler.scenes.findIndex(s => s.id === sceneId);
 		window.ScenesHandler.scenes.splice(sceneIndex, 1);
+		remove_zoom_from_storage(sceneId);
 		if (window.JOURNAL.notes[sceneId] != undefined){
 			delete window.JOURNAL.notes[sceneId];
 			window.JOURNAL.persist();

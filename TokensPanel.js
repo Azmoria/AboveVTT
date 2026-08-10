@@ -73,12 +73,13 @@ async function getOpen5e(results = [], search = ''){
         15: 'Plant',
         16: 'Undead'
     }
-    const maxCR = (monster_search_filters?.challengeRatingMax) ? monster_search_filters?.challengeRatingMax : '';
-    const minCR = (monster_search_filters?.challengeRatingMin) ? monster_search_filters?.challengeRatingMin : '';
+    const maxCR = (monster_search_filters?.challengeRatingMax) ? convert_challenge_rating_id(monster_search_filters?.challengeRatingMax) : '';
+    const minCR = (monster_search_filters?.challengeRatingMin) ? convert_challenge_rating_id(monster_search_filters?.challengeRatingMin) : '';
     const monsterTypes = (monster_search_filters?.monsterTypes) ? monster_search_filters.monsterTypes.map(item=> item = ddbMonsterTypes[item]).toString() : '';
     
 
-    let api_url = `https://api.open5e.com/monsters/?slug__in=&slug__iexact=&slug=&name__iexact=&name=&cr=&cr__range=&cr__gt=${minCR}&cr__gte=&cr__lt=${maxCR}&cr__lte=&armor_class=&armor_class__range=&armor_class__gt=&armor_class__gte=&armor_class__lt=&armor_class__lte=&type__iexact=&type=&type__in=${monsterTypes}&type__icontains=&page_no=&page_no__range=&page_no__gt=&page_no__gte=&page_no__lt=&page_no__lte=&document__slug__iexact=&document__slug=&document__slug__in=&document__slug__not_in=&name__icontains=${search}&limit=10`
+    let api_url = `https://api.open5e.com/v2/creatures/?name__icontains=${search}&type=${monsterTypes}&challenge_rating__lte=${maxCR}&challenge_rating__gte=${minCR}&limit=10`
+
     let jsonData = {}
     await $.getJSON(api_url, function(data){
         jsonData = data;
@@ -94,8 +95,8 @@ async function getOpen5e(results = [], search = ''){
 
     return open5e_monsters;
 }
-async function getGroupOpen5e(slugin){
-    let api_url = `https://api.open5e.com/monsters/?ordering=name&slug__in=${slugin}&slug__iexact=&slug=&name__iexact=&name=&cr=&cr__range=&cr__gt=&cr__gte=&cr__lt=&cr__lte=&armor_class=&armor_class__range=&armor_class__gt=&armor_class__gte=&armor_class__lt=&armor_class__lte=&type__iexact=&type=&type__in=&type__icontains=&page_no=&page_no__range=&page_no__gt=&page_no__gte=&page_no__lt=&page_no__lte=&document__slug__iexact=&document__slug=&document__slug__in=&document__slug__not_in=&limit=10`
+async function getGroupOpen5e(keys){
+    let api_url = `https://api.open5e.com/v2/creatures/?key__in=${keys}&limit=10`
     let jsonData = {}
     await $.getJSON(api_url, function(data){
         jsonData = data;
@@ -157,9 +158,9 @@ function migrate_tokendata() {
                 delete newToken.img;
                 let existing = migratedTokens.find(t => t.name === newToken.name && t.folderPath === newToken.folderPath)
                 if (existing !== undefined) {
-                    console.log("migrate_to_my_tokens not adding duplicate token", newToken);
+                    noisy_log("migrate_to_my_tokens not adding duplicate token", newToken);
                 } else {
-                    console.log("migrate_to_my_tokens successfully migrated token", newToken, "from", oldToken);
+                    noisy_log("migrate_to_my_tokens successfully migrated token", newToken, "from", oldToken);
                     migratedTokens.push(newToken);
                 }
                 oldToken.didMigrateToMyToken = true;
@@ -193,12 +194,12 @@ function rollback_from_my_tokens() {
     const rollbackFolderAtPath = function(oldFolderPath) {
         let currentFolderPath = sanitize_folder_path(oldFolderPath);
         let folder = convert_path(currentFolderPath);
-        console.log("attempting to roll back all tokens in folder", currentFolderPath, folder);
+        noisy_log("attempting to roll back all tokens in folder", currentFolderPath, folder);
         if (folder.tokens) {
             for (let tokenKey in folder.tokens) {
                 let oldToken = folder.tokens[tokenKey];
                 oldToken.didMigrateToMyToken = false;
-                console.log("rolling back oldToken", oldToken);
+                noisy_log("rolling back oldToken", oldToken);
             }
         }
         for (let folderName in folder.folders) {
@@ -285,10 +286,10 @@ function find_builtin_token(fullPath) {
     let found = builtInTokens.find(t => {
         let dirtyPath = `${RootFolder.AboveVTT.path}${t.folderPath}/${t.name}`;
         let fullTokenPath = sanitize_folder_path(dirtyPath);
-        console.debug("looking for: ", fullPath, dirtyPath, fullTokenPath, fullTokenPath === fullPath, t);
+        noisy_log("looking for: ", fullPath, dirtyPath, fullTokenPath, fullTokenPath === fullPath, t);
         return fullTokenPath === fullPath;
     });
-    console.debug("found: ", found);
+    noisy_log("found: ", found);
     console.groupEnd();
     return found;
 }
@@ -301,7 +302,7 @@ function find_builtin_token(fullPath) {
  */
 function rebuild_token_items_list() {
     if (!window.DM) return;
-    console.group("rebuild_token_items_list");
+
     try {
 
     //bring old players folder data up to current structure to support players folders
@@ -390,9 +391,9 @@ function rebuild_token_items_list() {
     window.tokenListItems = tokenItems.concat(aoe_items);
     rebuild_ddb_npcs();
     update_token_folders_remembered_state();
-    console.groupEnd();
+
     } catch (error) {
-        console.groupEnd();
+
         console.error("rebuild_token_items_list caught an unexpected error", error);
     }
 
@@ -410,7 +411,7 @@ function filter_token_list(searchTerm) {
         searchTerm = "";
     }
 
-    console.log("filter_token_list searchTerm", searchTerm)
+    noisy_log("filter_token_list searchTerm", searchTerm)
     $('.custom-token-list').hide();
     redraw_token_list(searchTerm, true, true);
 
@@ -431,14 +432,14 @@ function filter_token_list(searchTerm) {
         }
     }
 
-    console.log("filter_token_list about to call inject_monster_tokens");
+    noisy_log("filter_token_list about to call inject_monster_tokens");
 
     window.monsterListItems = []; // don't let this grow unbounded
     window.open5eListItems = [];
     open5e_monsters = [];
     inject_monster_tokens(searchTerm, 0);
     getOpen5e(open5e_monsters, searchTerm);
-     $('.custom-token-list').show();
+    $('.custom-token-list').show();
 }
 
 /**
@@ -447,14 +448,23 @@ function filter_token_list(searchTerm) {
  * @param skip {number} the pagination offset. This function will inject a "Load More" button with the skip details embedded. You don't need to pass anything for this.
  */
 function inject_monster_tokens(searchTerm, skip, addedList=[]) {
-    console.log("inject_monster_tokens about to call search_monsters");
+    noisy_log("inject_monster_tokens about to call search_monsters");
+    const monsterFolderTitle = $('#monstersFolder>.sidebar-list-item-row-item:first-of-type .sidebar-list-item-row-details-title');
+    if(monsterFolderTitle.find('.beholder-dm-screen').length==0){
+        const beholderSvg = $(`<svg class="beholder-dm-screen loading-status-indicator__svg animate" viewBox="0 0 285 176" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 50px;position: absolute;padding: 0px;display: inline;left: 110px;top: 2px;"><defs><path id="beholder-eye-move-path" d="M0 0 a 15 5 0 0 0 15 0 a 15 5 0 0 1 -15 0 z"></path><clipPath id="beholder-eye-socket-clip-path"><path id="eye-socket" fill-rule="evenodd" clip-rule="evenodd" d="M145.5 76c-8.562 0-15.5-7.027-15.5-15.694 0-8.663 6.938-1.575 15.5-1.575 8.562 0 15.5-7.088 15.5 1.575C161 68.973 154.062 76 145.5 76z"></path></clipPath></defs><g class="beholder-dm-screen__beholder"><path fill-rule="evenodd" clip-rule="evenodd" d="M145.313 77.36c-10.2 0-18.466-8.27-18.466-18.47 0-10.197 8.266-1.855 18.466-1.855 10.199 0 18.465-8.342 18.465 1.855 0 10.2-8.266 18.47-18.465 18.47m59.557 4.296l-.083-.057c-.704-.5-1.367-1.03-1.965-1.59a12.643 12.643 0 0 1-1.57-1.801c-.909-1.268-1.51-2.653-1.859-4.175-.355-1.521-.461-3.179-.442-4.977.007-.897.049-1.835.087-2.827.038-.995.079-2.032.053-3.194-.031-1.158-.11-2.445-.519-3.97a10.494 10.494 0 0 0-1.014-2.43 8.978 8.978 0 0 0-1.938-2.32 9.64 9.64 0 0 0-2.468-1.54l-.314-.137-.299-.114-.609-.212c-.382-.105-.787-.227-1.151-.298-1.495-.315-2.819-.383-4.065-.39-1.248-.004-2.407.087-3.534.2a56.971 56.971 0 0 0-3.18.44c-6.271.646-12.648 1.559-13.689-.837-1.079-2.487-3.35-8.058 3.115-12.19 4.076.154 8.141.347 12.179.62 1.461.098 2.914.212 4.36.34-4.614.924-9.314 1.7-14.019 2.43h-.015a2.845 2.845 0 0 0-2.388 3.066 2.84 2.84 0 0 0 3.088 2.574c5.125-.462 10.25-.973 15.416-1.696 2.592-.378 5.17-.776 7.88-1.42a29.7 29.7 0 0 0 2.108-.59c.181-.06.363-.117.56-.193.197-.072.378-.136.594-.227.208-.09.405-.17.643-.291l.345-.174.394-.235c.064-.042.124-.076.196-.125l.235-.174.235-.174.117-.099.148-.136c.098-.094.189-.189.283-.287l.137-.152a3.44 3.44 0 0 0 .166-.22c.114-.154.224-.317.318-.484l.072-.125.038-.064.042-.09a5.06 5.06 0 0 0 .367-1.154c.045-.308.06-.63.045-.944a4.322 4.322 0 0 0-.042-.458 5.19 5.19 0 0 0-.386-1.207 5.356 5.356 0 0 0-.499-.799l-.091-.117-.072-.083a5.828 5.828 0 0 0-.303-.318l-.155-.151-.083-.076-.057-.05a9.998 9.998 0 0 0-.503-.382c-.152-.102-.28-.178-.424-.265l-.205-.124-.181-.091-.36-.186a18.713 18.713 0 0 0-.643-.28l-.591-.23c-1.521-.538-2.853-.856-4.197-1.159a83.606 83.606 0 0 0-3.951-.772c-2.604-.45-5.185-.829-7.763-1.166-4.273-.564-8.531-1.029-12.785-1.46 0-.004-.004-.004-.004-.004a38.55 38.55 0 0 0-4.81-3.1v-.004c.397-.223.965-.424 1.688-.549 1.135-.208 2.551-.242 4.05-.185 3.024.11 6.366.59 10.022.662 1.832.02 3.781-.056 5.84-.56a12.415 12.415 0 0 0 3.081-1.188 10.429 10.429 0 0 0 2.702-2.135 2.841 2.841 0 0 0-3.774-4.205l-.208.152c-.825.594-1.76.87-2.956.942-1.188.068-2.566-.09-4.004-.367-2.907-.553-6.003-1.556-9.5-2.32-1.763-.371-3.644-.7-5.802-.73a16.984 16.984 0 0 0-3.455.298 13.236 13.236 0 0 0-3.774 1.333 13.065 13.065 0 0 0-3.376 2.615 14.67 14.67 0 0 0-1.646 2.154h-.004a41.49 41.49 0 0 0-8.436-.863c-1.518 0-3.017.079-4.489.238-1.79-1.563-3.444-3.198-4.833-4.913a21.527 21.527 0 0 1-1.4-1.903 15.588 15.588 0 0 1-1.094-1.893c-.606-1.241-.905-2.422-.893-3.22a3.38 3.38 0 0 1 .038-.55c.034-.155.06-.31.121-.446.106-.273.276-.534.571-.776.579-.496 1.681-.81 2.884-.689 1.207.114 2.487.629 3.615 1.476 1.135.848 2.111 2.044 2.868 3.444l.038.076a2.848 2.848 0 0 0 3.471 1.329 2.843 2.843 0 0 0 1.714-3.641c-.768-2.135-1.96-4.235-3.675-6.003-1.71-1.76-3.924-3.18-6.502-3.872a12.604 12.604 0 0 0-4.076-.416 11.248 11.248 0 0 0-4.284 1.128 10.405 10.405 0 0 0-3.702 3.054c-.499.655-.901 1.37-1.237 2.104-.318.73-.568 1.488-.731 2.237-.337 1.503-.356 2.96-.238 4.315.125 1.362.405 2.63.764 3.822.36 1.196.803 2.317 1.298 3.373a31.9 31.9 0 0 0 1.605 3.043c.458.768.935 1.506 1.427 2.233h-.004a39.13 39.13 0 0 0-4.515 2.384c-3.111-.344-6.2-.76-9.242-1.294-2.033-.364-4.043-.769-6.007-1.26-1.96-.485-3.876-1.045-5.662-1.726a24.74 24.74 0 0 1-2.528-1.102c-.772-.393-1.48-.829-1.987-1.234a4.916 4.916 0 0 1-.56-.507c-.02-.015-.03-.03-.046-.045.288-.28.761-.621 1.314-.905.719-.382 1.566-.711 2.456-.984 1.79-.556 3.762-.9 5.76-1.098l.046-.007a2.843 2.843 0 0 0 2.547-2.805 2.846 2.846 0 0 0-2.824-2.868c-2.301-.02-4.628.11-7.028.567-1.2.231-2.418.538-3.671 1.022-.628.246-1.26.526-1.911.901a10.12 10.12 0 0 0-1.96 1.446c-.648.62-1.307 1.438-1.757 2.524-.114.261-.197.56-.284.844a7.996 7.996 0 0 0-.166.909c-.061.609-.05 1.237.049 1.809.189 1.162.632 2.12 1.109 2.891a11.265 11.265 0 0 0 1.529 1.942c1.056 1.082 2.127 1.88 3.194 2.6a33.287 33.287 0 0 0 3.21 1.855c2.142 1.093 4.284 1.979 6.434 2.774a98.121 98.121 0 0 0 6.464 2.112c.511.147 1.018.291 1.529.435a36.8 36.8 0 0 0-4.458 7.089v.004c-1.908-2.014-3.876-3.997-6.022-5.931a52.386 52.386 0 0 0-3.471-2.888 31.347 31.347 0 0 0-2.028-1.408 17.575 17.575 0 0 0-2.574-1.378 11.177 11.177 0 0 0-1.888-.616c-.761-.16-1.73-.31-3.02-.107a6.543 6.543 0 0 0-1.007.254 6.508 6.508 0 0 0-2.79 1.84 6.7 6.7 0 0 0-.594.783c-.083.129-.174.269-.238.39a7.248 7.248 0 0 0-.681 1.692 9.383 9.383 0 0 0-.3 2.02c-.022.584 0 1.09.038 1.568.084.953.231 1.786.401 2.577l.39 1.764c.027.14.065.268.087.408l.057.428.121.855.065.428.033.443.072.886c.061.586.061 1.196.076 1.801.05 2.426-.11 4.92-.435 7.407a50.6 50.6 0 0 1-1.503 7.35c-.17.594-.367 1.17-.548 1.76a55.283 55.283 0 0 1-.632 1.684l-.352.791c-.061.129-.114.276-.178.39l-.193.356-.186.355c-.064.121-.129.246-.193.326-.129.185-.257.375-.378.575l-.303.485a2.813 2.813 0 0 0 4.462 3.387c.295-.322.59-.655.878-.988.155-.17.265-.333.382-.496l.349-.488.344-.492c.117-.166.2-.325.303-.492l.583-.98a53.92 53.92 0 0 0 1.018-1.964c.295-.659.61-1.321.89-1.984a58.231 58.231 0 0 0 2.69-8.114 58.405 58.405 0 0 0 1.51-8.493c.068-.73.152-1.454.167-2.203l.045-1.12.02-.56-.012-.568-.004-.205c.167.186.333.371.496.557 1.608 1.84 3.179 3.838 4.708 5.889a181.94 181.94 0 0 1 4.481 6.328c.14.2.311.428.477.617.284.33.594.62.924.874 0 .216.003.424.015.636-2.661 2.861-5.265 5.821-7.748 9.034-1.567 2.06-3.096 4.19-4.485 6.715-.685 1.267-1.347 2.645-1.854 4.363-.246.879-.454 1.851-.496 3.02l-.007.44.022.473c.012.159.02.314.038.477.023.166.05.337.076.503.113.666.333 1.385.65 2.07.16.337.356.67.557.992.212.299.44.613.681.878a8.075 8.075 0 0 0 1.54 1.328c1.05.697 2.04 1.06 2.938 1.31 1.79.466 3.292.519 4.723.507 2.842-.053 5.367-.48 7.853-.98 4.943-1.022 9.618-2.434 14.243-3.948a2.845 2.845 0 0 0 1.911-3.236 2.842 2.842 0 0 0-3.323-2.267h-.015c-4.648.878-9.322 1.635-13.864 1.965-2.252.155-4.511.208-6.46-.027a10.954 10.954 0 0 1-1.685-.322c.004-.015.012-.026.015-.037.133-.273.322-.606.534-.954.235-.36.477-.73.768-1.117 1.14-1.548 2.619-3.164 4.183-4.723a83.551 83.551 0 0 1 2.585-2.468 35.897 35.897 0 0 0 2.312 4.16c.125.2.261.405.397.602 3.747-.413 7.415-1.06 10.356-1.617l.037-.007a7.47 7.47 0 0 1 8.702 5.957 7.491 7.491 0 0 1-4.724 8.38C132.172 94.372 138.542 96 145.313 96c20.358 0 37.087-14.708 38.994-33.514.193-.05.386-.098.576-.144a23.261 23.261 0 0 1 2.354-.458c.726-.102 1.393-.14 1.847-.125.125-.004.193.015.299.012.03.003.064.007.098.007h.053c.008.004.015.004.027.004.106 0 .094-.019.09-.068-.007-.05-.022-.125.019-.117.038.007.125.083.216.26.087.19.186.443.269.761.079.33.159.69.219 1.102.129.806.216 1.745.307 2.725.091.984.178 2.02.306 3.1.262 2.138.682 4.435 1.533 6.683.837 2.245 2.154 4.406 3.812 6.15.825.871 1.725 1.655 2.66 2.336.943.677 1.919 1.26 2.911 1.782a2.848 2.848 0 0 0 3.641-.874 2.848 2.848 0 0 0-.674-3.966" fill="#0398F3"></path><g clip-path="url(#beholder-eye-socket-clip-path)"><circle cx="137.5" cy="60" r="7" fill="#1B9AF0"><animateMotion dur="2.3s" repeatCount="indefinite"><mpath xlink:href="#beholder-eye-move-path"></mpath></animateMotion></circle></g></g><g class="beholder-dm-screen__screen"><path fill="#EAEEF0" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" d="M76 76h136v97H76z"></path><path d="M218 170.926V74.282l64-35.208v96.644l-64 35.208zM70 171.026V74.318L3 38.974v96.708l67 35.344z" fill="#F3F6F9" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>`);
+        monsterFolderTitle.append(beholderSvg);
+    }
+
     search_monsters(searchTerm, skip, function (monsterSearchResponse) {
         let listItems = addedList;
         let remainderItems = 0;
-
+        const sourceList = {};
+        const sourceCategory = window.ddbConfigJson.sources.map((s) => {
+            sourceList[s.id] = s.sourceCategoryId;
+        });
         for (let i = 0; i < monsterSearchResponse.data.length; i++) {
             if(listItems.length == 10){
-                remainderItems = 10 - i;
+                remainderItems = 100 - i;
                 break;
             }
             let m = monsterSearchResponse.data[i];
@@ -462,31 +472,44 @@ function inject_monster_tokens(searchTerm, skip, addedList=[]) {
             if(window.ownedMonstersOnly && !item.monsterData.isReleased && item.monsterData.homebrewStatus == 0){
                 continue;   
             }
+
+            
+            if(Array.isArray(window.sourceCategoryMonsterFilter) && window.sourceCategoryMonsterFilter.length>0){
+
+                const sourceIdMap = item.monsterData.sources.map(s => { return sourceList[s.sourceId] })
+                const set = new Set(window.sourceCategoryMonsterFilter);
+                const hasMatch = sourceIdMap.some(value => set.has(`${value}`) || set.has(value)); 
+                if(!hasMatch)
+                    continue;
+            }
+                
+
             window.monsterListItems.push(item);
             listItems.push(item);
         }
-        console.log("search_monsters converted", listItems);
+        noisy_log("search_monsters converted", listItems);
         let monsterFolder = find_html_row_from_path(RootFolder.Monsters.path, tokensPanel.body);
-        if(listItems.length < 10 && monsterSearchResponse.pagination.total > (monsterSearchResponse.pagination.skip + 10)){
-           inject_monster_tokens(searchTerm, skip + 10, listItems);
+        if(listItems.length < 10 && monsterSearchResponse.pagination.total > (monsterSearchResponse.pagination.skip + 100)){
+           inject_monster_tokens(searchTerm, skip + 100, listItems);
         }
         else{
             inject_monster_list_items(listItems);
             if (searchTerm.length > 0) {
                 monsterFolder.removeClass("collapsed");
             }     
-            console.log("search_monster pagination ", monsterSearchResponse.pagination.total, monsterSearchResponse.pagination.skip, monsterSearchResponse.pagination.total > monsterSearchResponse.pagination.skip);
+            noisy_log("search_monster pagination ", monsterSearchResponse.pagination.total, monsterSearchResponse.pagination.skip, monsterSearchResponse.pagination.total > monsterSearchResponse.pagination.skip);
             monsterFolder.find(".load-more-button").remove();
-            if (monsterSearchResponse.pagination.total > (monsterSearchResponse.pagination.skip - remainderItems + 10)) {
+            if (monsterSearchResponse.pagination.total > (monsterSearchResponse.pagination.skip - remainderItems + 100)) {
                 // add load more button
                 let loadMoreButton = $(`<button class="ddbeb-button load-more-button" data-skip="${monsterSearchResponse.pagination.skip}">Load More</button>`);
                 loadMoreButton.click(function(loadMoreClickEvent) {
-                    console.log("load more!", loadMoreClickEvent);
+                    noisy_log("load more!", loadMoreClickEvent);
                     let previousSkip = parseInt($(loadMoreClickEvent.currentTarget).attr("data-skip"));
-                    inject_monster_tokens(searchTerm, previousSkip - remainderItems + 10);
+                    inject_monster_tokens(searchTerm, previousSkip - remainderItems + 100);
                 });
                 monsterFolder.find(`> .folder-item-list`).append(loadMoreButton);
             }
+            monsterFolderTitle.find('.beholder-dm-screen').remove();
         }   
     });
 }
@@ -524,7 +547,7 @@ function inject_open5e_monster_list_items(listItems = open5e_monsters) {
         // add load more button
         let loadMoreButton = $(`<button class="ddbeb-button open5e-load-more load-more-button">Load More</button>`);
         loadMoreButton.click(async function(loadMoreClickEvent) {
-            console.log("load more!", loadMoreClickEvent);   
+            noisy_log("load more!", loadMoreClickEvent);   
             open5e_monsters = await getNextOpen5e(open5e_monsters, open5e_next);
             $('.open5e-load-more').remove();
             monsterFolder.find('.folder-item-list').empty();
@@ -624,7 +647,7 @@ function redraw_token_list(searchTerm, enableDraggable = true, leaveEmpty=false)
         // don't do anything on startup
         return;
     }
-    console.group("redraw_token_list");
+   
     update_token_folders_remembered_state();
     let list = $(`<div class="custom-token-list"></div>`);
     tokensPanel.body.find('.custom-token-list').remove();
@@ -713,7 +736,6 @@ function redraw_token_list(searchTerm, enableDraggable = true, leaveEmpty=false)
     else{
         $(".sidebar-panel-content").find(".sidebar-panel-body .hidden-sidebar-item").toggleClass("temporary-visible", true);
     }  
-    console.groupEnd()
 }
 
 function get_helper_size(draggedItem){
@@ -730,9 +752,9 @@ function get_helper_size(draggedItem){
  * @param html {*|jQuery|HTMLElement} the html that corresponds to an item (like a row in the list of tokens)
  * @param specificImage {string} the url of the image to use. If nothing is provided, an image will be selected at random from the token's specified alternative-images.
  */
-async function enable_draggable_token_creation(html, specificImage = undefined) {
+async function enable_draggable_token_creation(html, specificImage = undefined, highPriority = false) {
     if(specificImage && specificImage.startsWith('above-bucket-not-a-url')){
-        specificImage = await getAvttStorageUrl(avttTokensApplyThumbnailPrefix(specificImage))
+        specificImage = await getAvttStorageUrl(avttTokensApplyThumbnailPrefix(specificImage), highPriority)
     }
     $(document).off('click.clearSelectTokens').on('click.clearSelectTokens', function(e) {
         if(!$(e.target).closest('#tokens-panel').length){
@@ -746,7 +768,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
         cancel: '.token-row-gear, .change-token-image-item, #context-menu-layer',
         distance: 25,
         helper: function(event) {
-            console.log("enable_draggable_token_creation helper");
+            noisy_log("enable_draggable_token_creation helper");
             let draggedRow = $(event.target).closest(".list-item-identifier");
             let isPlayerSheetAoe = false
             let playerAoe = undefined
@@ -769,7 +791,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                     helper.attr("src", specificImage);
                 } else {      
                     let src = random_image_for_item(draggedItem);
-                    if(draggedItem.type == ItemType.PC){
+                    if(draggedItem.type == ItemType.PC && find_token_customization(draggedItem.type, draggedItem.id)?.tokenOptions?.defaultImage == undefined){
                         src = window.all_token_objects?.[draggedItem.id]?.options?.imgsrc || src;
                     }  
                     helper.attr("data-src", src);
@@ -836,7 +858,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
         },
         start: function (event, ui) {
             
-            console.log("enable_draggable_token_creation start");
+            noisy_log("enable_draggable_token_creation start");
             let draggedRow = $(event.target).closest(".list-item-identifier");
             if ($(event.target).hasClass("list-item-identifier")) {
                 draggedRow = $(event.target);
@@ -873,7 +895,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
             // $( event.originalEvent.target ).one('click', function(e){ e.stopImmediatePropagation(); } );
             event.stopPropagation(); // prevent the mouseup event from closing the modal
             if ($(ui.helper).hasClass("drag-cancelled")) {
-                console.log("enable_draggable_token_creation cancelled");
+                noisy_log("enable_draggable_token_creation cancelled");
                 return;
             }
             const getRowItem = (event) => {
@@ -885,7 +907,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                 return draggedItem;
             }
             let droppedOn = document.elementFromPoint(event.clientX, event.clientY);
-            console.log("droppedOn", droppedOn);
+            noisy_log("droppedOn", droppedOn);
             const numSelected = $('#tokens-panel .selected').length;
             if (droppedOn?.closest("#VTT")) {
                 // place a token where this was dropped
@@ -897,7 +919,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                     if (ui.helper.attr("data-shape") && ui.helper.attr("data-style")) {
                         src = build_aoe_img_name(ui.helper.attr("data-style"), ui.helper.attr("data-shape"));
                     }
-                    create_and_place_token(draggedItem, hidden, src, event.pageX, event.pageY, true, undefined, undefined, undefined, true);
+                    create_and_place_token(draggedItem, hidden, src, event.pageX, event.pageY, true, undefined, undefined, undefined);
                 }
                 else{
                     const listItemArray = [];
@@ -925,7 +947,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                 const numSelected = $('#tokens-panel .selected').length;
                 const droppedOnWindow = $(droppedOn?.closest("#encounterWindow"));
                 const encounterId = droppedOnWindow.attr('data-encounter-id');
-                console.log("enable_draggable_token_creation stop");
+                noisy_log("enable_draggable_token_creation stop");
                 const customization = find_or_create_token_customization(ItemType.Folder, encounterId);
                 if (customization.encounterData == undefined)
                     customization.encounterData = {}
@@ -971,7 +993,7 @@ async function enable_draggable_token_creation(html, specificImage = undefined) 
                 persist_token_customization(customization)
                 droppedOnWindow.trigger('redrawListing');
             }else {
-                console.log("Not dropping over element", droppedOn);
+                noisy_log("Not dropping over element", droppedOn);
             }
         }
     });
@@ -1007,7 +1029,11 @@ function update_pc_token_rows() {
             });    
             let customizations = find_token_customization(listItem.type, listItem.id);
             
-            let rowImage = (customizations?.tokenOptions?.alternativeImages?.length > 0) ? customizations?.tokenOptions?.alternativeImages[0] : pc.image;
+            let rowImage =  customizations?.tokenOptions?.defaultImage != undefined 
+                                ? customizations.tokenOptions.defaultImage 
+                                : (customizations?.tokenOptions?.alternativeImages?.length > 0) 
+                                    ? customizations?.tokenOptions?.alternativeImages[0] 
+                                    : pc.image;
             if (rowImage.startsWith('above-bucket-not-a-url')){
                 getAvttStorageUrl(avttTokensApplyThumbnailPrefix(rowImage), true).then((url) => {
                     row.find(".token-image").attr('src', url)
@@ -1041,7 +1067,7 @@ function update_pc_token_rows() {
             } else{
                 row.find(".subtitle-attibute[title='Fly Speed']").hide()
             }
-            if(flyingSpeed > 0) {
+            if(swimmingSpeed > 0) {
                 row.find(".subtitle-attibute[title='Swim Speed']").show()
             } else {
                 row.find(".subtitle-attibute[title='Swim Speed']").hide()
@@ -1094,6 +1120,16 @@ function update_pc_token_rows() {
     });
 }
 
+function random_number_suffix(suffixNumbers = []) {
+    let base = suffixNumbers.length + 100
+    let randomNumber = Math.floor(Math.random() * base);
+    while (suffixNumbers.includes(randomNumber)) {
+        randomNumber = Math.floor(Math.random() * base);
+        base+=10;
+    }
+    return randomNumber;
+}
+
 /**
  * Creates a {Token} object and places it on the scene.
  * @param listItem {SidebarListItem} the item to create a token from
@@ -1106,14 +1142,14 @@ function update_pc_token_rows() {
  */
 
 
-async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined, ignoreOffset=false) {
+async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined) {
 
 
     if (listItem === undefined) {
         console.warn("create_and_place_token was called without a listItem");
         return;
     }
-
+    
     if (listItem.isTypeFolder() || listItem.isTypeEncounter()) {
 
         let tokensToPlace = [];
@@ -1180,24 +1216,35 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
     let options = {...window.TOKEN_SETTINGS}
     // set up whatever you need to. We'll override a few things after
     let foundOptions = find_token_options_for_list_item(listItem);
-    options = {...options, ...foundOptions}; // we may need to put this in specific places within the switch statement below
+    options = $.extend(true, {}, options, foundOptions); // we may need to put this in specific places within the switch statement below
     const chosenImage = random_image_for_item(listItem, specificImage);
     options.imgsrc = chosenImage;
-
+    options.alternativeImages = includeDDBImages(options.alternativeImages, listItem, options);
+            
 
     if(options.alternativeImagesCustomizations != undefined && options.alternativeImagesCustomizations[options.imgsrc] != undefined){
         const visionOptions = {
+            'devilsight': {...options.devilsight},
+            'truesight': {...options.truesight},
             'vision': {...options.vision},
             'light1': {...options.light1},
             'light2': {...options.light2}
         }
-        options = {
-            ...options,
-            ...options.alternativeImagesCustomizations[options.imgsrc],
-            imgsrc: options.imgsrc
-        }
+        options = $.extend(true, 
+            {}, 
+            options, 
+            options.alternativeImagesCustomizations[options.imgsrc], 
+            {imgsrc: options.imgsrc}
+        ); 
+            
         if(options.vision != undefined && options.vision?.feet == undefined && visionOptions?.vision?.feet != undefined){
             options.vision.feet = visionOptions.vision.feet;
+        }
+        if(options.devilsight != undefined && options.devilsight?.feet == undefined && visionOptions?.devilsight?.feet != undefined){
+            options.devilsight.feet = visionOptions.devilsight.feet;
+        }
+        if(options.truesight != undefined && options.truesight?.feet == undefined && visionOptions?.truesight?.feet != undefined){
+            options.truesight.feet = visionOptions.truesight.feet;
         }
          if(options.light1 != undefined && options.light1?.feet == undefined && visionOptions?.light1?.feet != undefined){
             options.light1.feet = visionOptions.light1.feet;
@@ -1215,13 +1262,15 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
     let hpVal;
     let placedCount;
     let color;
+    let appendedNumbers = [];
     switch (listItem.type) {
         case ItemType.Folder:
-            console.log("TODO: place all tokens in folder?", listItem);
+            noisy_log("TODO: place all tokens in folder?", listItem);
             break;
         case ItemType.MyToken:
             tokenSizeSetting = options.tokenSize;
-            tokenSize = parseInt(tokenSizeSetting);
+            tokenSize = parseFloat(tokenSizeSetting);
+            noisy_log("PLACING SIZE1", options.tokenSize, tokenSize)            
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
                 tokenSize = 1;
                 // TODO: handle custom sizes
@@ -1233,9 +1282,16 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 options.tokenSize = tokenSize;
             }
             placedCount = 1;
+            
             for (let tokenId in window.TOKEN_OBJECTS) {
                 if (window.TOKEN_OBJECTS[tokenId].options.itemId === listItem.id) {
                     placedCount++;
+                    if(options.placeType == 'random'){
+                        const nameNumberMatch = window.TOKEN_OBJECTS[tokenId].options.name.match(/(\d+)$/);
+                        if (nameNumberMatch) {
+                            appendedNumbers.push(parseInt(nameNumberMatch[1]));
+                        }
+                    }
                 }
             }
             color = TOKEN_COLORS[(placedCount - 1) % 54];
@@ -1243,15 +1299,19 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             switch (options['placeType']) {
                 case 'personality':
                     let personailityTrait = getPersonalityTrait()
-                    console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
+                    noisy_log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
                 case 'none':
                     break;
+                case 'random':
+                    const randomNumber = random_number_suffix(appendedNumbers);
+                    options.name = `${listItem.name} ${randomNumber}`;
+                    break;
                 case 'count': 
                 default:    
                     if (placedCount > 1) {
-                        console.log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
+                        noisy_log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
                         options.name = `${listItem.name} ${placedCount}`; 
                     }
                     break;
@@ -1266,14 +1326,17 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             }
             options.id = listItem.sheet;
             if(window.all_token_objects[options.id] != undefined){           
-                options = {...options, ...window.all_token_objects[options.id].options}
+                options = $.extend(true, {}, options, window.all_token_objects[options.id].options)
                 if (specificImage) { 
-                    options = { ...options, ...options.alternativeImagesCustomizations?.[specificImage], imgsrc: chosenImage };
+                    options = $.extend(true, {}, options, options.alternativeImagesCustomizations?.[specificImage], {imgsrc: chosenImage});
+                }       
+                else if (options.defaultImage !== undefined) {
+                     options = $.extend(true, {}, options, options.alternativeImagesCustomizations?.[specificImage], {imgsrc: chosenImage});
                 }
             }
-          
+            options.color = color_from_pc_object(pc);
             tokenSizeSetting = options.tokenSize;
-            tokenSize = parseInt(tokenSizeSetting);
+            tokenSize = parseFloat(tokenSizeSetting);
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
                 tokenSize = 1;
                 // TODO: handle custom sizes
@@ -1287,7 +1350,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 options.hitPointInfo = pc.hitPointInfo;
                 options.armorClass = pc.armorClass;
             }
-            options = {...options, ...foundOptions, name: listItem.name};
+            options.name = listItem.name;
             break;
         case ItemType.Monster:
             switch (options['defaultmaxhptype']) {
@@ -1309,7 +1372,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 temp: 0
             };
             tokenSizeSetting = options.tokenSize;
-            tokenSize = parseInt(tokenSizeSetting);
+            tokenSize = parseFloat(tokenSizeSetting);
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
                 options.sizeId = listItem.monsterData.sizeId;
                 // TODO: handle custom sizes
@@ -1319,9 +1382,16 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             options.stat = listItem.monsterData.id;
 
             placedCount = 1;
+            appendedNumbers = [];
             for (let tokenId in window.TOKEN_OBJECTS) {
-                if (window.TOKEN_OBJECTS[tokenId].options.monster === listItem.monsterData.id) {
+                if (window.TOKEN_OBJECTS[tokenId].options.monster === listItem.monsterData.id || window.TOKEN_OBJECTS[tokenId].options.stat === listItem.monsterData.id) {
                     placedCount++;
+                    if(options.placeType == 'random'){
+                        const nameNumberMatch = window.TOKEN_OBJECTS[tokenId].options.name.match(/(\d+)$/);
+                        if (nameNumberMatch) {
+                            appendedNumbers.push(parseInt(nameNumberMatch[1]));
+                        }
+                    }
                 }
             }
             color = TOKEN_COLORS[(placedCount - 1) % 54];
@@ -1329,30 +1399,43 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             switch (options['placeType']) {
                 case 'personality':
                     let personailityTrait = getPersonalityTrait()
-                    console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
+                    noisy_log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
                 case 'none':
                     break;
+                case 'random':
+                    const randomNumber = random_number_suffix(appendedNumbers);
+                    options.name = `${listItem.name} ${randomNumber}`;
+                    break;
                 case 'count': 
                 default:    
                     if (placedCount > 1) {
-                        console.log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
+                        noisy_log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
                         options.name = `${listItem.name} ${placedCount}`; 
                     }
                     break;
             }
-            if(listItem.monsterData.senses.length > 0 && foundOptions.vision == undefined){
-                let darkvision = 0;
-                for(let i=0; i < listItem.monsterData.senses.length; i++){
-                    const ftPosition = listItem.monsterData.senses[i].notes.indexOf('ft.')
-                    const range = parseInt(listItem.monsterData.senses[i].notes.slice(0, ftPosition));
-                    if(range > darkvision)
-                        darkvision = range;
+            if(listItem.monsterData.senses.length > 0){
+               
+                const vision = get_monster_senses(listItem.monsterData.senses);
+                if(foundOptions.vision == undefined){
+                    options.vision = {
+                        feet: vision.darkvision.toString(),
+                        color: (window.TOKEN_SETTINGS?.vision?.color) ? window.TOKEN_SETTINGS.vision.color : 'rgba(142, 142, 142, 1)'
+                    }
                 }
-                options.vision = {
-                    feet: darkvision.toString(),
-                    color: (window.TOKEN_SETTINGS?.vision?.color) ? window.TOKEN_SETTINGS.vision.color : 'rgba(142, 142, 142, 1)'
+                if(foundOptions.truesight == undefined){
+                    options.truesight = {
+                        feet: vision.truesight.toString(),
+                        color: (window.TOKEN_SETTINGS?.truesight?.color) ? window.TOKEN_SETTINGS.truesight.color : 'rgba(142, 142, 142, 1)'
+                    }
+                }
+                if(foundOptions.devilsight == undefined){
+                    options.devilsight = {
+                        feet: vision.devilsight.toString(),
+                        color: (window.TOKEN_SETTINGS?.devilsight?.color) ? window.TOKEN_SETTINGS.devilsight.color : 'rgba(142, 142, 142, 1)'
+                    }
                 }
             }
             break;
@@ -1376,18 +1459,25 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 temp: 0
             };
             tokenSizeSetting = options.tokenSize;
-            tokenSize = parseInt(tokenSizeSetting);
+            tokenSize = parseFloat(tokenSizeSetting);
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
                 options.sizeId = listItem.monsterData.sizeId;
                 // TODO: handle custom sizes
             }
             options.armorClass = listItem.monsterData.armorClass;
             options.monster = "open5e";
-            options.stat = listItem.monsterData.slug;
+            options.stat = listItem.monsterData.key;
             placedCount = 1;
+            appendedNumbers = [];
             for (let tokenId in window.TOKEN_OBJECTS) {
-                if (window.TOKEN_OBJECTS[tokenId].options.monster === listItem.monsterData.id) {
+                if (window.TOKEN_OBJECTS[tokenId].options.monster === listItem.monsterData.key || window.TOKEN_OBJECTS[tokenId].options.stat === listItem.monsterData.key) {
                     placedCount++;
+                    if(options.placeType == 'random'){
+                        const nameNumberMatch = window.TOKEN_OBJECTS[tokenId].options.name.match(/(\d+)$/);
+                        if (nameNumberMatch) {
+                            appendedNumbers.push(parseInt(nameNumberMatch[1]));
+                        }
+                    }
                 }
             }
             color = TOKEN_COLORS[(placedCount - 1) % 54];
@@ -1396,15 +1486,19 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
            
                 case 'personality':
                     let personailityTrait = getPersonalityTrait()
-                    console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
+                    noisy_log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
                 case 'none':
                     break;
+                case 'random':
+                    const randomNumber = random_number_suffix(appendedNumbers);
+                    options.name = `${listItem.name} ${randomNumber}`;
+                    break;
                 case 'count': 
                 default:    
                     if (placedCount > 1) {
-                        console.log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
+                        noisy_log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
                         options.name = `${listItem.name} ${placedCount}`; 
                     }
                     break;
@@ -1412,7 +1506,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             break;
         case ItemType.BuiltinToken:
             tokenSizeSetting = options.tokenSize;
-            tokenSize = parseInt(tokenSizeSetting);
+            tokenSize = parseFloat(tokenSizeSetting);
             if (tokenSizeSetting === undefined || typeof tokenSizeSetting !== 'number') {
                 tokenSize = 1;
                 // TODO: handle custom sizes
@@ -1424,9 +1518,16 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 options.tokenSize = tokenSize;
             }
             placedCount = 1;
+            appendedNumbers = [];
             for (let tokenId in window.TOKEN_OBJECTS) {
                 if (window.TOKEN_OBJECTS[tokenId].options.itemId === listItem.id) {
-                    placedCount++;
+                    placedCount++;          
+                    if(options.placeType == 'random'){
+                        const nameNumberMatch = window.TOKEN_OBJECTS[tokenId].options.name.match(/(\d+)$/);
+                        if (nameNumberMatch) {
+                            appendedNumbers.push(parseInt(nameNumberMatch[1]));
+                        }
+                    }
                 }
             }
             color = TOKEN_COLORS[(placedCount - 1) % 54];
@@ -1434,15 +1535,19 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             switch (options['placeType']) {
                 case 'personality':
                     let personailityTrait = getPersonalityTrait()
-                    console.log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
+                    noisy_log(`updating monster name with trait: ${personailityTrait}, and setting color: ${color}`);
                     options.name = ` ${personailityTrait} ${listItem.name}`;
                     break;
                 case 'none':
                     break;
+                case 'random':
+                    const randomNumber = random_number_suffix(appendedNumbers);
+                    options.name = `${listItem.name} ${randomNumber}`;
+                    break;
                 case 'count': 
                 default:    
                     if (placedCount > 1) {
-                        console.log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
+                        noisy_log(`updating monster name with count: ${placedCount}, and setting color: ${color}`);
                         options.name = `${listItem.name} ${placedCount}`; 
                     }
                     break;
@@ -1455,7 +1560,7 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             // specificImage = options.imgsrc; // force it to use what we just built
             break;
     }
-    if(options.statBlock && window.JOURNAL.notes[options.statBlock]){
+    if(options.statBlock && window.JOURNAL.notes[options.statBlock] != undefined){
         let statText = $(`<div>${window.JOURNAL.notes[options.statBlock].text}</div>`);
         statText.find('style').remove();
         statText=statText[0].innerHTML;
@@ -1539,6 +1644,8 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
             try{
                 const charURLparts = pcURL.match(/.*?\/characters\/([0-9]+)(\/.*?)?/i);
                 const charDetails  = await DDBApi.fetchCharacterDetails([charURLparts[1]]);
+                removeUnusedPlayerData(charDetails[0]);
+                options.color = color_from_pc_object(charDetails[0]);
                 options = $.extend(true, {}, charDetails[0], options);
                 options.customStat = options.abilities;
                 if(!options.customInit){
@@ -1653,13 +1760,13 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
         }
         options.monster = 'customStat'
     }
-    if(foundOptions.color != undefined){
-        options.color = foundOptions.color;
-    }
+    
+    options.color = foundOptions.color ?? options.color;
+    
 
 
 
-
+    
 
     options.itemType = listItem.type;
     options.itemId = listItem.id;
@@ -1672,21 +1779,18 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
 
 
     if(extraOptions != undefined){
-        options = {
-            ...options,
-            ...extraOptions
-        }
+        options = $.extend(true, {}, options, extraOptions);
     }
 
-    // TODO: figure out if we still need to do this, and where they are coming from
+
     delete options.undefined;
     delete options[""];
-    console.log("create_and_place_token about to place token with options", options, hidden, mapPoint, eventPageX, eventPageY, disableSnap);
+    noisy_log("create_and_place_token about to place token with options", options, hidden, mapPoint, eventPageX, eventPageY, disableSnap);
 
     if (eventPageX === undefined || eventPageY === undefined) {
         place_token_in_center_of_view(options);
     } else if(mapPoint==false){
-        let mapPosition = convert_point_from_view_to_map(eventPageX, eventPageY, disableSnap, ignoreOffset);
+        let mapPosition = convert_point_from_view_to_map(eventPageX, eventPageY, disableSnap);
         place_token_at_map_point(options, mapPosition.x, mapPosition.y);
     }
     else{
@@ -1694,114 +1798,43 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
     }
 }
 
-/**
- * determines the size of the token the given item represents
- * @param listItem {SidebarListItem} the item representing a token
- * @returns {number} the tokenSize that corresponds to the token you're looking for
- */
-function token_size_for_item(listItem, selectedTokenImage) {
-    let options;
-    let tokenSizeSetting;
-    let tokenSize;
-    switch (listItem.type) {
-        case ItemType.Folder:
-            return 1;
-        case ItemType.MyToken:
-            options = find_token_options_for_list_item(listItem);
-            if(selectedTokenImage){
-                options = {
-                    ...options,
-                    ...options.alternativeImagesCustomizations[selectedTokenImage]
-                }
-            }
-            tokenSizeSetting = parseFloat(options.tokenSize);
-            if (isNaN(tokenSizeSetting)) {
-                return 1;
-            }
-            tokenSize = Math.round(tokenSizeSetting * 2) / 2; // round to the nearest 0.5; ex: everything between 0.25 and 0.74 round to 0.5; below .025 rounds to 0, and everything above 0.74 rounds to 1
-            if (tokenSize < 0.5) {
-                return 0.5;
-            }
-            return tokenSize;
-        case ItemType.PC:
-            options = find_token_options_for_list_item(listItem);
-             if(selectedTokenImage){
-                options = {
-                    ...options,
-                    ...options.alternativeImagesCustomizations[selectedTokenImage]
-                }
-            }
-            tokenSizeSetting = parseFloat(options.tokenSize);
-            if (isNaN(tokenSizeSetting)) {
-                return 1;
-            }
-            tokenSize = Math.round(tokenSizeSetting * 2) / 2; // round to the nearest 0.5; ex: everything between 0.25 and 0.74 round to 0.5; below .025 rounds to 0, and everything above 0.74 rounds to 1
-            if (tokenSize < 0.5) {
-                return 0.5;
-            }
-            return tokenSize;
-        case ItemType.DDBToken:
-            options = find_token_options_for_list_item(listItem);
-            if(selectedTokenImage){
-                options = {
-                    ...options,
-                    ...options.alternativeImagesCustomizations[selectedTokenImage]
-                }
-            }
-            tokenSizeSetting = parseFloat(options.tokenSize);
-            if (isNaN(tokenSizeSetting)) {
-                return 1;
-            }
-            tokenSize = Math.round(tokenSizeSetting * 2) / 2; // round to the nearest 0.5; ex: everything between 0.25 and 0.74 round to 0.5; below .025 rounds to 0, and everything above 0.74 rounds to 1
-            if (tokenSize < 0.5) {
-                return 0.5;
-            }
-            return tokenSize;
+const token_size_for_item = function () {
+    // round to nearest hundreth with default (ADJUST SIZE ROUNDING HERE)
+    function roundTokenSize(s, defaultSize = 1) {
+        return isNaN(s) ? defaultSize : Math.max(0.5, +s.toFixed(2));
+    }
+    function tokenSizeDefault(type, sizeId) {
+        switch(type) {
         case ItemType.Monster:
         case ItemType.Open5e:
-            options = find_token_options_for_list_item(listItem);
-            if(selectedTokenImage){
-                options = {
-                    ...options,
-                    ...options.alternativeImagesCustomizations[selectedTokenImage]
-                }
+            switch (sizeId) {
+            case 5: return 2;
+            case 6: return 3;
+            case 7: return 4;
+            default: return 1;
             }
-            tokenSizeSetting = parseFloat(options.tokenSize);
-            if (isNaN(tokenSizeSetting)) {
-                switch (listItem.monsterData.sizeId) {
-                    case 5: return 2;
-                    case 6: return 3;
-                    case 7: return 4;
-                    default: return 1;
-                }
-            }
-            tokenSize = Math.round(tokenSizeSetting * 2) / 2; // round to the nearest 0.5; ex: everything between 0.25 and 0.74 round to 0.5; below .025 rounds to 0, and everything above 0.74 rounds to 1
-            if (tokenSize < 0.5) {
-                return 0.5;
-            }
-            return tokenSize;
-            
-        case ItemType.BuiltinToken:
-            options = find_token_options_for_list_item(listItem);
-            if(selectedTokenImage){
-                options = {
-                    ...options,
-                    ...options.alternativeImagesCustomizations[selectedTokenImage]
-                }
-            }
-            tokenSizeSetting = parseFloat(options.tokenSize);
-            if (isNaN(tokenSizeSetting)) {
-                return 1;
-            }
-            tokenSize = Math.round(tokenSizeSetting * 2) / 2; // round to the nearest 0.5; ex: everything between 0.25 and 0.74 round to 0.5; below .025 rounds to 0, and everything above 0.74 rounds to 1
-            if (tokenSize < 0.5) {
-                return 0.5;
-            }
-            return tokenSize;
+        default: return 1;
+        }
+    }
+    /**
+     * determines the size of the token the given item represents
+     * @param listItem {SidebarListItem} the item representing a token
+     * @returns {number} the tokenSize that corresponds to the token you're looking for
+     */
+    return function(listItem, selectedTokenImage) {
+        switch (listItem.type) {
+        case ItemType.Folder:
+            return 1;
         case ItemType.Aoe:
             return listItem.size;
+        default:
+            const options = find_token_options_for_list_item(listItem);
+            const tokenSize = parseFloat(options.alternativeImagesCustomizations?.[selectedTokenImage]?.tokenSize ?? options.tokenSize ?? 1);
+            return roundTokenSize(parseFloat(tokenSize),
+                tokenSizeDefault(listItem.type, listItem?.monsterData?.sizeId));
+        }
     }
-}
+}();
 
 /**
  * finds and returns alternative images for the given listItem.
@@ -1831,7 +1864,7 @@ function alternative_images_for_item(listItem) {
             alternativeImages = listItem.tokenOptions.alternativeImages;
             break;
     }
-
+    alternativeImages = includeDDBImages(alternativeImages, listItem, find_token_options_for_list_item(listItem));
     if (alternativeImages === undefined) {
         alternativeImages = [];
     }
@@ -1846,19 +1879,24 @@ function alternative_images_for_item(listItem) {
  * @returns {string} the url an image associated with the provided listItem
  */
 function random_image_for_item(listItem, specificImage) {
-    let validSpecifiedImage = parse_img(specificImage);
+    const validSpecifiedImage = parse_img(specificImage);
     if (validSpecifiedImage !== undefined && validSpecifiedImage.length > 0) {
-        console.debug("random_image_for_item validSpecifiedImage", validSpecifiedImage);
+        noisy_log("random_image_for_item validSpecifiedImage", validSpecifiedImage);
         return validSpecifiedImage
     }
-
-    let alternativeImages = alternative_images_for_item(listItem);
+    const customizations = find_token_customization(listItem.type, listItem.id);
+    const validDefaultImage = parse_img(customizations?.tokenOptions?.defaultImage);
+    if (validDefaultImage !== undefined && validDefaultImage.length > 0) {
+        noisy_log("random_image_for_item validDefaultImage", validDefaultImage);
+        return validDefaultImage
+    }
+    const alternativeImages = alternative_images_for_item(listItem);
     if (alternativeImages !== undefined && alternativeImages.length > 0) {
-        let randomIndex = getRandomInt(0, alternativeImages.length);
-        console.debug("random_image_for_item", alternativeImages, randomIndex);
+        const randomIndex = getRandomInt(0, alternativeImages.length);
+        noisy_log("random_image_for_item", alternativeImages, randomIndex);
         return parse_img(alternativeImages[randomIndex]);
     } else {
-        console.debug("random_image_for_item alternativeImages empty, returning", listItem.image);
+        noisy_log("random_image_for_item alternativeImages empty, returning", listItem.image);
         return parse_img(listItem.image);
     }
 }
@@ -1870,7 +1908,7 @@ function random_image_for_item(listItem, specificImage) {
  * @param callback {function} a function that takes the JSON object returned by the DDB API
  */
 function search_monsters(searchTerm, skip, callback) {
-    console.log("search_monsters starting");
+   noisy_log("search_monsters starting");
     if (typeof callback !== 'function') {
         callback = function(){};
     }
@@ -1887,11 +1925,11 @@ function search_monsters(searchTerm, skip, callback) {
     if (filterParams.length > 0) {
         searchParam += `&${filterParams}`;
     }
-    console.log(`search_monsters calling API https://monster-service.dndbeyond.com/v1/Monster?skip=${offset}&take=10${searchParam}`);
+    noisy_log(`search_monsters calling API https://monster-service.dndbeyond.com/v1/Monster?skip=${offset}&take=100${searchParam}`);
     window.ajaxQueue.addDDBRequest({
-        url: `https://monster-service.dndbeyond.com/v1/Monster?skip=${offset}&take=10${searchParam}`,
+        url: `https://monster-service.dndbeyond.com/v1/Monster?skip=${offset}&take=100${searchParam}`,
         success: function (responseData) {
-            console.log(`search_monsters succeeded`, responseData);
+            noisy_log(`search_monsters succeeded`);
             callback(responseData);
         },
         failure: function (errorMessage) {
@@ -1947,6 +1985,7 @@ function register_token_row_context_menu() {
                         for (let i = 0; i < selectedItems.length; i++) {
                             let selectedRow = $(selectedItems[i]);
                             let selectedItem = find_sidebar_list_item(selectedRow);
+                            listItemArray.push(selectedItem);
                         }
                         if (listItemArray.length < 10 || confirm(`This will add ${listItemArray.length} tokens which could lead to unexpected results. Are you sure you want to add all of these tokens?`)) {
                             let distanceFromCenter = window.CURRENT_SCENE_DATA.hpps * window.ZOOM * (listItemArray.length / 8);
@@ -2472,16 +2511,16 @@ function create_mytoken_folder_inside(listItem, options = {}) {
 
 function delete_mytokens_folder_and_everything_in_it(listItem) {
     build_import_loading_indicator('Deleting Folder and Contents');
-    console.log("delete_mytokens_folder_and_everything_in_it about to delete all tokens with parentId", listItem.id);
+    noisy_log("delete_mytokens_folder_and_everything_in_it about to delete all tokens with parentId", listItem.id);
     setTimeout(() => {
         delete_token_customization_by_parent_id(listItem.id, function (deletedChildren, deletedChildrenErrorType) {
             if (deletedChildren) {
-                console.log("delete_mytokens_folder_and_everything_in_it successfully deleted all children. about to delete the folder with id", listItem.id);
+                noisy_log("delete_mytokens_folder_and_everything_in_it successfully deleted all children. about to delete the folder with id", listItem.id);
                 delete_token_customization_by_type_and_id(listItem.type, listItem.id, function (deletedFolder, deletedFolderErrorType) {
                     did_change_mytokens_items();
                     expand_all_folders_up_to_item(listItem);
                     if (deletedFolder) {
-                        console.log("delete_mytokens_folder_and_everything_in_it successfully deleted the folder with id", listItem.id);
+                        noisy_log("delete_mytokens_folder_and_everything_in_it successfully deleted the folder with id", listItem.id);
                     } else {
                         showError(deletedFolderErrorType, "delete_mytokens_folder_and_everything_in_it failed to delete the folder with id", listItem.id);
                     }
@@ -2502,7 +2541,7 @@ function delete_mytokens_folder_and_everything_in_it(listItem) {
 function move_mytokens_to_parent_folder_and_delete_folder(listItem, callback) {
     // this is different from move_mytokens_folder in that it moved everything out of listItem
 
-    console.log("move_mytokens_to_parent_folder_and_delete_folder about to move all items out of", listItem.id);
+    noisy_log("move_mytokens_to_parent_folder_and_delete_folder about to move all items out of", listItem.id);
     window.TOKEN_CUSTOMIZATIONS.forEach(tc => {
         if (tc.parentId === listItem.id) {
             tc.parentId = listItem.parentId;
@@ -2510,15 +2549,15 @@ function move_mytokens_to_parent_folder_and_delete_folder(listItem, callback) {
     });
     let index = window.TOKEN_CUSTOMIZATIONS.findIndex(tc => tc.tokenType === listItem.type && tc.id === listItem.id);
     if (index >= 0) {
-        console.log(window.TOKEN_CUSTOMIZATIONS.length);
+        noisy_log(window.TOKEN_CUSTOMIZATIONS.length);
         window.TOKEN_CUSTOMIZATIONS.splice(index, 1);
-        console.log(window.TOKEN_CUSTOMIZATIONS.length);
+        noisy_log(window.TOKEN_CUSTOMIZATIONS.length);
     } else {
-        console.log("move_mytokens_to_parent_folder_and_delete_folder could not find customization with id", listItem.id);
+        noisy_log("move_mytokens_to_parent_folder_and_delete_folder could not find customization with id", listItem.id);
     }
     persist_all_token_customizations(window.TOKEN_CUSTOMIZATIONS, function (didSucceed, errorType) {
         if (didSucceed) {
-            console.log("move_mytokens_to_parent_folder_and_delete_folder successfully moved all children up one level and deleted folder with id", listItem.id);
+            noisy_log("move_mytokens_to_parent_folder_and_delete_folder successfully moved all children up one level and deleted folder with id", listItem.id);
         } else {
             showError(errorType, "move_mytokens_to_parent_folder_and_delete_folder failed to move all items out of", listItem.id);
         }
@@ -2544,7 +2583,7 @@ function create_token_inside(listItem, tokenName = "New Token", tokenImage = '',
 
     // let folderPath = listItem.fullPath().replace(RootFolder.MyTokens.path, "");
     // let newTokenCount = mytokens.filter(t => t.folderPath === folderPath && t.name.startsWith(newTokenName)).length;
-    console.log("newTokenCount", newTokenCount);
+    noisy_log("newTokenCount", newTokenCount);
     if (newTokenCount > 0) {
         newTokenName += ` ${newTokenCount + 1}`;
     }
@@ -2561,11 +2600,11 @@ function create_token_inside(listItem, tokenName = "New Token", tokenImage = '',
         customization.tokenOptions.videoToken = true;
     }
     if(options != undefined){
-        customization.tokenOptions = {
-            ...customization.tokenOptions,
-            ...options,
-            alternativeImages: options.alternativeImages?.length > 0 ? options.alternativeImages : options.imgsrc != '' ? [options.imgsrc] : []
-        }
+        customization.tokenOptions = $.extend(true, {}, 
+            customization.tokenOptions,
+            options,
+            {alternativeImages: options.alternativeImages?.length > 0 ? options.alternativeImages : options.imgsrc != '' ? [options.imgsrc] : []}
+        );
     }
 
     if(statBlock != undefined){
@@ -2598,7 +2637,7 @@ function create_token_inside(listItem, tokenName = "New Token", tokenImage = '',
     persist_token_customization(customization, function (didSucceed, error) {
         if (skipDidChange)
             return;
-        console.log("create_token_inside created a new item", customization);
+        noisy_log("create_token_inside created a new item", customization);
         did_change_mytokens_items();
         const newItem = window.tokenListItems.find(li => li.type === ItemType.MyToken && li.id === customization.id);
         if (didSucceed && newItem) {
@@ -2706,7 +2745,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     // close any that are already open just to be safe
     let sidebarPanel;
     let name = listItem.name;
-    if(!selectedTokenImage && !redrawPanel){ // we just want to redraw the panel options not the images since we selected a token image to edit
+    if(!selectedTokenImage && !redrawPanel){ 
         close_sidebar_modal();
         sidebarPanel = new SidebarPanel("token-configuration-modal");
         
@@ -2733,10 +2772,10 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     if(selectedTokenImage){
         if(customization.tokenOptions.alternativeImagesCustomizations == undefined)
             customization.tokenOptions.alternativeImagesCustomizations = {};
-        targetOptions = {
-            ...customization.tokenOptions,
-            ...customization.tokenOptions.alternativeImagesCustomizations[selectedTokenImage]
-        }
+        targetOptions = $.extend(true, {}, 
+            customization.tokenOptions,
+            customization.tokenOptions.alternativeImagesCustomizations[selectedTokenImage]
+        )
     }
 
     let inputWrapper = sidebarPanel.inputWrapper;
@@ -2761,24 +2800,24 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
             return; // no need to do anything if the image wasn't added. This can happen if they accidentally hit enter a few times which would try to add the same url multiple times
         }
         if(listItem.type == ItemType.PC ){
-            const id = customization.tokenOptions.id;
+            const id = targetOptions.id;
             let token = window.all_token_objects[id]
             if (token)
-                window.all_token_objects[id].options.alternativeImages = customization.tokenOptions.alternativeImages;
+                window.all_token_objects[id].options.alternativeImages = targetOptions.alternativeImages;
            
             token = window.TOKEN_OBJECTS[id]
             if (token){
-                token.options.alternativeImages = customization.tokenOptions.alternativeImages;
-                token.sync(await $.extend(true, {}, token.options))
+                token.options.alternativeImages = targetOptions.alternativeImages;
+                token.sync()
             }
         }
         if(['.mp4', '.webm', '.m4v'].some(d => type.includes(d))){
-            customization.tokenOptions.videoToken = true;
+            targetOptions.videoToken = true;
         }
         persist_token_customization(customization);
         if (redraw) {
             debounceRedrawToken(sidebarPanel, listItem, placedToken);
-            let listingImage = (customization.tokenOptions?.alternativeImages && customization.tokenOptions?.alternativeImages[0] != undefined) ? customization.tokenOptions?.alternativeImages[0] : listItem.image;     
+            let listingImage = (targetOptions?.alternativeImages && targetOptions?.alternativeImages[0] != undefined) ? targetOptions?.alternativeImages[0] : listItem.image;     
            
 
             let rowImage;
@@ -2803,7 +2842,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     // MyToken name input handler
     const rename = async function(newName) {
         if (newName !== undefined && newName.length > 0) {
-            console.log("update token name to", newName);
+            noisy_log("update token name to", newName);
             customization.setTokenOption("name", newName);
             persist_token_customization(customization);
             sidebarPanel.updateHeader(newName, "", "When placing tokens, one of these images will be chosen at random. Right-click an image for more options.");
@@ -2840,7 +2879,27 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
 
         
     }
-
+    if(listItem?.isTypeMonster()){
+        const includeDDBImage = {
+            name: "includeDDB",
+            label: "Include DDB Image",
+            type: 'dropdown',
+            options: [
+                { value: 'fullAvatarImage', label: 'Full Size and Token/Avatar Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+                { value: 'fullImage', label: 'Full Size Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+                { value: 'avatarImage', label: 'Token/Avatar Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+                { value: false, label: 'Disabled', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." }
+            ],
+            defaultValue: false
+        };
+        const isIncludeDDB = customization?.allCombinedOptions()?.includeDDB;
+        const includeDDBToggle = build_dropdown_input(includeDDBImage, isIncludeDDB, function (key, value) {
+            customization.setTokenOption(key, value);
+            persist_token_customization(customization);
+            redraw_token_images_in_modal(sidebarPanel, listItem, placedToken);
+        });
+        inputWrapper.append(includeDDBToggle);
+    }
 
 
     if(!listItem?.isTypeBuiltinToken() && !listItem?.isTypeDDBToken()){
@@ -2862,7 +2921,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
             
             let rowImage;
             let alt = $(`.sidebar-list-item-row[id='${listItem.id}'] .token-image`).attr('alt')
-            let listingImage = (customization.tokenOptions?.alternativeImages && customization.tokenOptions?.alternativeImages[0] != undefined) ? customization.tokenOptions?.alternativeImages[0] : listItem.image;
+            let listingImage = (targetOptions?.alternativeImages && targetOptions?.alternativeImages[0] != undefined) ? targetOptions?.alternativeImages[0] : listItem.image;
             
             let video=false;
             if(isVideoValue || (['.mp4', '.webm', '.m4v'].some(d => listingImage.includes(d)))){
@@ -2917,11 +2976,13 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         editNoteButton.off().on("click", function(){
             if (!(customization.id in window.JOURNAL.notes)) {
                 window.JOURNAL.notes[customization.id] = {
-                    title: customization.tokenOptions.name,
+                    title: listItem.name,
                     text: '',
                     plain: '',
                     player: true
                 }     
+            }else{
+                window.JOURNAL.notes[customization.id].title = listItem.name;
             }
             if(customization.tokenOptions.statBlock != customization.id){
                 customization.tokenOptions.statBlock = customization.id;
@@ -2958,12 +3019,13 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     // token size
     let tokenSizes = [];
     if (placedToken) {
-        tokenSizes.push(placedToken.numberOfGridSpacesWide());
-        tokenSizes.push(placedToken.numberOfGridSpacesTall());
+        tokenSizes.push(... Object.values(placedToken.numberOfGridSpaces()));
     } else {
         tokenSizes.push(token_size_for_item(listItem, selectedTokenImage))
     }
-    let tokenSizeInput = build_token_size_input(tokenSizes, function (newSize) {
+     noisy_log("TOKENSIZES", tokenSizes);
+     let tokenSizeInput = build_token_size_input(tokenSizes, function (newSize) {
+        noisy_log("TOKEN NEW SIZES", newSize);
         customization.setTokenOption("tokenSize", newSize);
         persist_token_customization(customization);
         decorate_modal_images(sidebarPanel, listItem, placedToken);
@@ -2971,7 +3033,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     inputWrapper.append(tokenSizeInput);
 
     // image scale
-    let startingScale = targetOptions.imageSize || 1;
+    let startingScale = targetOptions.imageSize ?? 1;
     let imageScaleWrapper = build_token_image_scale_input(startingScale, false, function (imageSize) {
         customization.setTokenOption("imageSize", imageSize);
         persist_token_customization(customization);
@@ -2979,37 +3041,50 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     });
     inputWrapper.append(imageScaleWrapper);
 
-    let startingOffsetX = targetOptions.offset?.x || 0;
+    let startingOffsetX = targetOptions.offset?.x ?? 0;
     let offsetXWrapper = build_token_num_input(startingOffsetX, false, 'Image Offset X', "", "", 1, function (offsetX) {
-
-        if(targetOptions.offset == undefined)
-            customization.setTokenOption('offset', {x: 0, y: 0})
+        const selectedTokenImage = $('.example-token.selected .div-token-image').attr('data-src');
+        const options = customization.tokenOptions;
+        if(selectedTokenImage){
+            options.alternativeImagesCustomizations = options.alternativeImagesCustomizations ?? {}
+            options.alternativeImagesCustomizations[selectedTokenImage] = options.alternativeImagesCustomizations[selectedTokenImage] ?? {}
+            options.alternativeImagesCustomizations[selectedTokenImage].offset = options.alternativeImagesCustomizations[selectedTokenImage].offset ?? {x: 0, y: 0}
+        } else{
+            options.offset = options.offset ?? {x: 0, y: 0}
+        }
         customization.setTokenOption('offset.x', offsetX)
         persist_token_customization(customization);
         decorate_modal_images(sidebarPanel, listItem, placedToken);
-    });
+    }, "Adjust the X position of the image. Larger values moves the image right, smaller left.");
     inputWrapper.append(offsetXWrapper);
 
-    let startingOffsetY = targetOptions.offset?.y || 0;
+    let startingOffsetY = targetOptions.offset?.y ?? 0;
     let offsetYWrapper = build_token_num_input(startingOffsetY, false, 'Image Offset Y', "", "", 1, function (offsetY) {
-        if(targetOptions.offset == undefined)
-            customization.setTokenOption('offset', {x: 0, y: 0})
+        const selectedTokenImage = $('.example-token.selected .div-token-image').attr('data-src');
+        const options = customization.tokenOptions;
+        if(selectedTokenImage){
+            options.alternativeImagesCustomizations = options.alternativeImagesCustomizations ?? {}
+            options.alternativeImagesCustomizations[selectedTokenImage] = options.alternativeImagesCustomizations[selectedTokenImage] ?? {}
+            options.alternativeImagesCustomizations[selectedTokenImage].offset = options.alternativeImagesCustomizations[selectedTokenImage].offset ?? {x: 0, y: 0}
+        } else{
+            options.offset = options.offset ?? {x: 0, y: 0}
+        }
         customization.setTokenOption('offset.y', offsetY)
         persist_token_customization(customization);
         decorate_modal_images(sidebarPanel, listItem, placedToken);
-    });
+    }, "Adjust the Y position of the image. Larger values moves the image up, smaller down.");
     inputWrapper.append(offsetYWrapper);
 
 
-    let startingImageZoom = targetOptions.imageZoom || 0;
+    let startingImageZoom = targetOptions.imageZoom ?? 0;
     let imageZoomWrapper = build_token_num_input(startingImageZoom, false, 'Image Zoom %', -100, '', 5, function (imageZoom) { 
         customization.setTokenOption("imageZoom", imageZoom);
         persist_token_customization(customization);
         decorate_modal_images(sidebarPanel, listItem, placedToken);  
-    });
+    }, "This will adjust the zoom of the image. Different clipping will happen based on token style.");
     inputWrapper.append(imageZoomWrapper);
 
-    let startingTokenFlip = targetOptions.targetFlip || 0;
+    let startingTokenFlip = targetOptions.tokenFlip ?? 0;
     let tokenFlipWrapper = build_token_flip_input(startingTokenFlip, function (tokenFlip) { 
         customization.setTokenOption("tokenFlip", tokenFlip);
         persist_token_customization(customization);
@@ -3017,13 +3092,21 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     });
     inputWrapper.append(tokenFlipWrapper);
      
-    let startingOpacity = targetOptions.imageOpacity || 1;
+    let startingOpacity = targetOptions.imageOpacity ?? 1;
     let opacityWrapper = build_token_num_input(startingOpacity, tokens,  'Image Opacity', 0, 1, 0.1, function (opacity) {
         customization.setTokenOption("imageOpacity", opacity);
         persist_token_customization(customization);
         decorate_modal_images(sidebarPanel, listItem, placedToken);
-    });
+    }, "This will adjust the image opacity. Accepted values between 0 and 1, 0 being fully transparent.");
     inputWrapper.append(opacityWrapper);
+
+    let startingHeading = targetOptions.imageHeading ?? 0;
+    let headingWrapper = build_token_num_input(startingHeading, tokens,  'Image Heading', 0, 360, 1, function (heading) {
+        customization.setTokenOption("imageHeading", heading);
+        persist_token_customization(customization);
+        decorate_modal_images(sidebarPanel, listItem, placedToken);
+    }, "This will adjust the default image direction/rotation. This affects where the 'look here' rotation and arrow key rotation uses as the token facing direction. Default token facing is down.");
+    inputWrapper.append(headingWrapper);
 
     // border color
     if(listItem.isTypePC() && targetOptions.playerThemeBorder != false){
@@ -3096,69 +3179,89 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     if (!specificBorderColorValue || (listItem.isTypePC() && targetOptions.playerThemeBorder != false)) {
         borderColorWrapper.hide();
     }
-
-    if(customization.tokenOptions.vision?.feet == undefined){
-        if(listItem.isTypePC()){
-            let pcData = find_pc_by_player_id(listItem.id);
-            let darkvision = 0;
-            if(pcData.senses.length > 0)
-            {
-                for(let i=0; i < pcData.senses.length; i++){
-                    const ftPosition = pcData.senses[i].distance.indexOf('ft.');
-                    const range = parseInt(pcData.senses[i].distance.slice(0, ftPosition));
-                    if(range > darkvision)
-                        darkvision = range;
-                }
-            }
-            customization.tokenOptions.vision = {
-                feet: darkvision.toString(),
-                color: window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS?.vision?.color : 'rgba(142, 142, 142, 1)'
-            }
+    //TO DO VISION UPDATE: add detection for pc/monsters
+    if(targetOptions.devilsight?.feet == undefined){
+        targetOptions.devilsight = {
+            feet: '0',
+            color: window.TOKEN_SETTINGS?.devilsight?.color ? window.TOKEN_SETTINGS?.devilsight?.color : 'rgba(142, 142, 142, 1)'
         }
-        else if(listItem.isTypeMonster() || listItem.isTypeOpen5eMonster()){
-            let darkvision = 0;
-            if(listItem.monsterData.senses.length > 0)
-            {
-                for(let i=0; i < listItem.monsterData.senses.length; i++){
-                    const ftPosition = listItem.monsterData.senses[i].notes.indexOf('ft.')
-                    const range = parseInt(listItem.monsterData.senses[i].notes.slice(0, ftPosition));
-                    if(range > darkvision)
-                        darkvision = range;
-                }
-            }
-
-            customization.tokenOptions.vision = {
-                feet: darkvision.toString(),
-                color: window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS?.vision?.color : 'rgba(142, 142, 142, 1)'
-            }
+    }
+    if(targetOptions.truesight?.feet == undefined){
+        targetOptions.truesight = {
+            feet: '0',
+            color: window.TOKEN_SETTINGS?.truesight?.color ? window.TOKEN_SETTINGS?.truesight?.color : 'rgba(142, 142, 142, 1)'
         }
-        else{
-            customization.tokenOptions.vision = {
-                feet: '60',
-                color: window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS?.vision?.color : 'rgba(142, 142, 142, 1)'
+    }
+    let vision = {
+        darkvision: 0,
+        devilsight: 0,
+        truesight: 0
+    }
+    if(listItem.isTypePC()){
+        let pcData = find_pc_by_player_id(listItem.id);
+
+        if(pcData.senses.length > 0)
+        {
+            const pcSenses = {
+                darkvision: "darkvision",
+                tremorsense: "darkvision",
+                blindsight: "truesight",
+                truesight: "truesight"
+            }
+            for(let i=0; i < pcData.senses.length; i++){
+                const name = pcData.senses[i].name?.toLowerCase();
+                const ftPosition = pcData.senses[i].distance.indexOf('ft.');
+                const range = parseInt(pcData.senses[i].distance.slice(0, ftPosition));
+                if(range > vision[pcSenses[name]])
+                    vision[pcSenses[name]] = range;
             }
         }
     }
-    if(customization.tokenOptions.light1?.feet == undefined){
-        customization.tokenOptions.light1 = {
+    else if(listItem.isTypeMonster() || listItem.isTypeOpen5eMonster()){
+        vision = get_monster_senses(listItem.monsterData.senses);
+    }
+    if(targetOptions.vision?.feet == undefined){
+        targetOptions.vision = {
+            feet: vision.darkvision.toString(),
+            color: window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS?.vision?.color : 'rgba(142, 142, 142, 1)'
+        }
+    }
+    if(targetOptions.truesight?.feet == undefined){
+        targetOptions.truesight = {
+            feet: vision.truesight.toString(),
+            color: (window.TOKEN_SETTINGS?.truesight?.color) ? window.TOKEN_SETTINGS.truesight.color : 'rgba(142, 142, 142, 1)'
+        }
+    }
+    if(targetOptions.devilsight?.feet == undefined){
+
+        targetOptions.devilsight = {
+            feet: vision.devilsight.toString(),
+            color: (window.TOKEN_SETTINGS?.devilsight?.color) ? window.TOKEN_SETTINGS.devilsight.color : 'rgba(142, 142, 142, 1)'
+        }
+    }
+    if(targetOptions.light1?.feet == undefined){
+        targetOptions.light1 = {
             feet: '0',
             color: window.TOKEN_SETTINGS?.light1?.color ? window.TOKEN_SETTINGS?.light1?.color : 'rgba(255, 255, 255, 1)'
         }
     }
-    if(customization.tokenOptions.light2?.feet == undefined){
-        customization.tokenOptions.light2 = {
+    if(targetOptions.light2?.feet == undefined){
+        targetOptions.light2 = {
             feet: '0',
             color: window.TOKEN_SETTINGS?.light2?.color ? window.TOKEN_SETTINGS?.light2?.color : 'rgba(142, 142, 142, 1)'
         }
     }
 
-
-    let uniqueVisionFeet = customization.tokenOptions.vision.feet;
-    let uniqueVisionColor = customization.tokenOptions.vision.color;
-    let uniqueLight1Feet = customization.tokenOptions.light1.feet;
-    let uniqueLight2Feet = customization.tokenOptions.light2.feet;
-    let uniqueLight1Color = customization.tokenOptions.light1.color;
-    let uniqueLight2Color = customization.tokenOptions.light2.color;
+    const uniqueDevilsightFeet = targetOptions.devilsight.feet;
+    const uniqueDevilsightColor = targetOptions.devilsight.color;
+    const uniqueTruesightFeet = targetOptions.truesight.feet;
+    const uniqueTruesightColor = targetOptions.truesight.color;
+    const uniqueVisionFeet = targetOptions.vision.feet;
+    const uniqueVisionColor = targetOptions.vision.color;
+    const uniqueLight1Feet = targetOptions.light1.feet;
+    const uniqueLight2Feet = targetOptions.light2.feet;
+    const uniqueLight1Color = targetOptions.light1.color;
+    const uniqueLight2Color = targetOptions.light2.color;
 
     const lightOption = {
     name: "auraislight",
@@ -3170,9 +3273,9 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     ],
     defaultValue: false
     };
-    let auraIsLightEnabled = (customization.tokenOptions.auraislight != undefined) ? customization.tokenOptions.auraislight : true;
+    let auraIsLightEnabled = (targetOptions.auraislight != undefined) ? targetOptions.auraislight : true;
     let enabledLightInput = build_toggle_input( lightOption, auraIsLightEnabled, function(name, newValue) {
-        console.log(`${name} setting is now ${newValue}`);
+        noisy_log(`${name} setting is now ${newValue}`);
         customization.setTokenOption("auraislight", newValue);
         persist_token_customization(customization);
         if (newValue) {
@@ -3194,6 +3297,28 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
                     <div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
                         <div class="token-image-modal-footer-title">Color</div>
                         <input class="spectrum" name="visionColor" value="${uniqueVisionColor}" >
+                    </div>
+                </div>
+                <div class="menu-vision-aura">
+                    <h3 style="margin-bottom:0px;">Devilsight</h3>
+                    <div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+                        <div class="token-image-modal-footer-title">Radius (${window.CURRENT_SCENE_DATA.upsq})</div>
+                        <input class="vision-radius" name="devilsight" type="text" value="${uniqueDevilsightFeet}" style="width: 3rem" />
+                    </div>
+                    <div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+                        <div class="token-image-modal-footer-title">Color</div>
+                        <input class="spectrum" name="devilsightColor" value="${uniqueDevilsightColor}" >
+                    </div>
+                </div>
+                <div class="menu-vision-aura">
+                    <h3 style="margin-bottom:0px;">Truesight</h3>
+                    <div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+                        <div class="token-image-modal-footer-title">Radius (${window.CURRENT_SCENE_DATA.upsq})</div>
+                        <input class="vision-radius" name="truesight" type="text" value="${uniqueTruesightFeet}" style="width: 3rem" />
+                    </div>
+                    <div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+                        <div class="token-image-modal-footer-title">Color</div>
+                        <input class="spectrum" name="truesightColor" value="${uniqueTruesightColor}" >
                     </div>
                 </div>
                 <div class="menu-inner-aura">
@@ -3233,7 +3358,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         ],
         defaultValue: false
     };
-    let auraRevealVisionEnabled = (customization.tokenOptions.share_vision != undefined) ? customization.tokenOptions.share_vision : false;
+    let auraRevealVisionEnabled = (targetOptions.share_vision != undefined) ? targetOptions.share_vision : false;
     for(let i=0; i<window.playerUsers.length; i++){
         if(!revealvisionOption.options.some(d => d.value == window.playerUsers[i].userId)){
             let option = {value: window.playerUsers[i].userId, label: window.playerUsers[i].userName, desciption: `Token vision is shared with ${window.playerUsers[i].userName}`};
@@ -3275,24 +3400,24 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     });
 
 
-    if(customization.tokenOptions.aura1?.feet == undefined){
-        customization.tokenOptions.aura1 = {
+    if(targetOptions.aura1?.feet == undefined){
+        targetOptions.aura1 = {
             feet: '0',
             color: window.TOKEN_SETTINGS?.aura1?.color ? window.TOKEN_SETTINGS?.aura1?.color : 'rgba(255, 255, 100, 0.5)'
         }
     }
-    if(customization.tokenOptions.aura2?.feet == undefined){
-        customization.tokenOptions.aura2 = {
+    if(targetOptions.aura2?.feet == undefined){
+        targetOptions.aura2 = {
             feet: '0',
             color: window.TOKEN_SETTINGS?.aura2?.color ? window.TOKEN_SETTINGS?.aura2?.color : 'rgba(255, 255, 100, 0.5)'
         }
     }
 
 
-    let uniqueAura1Feet = customization.tokenOptions.aura1.feet;
-    let uniqueAura2Feet = customization.tokenOptions.aura2.feet;
-    let uniqueAura1Color = customization.tokenOptions.aura1.color;
-    let uniqueAura2Color = customization.tokenOptions.aura2.color;
+    let uniqueAura1Feet = targetOptions.aura1.feet;
+    let uniqueAura2Feet = targetOptions.aura2.feet;
+    let uniqueAura1Color = targetOptions.aura1.color;
+    let uniqueAura2Color = targetOptions.aura2.color;
 
     const auraOption = {
         name: "auraVisible",
@@ -3304,9 +3429,9 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         ],
         defaultValue: false
     };
-    let auraIsEnabled = (customization.tokenOptions.auraVisible != undefined) ? customization.tokenOptions.auraVisible : false;
+    let auraIsEnabled = (targetOptions.auraVisible != undefined) ? targetOptions.auraVisible : false;
     let enabledAuraInput = build_toggle_input( auraOption, auraIsEnabled, function(name, newValue) {
-        console.log(`${name} setting is now ${newValue}`);
+        noisy_log(`${name} setting is now ${newValue}`);
         customization.setTokenOption("auraVisible", newValue);
         persist_token_customization(customization);
         if (newValue) {
@@ -3386,7 +3511,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     const colorPickerChange = function(e, tinycolor) {
         let auraName = e.target.name.replace("Color", "");
         let color = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-        console.log(auraName, e, tinycolor);
+        noisy_log(auraName, e, tinycolor);
         customization.setTokenOption(`${auraName}.color`, color)
         persist_token_customization(customization);
         
@@ -3400,17 +3525,26 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
     // token options override
     let tokenOptionsButton = build_override_token_options_button(sidebarPanel, listItem, placedToken, targetOptions, function(name, value) {
         customization.setTokenOption(name, value);
+        const selectedTokenImage = $('.example-token.selected .div-token-image').attr('data-src');
+        redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, undefined, selectedTokenImage);
     }, function () {
+        let devilsightInput = $("input[name='devilsightColor']").spectrum("get");
+        let truesightInput = $("input[name='truesightColor']").spectrum("get");
         let visionInput = $("input[name='visionColor']").spectrum("get");
         let light1Input = $("input[name='light1Color']").spectrum("get");
         let light2Input = $("input[name='light2Color']").spectrum("get");
+        customization.setTokenOption('devilsight.color', `rgba(${devilsightInput._r}, ${devilsightInput._g}, ${devilsightInput._b}, ${devilsightInput._a})`);
+        customization.setTokenOption('truesight.color', `rgba(${truesightInput._r}, ${truesightInput._g}, ${truesightInput._b}, ${truesightInput._a})`);
         customization.setTokenOption('vision.color', `rgba(${visionInput._r}, ${visionInput._g}, ${visionInput._b}, ${visionInput._a})`);
         customization.setTokenOption(`light1.color`, `rgba(${light1Input._r}, ${light1Input._g}, ${light1Input._b}, ${light1Input._a})`);
         customization.setTokenOption(`light2.color`, `rgba(${light2Input._r}, ${light2Input._g}, ${light2Input._b}, ${light2Input._a})`);
-
+        if(customization.tokenOptions.includeDDB == null)
+            delete customization.tokenOptions.includeDDB 
         persist_token_customization(customization);
         redraw_settings_panel_token_examples(customization.tokenOptions);
-        decorate_modal_images(sidebarPanel, listItem, placedToken);
+        const selectedTokenImage = $('.example-token.selected .div-token-image').attr('data-src');
+        display_token_configuration_modal(listItem, placedToken, selectedTokenImage, sidebarPanel);
+
     });
 
     inputWrapper.append(tokenOptionsButton);
@@ -3479,7 +3613,10 @@ function build_override_token_options_button(sidebarPanel, listItem, placedToken
     tokenOptionsButton.on("click", function (clickEvent) {
 
         build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
-            const options = find_token_customization(listItem.type, listItem.id)?.tokenOptions;
+            let options = find_token_options_for_list_item(listItem);
+            const selectedTokenImage = $('.example-token.selected .div-token-image').attr('data-src');
+            if(selectedTokenImage)
+                options = $.extend(true, {}, options, options.alternativeImagesCustomizations[selectedTokenImage]);
             const overrideOptions = listItem.isTypeAoe() ? 
                 token_setting_options().filter(option=> availableToAoe.includes(option.name))
                  .map(option => convert_option_to_override_dropdown(option)) 
@@ -3554,16 +3691,16 @@ function display_builtin_token_details_modal(listItem, placedToken) {
 }
 
 function build_token_div_for_sidebar_modal(imageUrl, listItem, placedToken) {
-    let parsedImage = parse_img(imageUrl);
     let options = find_token_options_for_list_item(listItem);
+    let parsedImage = parse_img(imageUrl);
     if (placedToken) {
         options = {...placedToken.options};
     }
     if(options.alternativeImagesCustomizations != undefined && options.alternativeImagesCustomizations[parsedImage] != undefined){
-        options = {
-            ...options,
-            ...options.alternativeImagesCustomizations[parsedImage]
-        }
+        options = $.extend(true, {}, 
+            options, 
+            options.alternativeImagesCustomizations[parsedImage]
+        )
     }
 
     let tokenDiv = build_alternative_image_for_modal(parsedImage, options, placedToken, listItem);
@@ -3571,10 +3708,48 @@ function build_token_div_for_sidebar_modal(imageUrl, listItem, placedToken) {
         tokenDiv.attr("data-monster", placedToken.options.monster);
     }
     set_list_item_identifier(tokenDiv, listItem);
-    enable_draggable_token_creation(tokenDiv, parsedImage);
+    enable_draggable_token_creation(tokenDiv, parsedImage, true);
     return tokenDiv;
-}
 
+}
+function includeDDBImages(alternativeImages = [], listItem, options) {
+    if (!listItem?.isTypeMonster() || !options) {
+        return alternativeImages;
+    }
+
+    const includeDDB = options.includeDDB;
+    const { largeAvatarUrl: fullImage, avatarUrl: avatarImage } = listItem.monsterData ?? {};
+    if(includeDDB)
+        alternativeImages = alternativeImages.filter(image => image != fullImage && image != avatarImage);
+    const pushUniqueImage = (image) => {
+        if (image && !alternativeImages.includes(image)) {
+            alternativeImages.push(image);
+        }
+    };
+    listItem.image = avatarImage;
+    switch (includeDDB) {
+        case "fullAvatarImage":
+            pushUniqueImage(fullImage);
+            pushUniqueImage(avatarImage);
+            break;
+        case "fullImage":
+            if (fullImage) {
+                if (alternativeImages.length === 0) {
+                    listItem.image = fullImage;
+                } else {
+                    pushUniqueImage(fullImage);
+                }
+            }
+            break;
+        case "avatarImage":
+            if (alternativeImages.length > 0) {
+                pushUniqueImage(avatarImage);
+            }
+            break;
+    }
+    return alternativeImages;
+    
+}
 /**
  * Clears the body of the given sidebarPanel and adds a new element for every alternative image the listItem has
  * @param sidebarPanel {SidebarPanel} the modal to display objects in
@@ -3610,16 +3785,20 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
         alternativeImages = alternativeImages.concat(placedToken.options.alternativeImages);
     }
     alternativeImages = alternativeImages.concat(alternative_images_for_item(listItem).map(image => parse_img(image)));
-
+    const customization = find_token_customization(listItem.type, listItem.id);
+    const defaultImage = customization?.tokenOptions?.defaultImage;
     let placedImg = parse_img(placedToken?.options?.imgsrc);
     if (placedImg.length > 0 && !alternativeImages.includes(placedImg)) {
         // the placedToken image has been changed by the user so put it at the front
         let tokenDiv = build_token_div_for_sidebar_modal(placedImg, listItem, placedToken);
         tokenDiv.attr("data-token-id", placedToken.options.id);
-        if((currentlySelectedToken != undefined && tokenDiv.find('.div-token-image')?.attr('src') == currentlySelectedToken) || (selectedTokenImage != undefined && tokenDiv.find('.div-token-image')?.attr('src') == selectedTokenImage))
+        if((currentlySelectedToken != undefined && placedImg == currentlySelectedToken) || (selectedTokenImage != undefined && placedImg == selectedTokenImage))
             tokenDiv.toggleClass('selected', true);
+        if(defaultImage != undefined && defaultImage == placedImg)
+            tokenDiv.toggleClass('default-token-image');
         modalBody.append(tokenDiv);
     }
+
 
     if (alternativeImages.length === 0 && placedImg !== parse_img(listItem?.image)) {
         // if we don't have any alternative images, show the default image
@@ -3629,7 +3808,8 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
             listItem.image = pc.image;
         }
         let tokenDiv = build_token_div_for_sidebar_modal(listItem?.image, listItem, placedToken);
-        if((currentlySelectedToken != undefined && tokenDiv.find('.div-token-image')?.attr('src') == currentlySelectedToken) || (selectedTokenImage != undefined && tokenDiv.find('.div-token-image')?.attr('src') == selectedTokenImage))
+        const image = parse_img(listItem.image);
+        if((currentlySelectedToken != undefined && image == currentlySelectedToken) || (selectedTokenImage != undefined && image == selectedTokenImage))
             tokenDiv.toggleClass('selected', true);
         modalBody.append(tokenDiv);
     }
@@ -3639,43 +3819,37 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
           return `class=aoe-token-tileable aoe-style-${aoeStyle.toLowerCase()} aoe-shape-${listItem.shape}`
         })
     }
+    const exampleImageChunkSize = 14;
+    let nextIndex = 0;
 
-    function* addExampleToken(index) {
-        
-        while(index < index+8 && index<alternativeImages.length){
-            setTimeout(function(){
-                if(index < alternativeImages.length){
-                    let tokenDiv = build_token_div_for_sidebar_modal(alternativeImages[index], listItem, placedToken);
-                    if((currentlySelectedToken != undefined && tokenDiv.find('.div-token-image')?.attr('src') == currentlySelectedToken) || (selectedTokenImage != undefined && tokenDiv.find('.div-token-image')?.attr('src') == selectedTokenImage))
-                        tokenDiv.toggleClass('selected', true);
-                    modalBody.append(tokenDiv);
-                    index++;
-                }
-            })
-            yield
-        }
-       
+    function appendNextBatch() {
+        const batch = alternativeImages.slice(nextIndex, nextIndex + exampleImageChunkSize);
+        const fragment = document.createDocumentFragment();
+
+        batch.forEach(imageUrl => {
+            const tokenDiv = build_token_div_for_sidebar_modal(imageUrl, listItem, placedToken);
+            const image = parse_img(imageUrl);
+            if ((currentlySelectedToken && image === currentlySelectedToken) || (selectedTokenImage && image === selectedTokenImage)) {
+                tokenDiv.toggleClass('selected', true);
+            }
+            if (defaultImage && defaultImage === imageUrl) {
+                tokenDiv.toggleClass('default-token-image');
+            }
+            fragment.appendChild(tokenDiv[0]);
+        });
+
+        modalBody.append(fragment);
+        nextIndex += batch.length;
     }
-    let buildToken = addExampleToken(0);
+
     const debounceExampleToken = mydebounce(() => {
         if (modalBody.scrollTop() + 300 >=
             modalBody[0].scrollHeight) {
-            for (let i = 0; i < 8; i++) {
-                buildToken.next()
-            }
+            appendNextBatch();
         }
     }, 50)
     modalBody.off('scroll.exampleToken').on('scroll.exampleToken', debounceExampleToken);
-    for (let i = 0; i < alternativeImages.length; i++) {
-        if (drawInline) {
-            let tokenDiv = build_token_div_for_sidebar_modal(alternativeImages[i], listItem, placedToken);
-            modalBody.append(tokenDiv);
-        } else {
-            if(i<13){
-                buildToken.next();
-            }
-        }
-    }
+    appendNextBatch();
 
     if (alternativeImages.length === 0) {
         sidebarPanel.footer.find(".token-image-modal-url-label-add-wrapper > .token-image-modal-url-label-wrapper > .token-image-modal-footer-title").text("Replace The Default Image");
@@ -3696,13 +3870,13 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
 function build_alternative_image_for_modal(image, options, placedToken, listItem) {
     let mergedOptions = {};
     if (options !== undefined) {
-        mergedOptions = {...mergedOptions, ...options};
+        mergedOptions = $.extend(true, {}, mergedOptions, options);
     }
     if (placedToken !== undefined) {
-        mergedOptions = {...mergedOptions, ...placedToken.options};
+        mergedOptions = $.extend(true, {}, mergedOptions, placedToken.options);
     }
     if (listItem?.isTypeAoe()) {
-        mergedOptions = {...mergedOptions, ...build_aoe_token_options(listItem.style, listItem.shape, listItem.size, listItem.name)};
+        mergedOptions = $.extend(true, {}, mergedOptions, build_aoe_token_options(listItem.style, listItem.shape, listItem.size, listItem.name));
     }
     mergedOptions.imgsrc = image;
     let tokenDiv = build_example_token(mergedOptions);
@@ -3744,10 +3918,10 @@ async function decorate_modal_images(sidebarPanel, listItem, placedToken) {
         let item = $(items[i]);
         let imgsrc = item.find(".div-token-image, .token-image").attr("data-src");
         if(options.alternativeImagesCustomizations != undefined && options.alternativeImagesCustomizations[imgsrc] != undefined){
-            combinedOptions = {
-                ...options,
-                ...options.alternativeImagesCustomizations[imgsrc]
-            }
+            combinedOptions = $.extend(true, {}, 
+                options,
+                options.alternativeImagesCustomizations[imgsrc]
+            )
         }
         
         let tokenDiv = build_alternative_image_for_modal(imgsrc, combinedOptions, placedToken, listItem);
@@ -3934,7 +4108,7 @@ function inject_encounter_monsters() {
 function did_change_mytokens_items() {
     rebuild_token_items_list();
     filter_token_list($('[name="token-search"]').val() ? $('[name="token-search"]').val() : "");
-}
+}   
 
 /**
  * creates an iframe that loads a monster stat block for the given item
@@ -3978,10 +4152,11 @@ function open_monster_item_iframe(listItem) {
         "border": "none",
         "z-index": 10
     });
+
     tokensPanel.container.append(iframe);
 
     let rowHtml = find_html_row(listItem, tokensPanel.body);
-    console.log(listItem.fullPath(), rowHtml);
+    noisy_log(listItem.fullPath(), rowHtml);
     rowHtml.addClass("button-loading");
     iframe.on("load", function(event) {
         rowHtml.removeClass("button-loading");
@@ -3989,14 +4164,43 @@ function open_monster_item_iframe(listItem) {
             // it was just created. no need to do anything until it actually loads something
             return;
         }
-
         let contents = $(event.target).contents();
-        contents.find("#site > footer").hide();
-        contents.find("#site-main > header.main").hide();
-        contents.find("#site-main").css("padding-top", 0);
-        contents.find(".site-bar").hide();
-        contents.find(".ad-container").hide();
-        contents.find(".homebrew-comments").hide();
+        contents.find("head").append(`
+			<style>
+                #site > footer,
+                #site-main > header.main,
+                .site-bar,
+                .ad-container,
+                .homebrew-comments,
+                #mega-menu-target {
+                    display:none !important;
+                }
+                #site-main{
+                    padding-top:0;
+                }
+                .more-info.details-more-info
+                {
+                    padding: 8;
+                }
+                .mon-stat-block{
+                    column-count:1
+                }
+                button.avtt-roll-button {
+                    /* lifted from DDB encounter stat blocks  */
+                    color: #b43c35;
+                    border: 1px solid #b43c35;
+                    border-radius: 4px;
+                    background-color: #fff;
+                    white-space: nowrap;
+                    font-size: 14px;
+                    font-weight: 600;
+                    font-family: Roboto Condensed,Open Sans,Helvetica,sans-serif;
+                    line-height: 18px;
+                    letter-spacing: 1px;
+                    padding: 1px 4px 0;
+                }
+			</style>
+		`);
 
         // move the image below the stat block
         let image = contents.find(".detail-content > .image");
@@ -4015,34 +4219,14 @@ function open_monster_item_iframe(listItem) {
             $("#monster-details-page-iframe").remove();
         });
 
-        contents.find(".main.content-container").attr("style", "padding:0!important");
-        contents.find(".more-info.details-more-info").css("padding", "8");
-        contents.find(".mon-stat-block").css("column-count", "1");
+        contents.find(".main.content-container").attr("style", "padding:0!important")
         contents.find("a").attr("target", "_blank");
 
         scan_creature_pane(contents, listItem.monsterData.name, listItem.monsterData.avatarUrl);
-
-        contents.find("body").append(`<style>
-            button.avtt-roll-button {
-                /* lifted from DDB encounter stat blocks  */
-                color: #b43c35;
-                border: 1px solid #b43c35;
-                border-radius: 4px;
-                background-color: #fff;
-                white-space: nowrap;
-                font-size: 14px;
-                font-weight: 600;
-                font-family: Roboto Condensed,Open Sans,Helvetica,sans-serif;
-                line-height: 18px;
-                letter-spacing: 1px;
-                padding: 1px 4px 0;
-            }
-            </style>
-        `);
-
+        tokensPanel.remove_sidebar_loading_indicator();
     });
 
-
+    tokensPanel.display_sidebar_loading_indicator('Loading Fallback Monster Sheet');
     iframe.attr("src", listItem.monsterData.url);
 }
 
@@ -4105,13 +4289,15 @@ function display_monster_filter_modal() {
         console.group("observe_filters")
         let mutation_target = $(event.target).contents()[0];
         let mutation_config = { attributes: false, childList: true, characterData: false, subtree: true };
-
-        let filter_observer = new MutationObserver(function() {
+        if(window.filter_observer)
+            window.filter_observer.disconnect();
+        window.filter_observer = new MutationObserver(function() {
             let filterButton = $(event.target).contents().find(".monster-listing__header button");
             let monsterListing = $(event.target).contents().find(".qa-monster-filters:not('above-loaded')")
             if (filterButton.length > 0 || monsterListing.length>0){
                 filter_observer.disconnect();
-                $(event.target).contents().find("head").append(
+                const contents = $(event.target).contents();
+                contents.find("head").append(
                 `<style>
                     .input-select .input-select__dropdown-wrapper {
                         transition: max-height 0.5s ease 0.1s;
@@ -4131,12 +4317,12 @@ function display_monster_filter_modal() {
                     }
                 </style>`
                 );
-                $(event.target).contents().find("body").addClass("prevent-sidebar-modal-close");
+                contents.find("body").addClass("prevent-sidebar-modal-close");
 
-                $(event.target).contents().find(".monster-listing__header button").click();
-                $(event.target).contents().find('.qa-monster-filters').toggleClass('above-loaded', true);
-                $(event.target).contents().find(".popup-overlay").css("background", "rgb(235, 241, 245)");
-                $(event.target).contents().find(".popup-content").css({
+                contents.find(".monster-listing__header button").click();
+                contents.find('.qa-monster-filters').toggleClass('above-loaded', true);
+                contents.find(".popup-overlay").css("background", "rgb(235, 241, 245)");
+                contents.find(".popup-content").css({
                     "width": "100%",
                     "height": "100%",
                     "max-width": "100%",
@@ -4153,8 +4339,112 @@ function display_monster_filter_modal() {
                         <path class="svg-center" d="M10.9545457,13.4909096 L8.00000021,11.2727278 C7.5983384,10.9714815 7.0285184,11.0528842 6.72727294,11.454546 C6.42602658,11.8562078 6.5074293,12.4260278 6.90909113,12.7272733 L11.227273,15.9636369 L17.2363639,8.95454602 C17.562714,8.57296782 17.5179421,7.99908236 17.136364,7.67272782 C16.7547858,7.34637782 16.1809003,7.39114963 15.8545458,7.77272782 L10.9545457,13.4909096 Z"></path>
                     </svg>
                     <span class="input-checkbox__text">Only show monsters I have access to</span>
-                </label>`).insertAfter($(event.target).contents().find(".qa-monster-filters_remember"));
+                </label>`).insertAfter(contents.find(".qa-monster-filters_remember"));
+                
+                const savedSourceCategories = localStorage.getItem(`${gameId}-sourceCategoryMonsterFilter`) != null ? JSON.parse(localStorage.getItem(`${gameId}-sourceCategoryMonsterFilter`)) : [];
+                
+                const createDropdownOption = function(name, value){
+                    return $(`<li aria-selected="false" class="input-select__dropdown-option" role="option">
+                        <label class="input-checkbox input-checkbox-label qa-input-checkbox_label input-select__dropdown-option-input-checkbox">
+                            <input class="input-checkbox__input qa-input-checkbox_input" tabindex="0" value="${value}" type="checkbox" ${savedSourceCategories.includes(`${value}`) ? 'checked': ''}>
+                            <div class="input-checkbox__focus-indicator"></div>
+                            <svg class="input-checkbox__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" overflow="visible" focusable="false">
+                                <path class="svg-border" d="M5.63636382,2.00000055 C3.62805456,2.00000064 2,3.62805509 2,5.63636419 C2,5.63636419 2,9.87878843 2,18.3636369 C1.9999997,20.3719455 3.62805456,22 5.63636367,22 L18.3636365,22 C20.3719454,22.0000001 22,20.3719455 22,18.3636364 L22,5.63636364 C22,3.62805455 20.3719454,2 18.3636363,2 L5.63636382,2.00000055 Z M19,17.25 C19,18.2164987 18.2164979,19 17.25,19 L6.75000007,19 C5.78350125,19 5,18.2164979 5,17.25 C5,17.25 5,17.25 5,17.25 L5,6.74999977 L5,6.75000003 C4.99999985,5.78350126 5.78350125,5 6.74999999,5 L17.2499999,5 C18.2164986,4.99999996 18.9999998,5.78350126 18.9999998,6.75000003 L19,17.25 Z"></path>
+                                <path class="svg-center" d="M10.9545457,13.4909096 L8.00000021,11.2727278 C7.5983384,10.9714815 7.0285184,11.0528842 6.72727294,11.454546 C6.42602658,11.8562078 6.5074293,12.4260278 6.90909113,12.7272733 L11.227273,15.9636369 L17.2363639,8.95454602 C17.562714,8.57296782 17.5179421,7.99908236 17.136364,7.67272782 C16.7547858,7.34637782 16.1809003,7.39114963 15.8545458,7.77272782 L10.9545457,13.4909096 Z"></path>
+                            </svg>
+                            <span class="input-checkbox__text">${name}</span>
+                        </label>
+                    </li>`)
+                }
+
+                const dropdownFilter = $(`<div class="input-select qa-input-select-dropdown qa-monster-filters_source_category input-select--list input-select--multi">
+                                            <div aria-haspopup="true" class="input-select__button qa-input-select-dropdown_button" type="button" role="button" tabindex="0">
+                                                <div class="input-select__button-text"><span style="flex: 1 1 0%; text-align: start;"><span style="flex: 1 1 0%; text-align: start;">Source Category</span></span></div>
+                                                <div class="input-select__button-icon">
+                                                    <svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" overflow="visible">
+                                                        <path d="M 0 25 L 50 75 L 100 25" stroke-width="15" fill="none"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            <input class="input-select__input-cache qa-input-select-dropdown_input-cache" title="Search Source Category Options" type="text" value="">
+                                            <div aria-hidden="true" class="input-select__dropdown-wrapper">
+                                                <ul class="input-select__dropdown" role="listbox">
+                                                   
+                                                </ul>
+                                            </div>
+                                        </div>`);
+                const sourceCategories = window.ddbConfigJson.sourceCategories;
+                const list = dropdownFilter.find('ul.input-select__dropdown[role="listbox"]')
+                for (const category of sourceCategories){
+                    if((!category.isEnabledByDefault && category.name != "Subscriber Content") || category.name == "Internal")
+                        continue;
+                    const option = createDropdownOption(category.name, category.id);
+                    list.append(option);
+                }
+                list.find('li').sort(function(a,b){
+                    return $(a).find('.input-checkbox__text').text().localeCompare($(b).find('.input-checkbox__text').text(), "en", { sensitivity: 'base' });
+                }).appendTo(list);
+                const sourceDropdown = contents.find('.monster-filters>.input-select:nth-of-type(2)');
+                sourceDropdown.after(dropdownFilter);
+
+                dropdownFilter.find('.qa-input-select-dropdown_input-cache').off('input.search').on('input.search', function(e) {
+                    const query = e.target.value.toLowerCase();
+                    const listItems = list.find('li')
+                    listItems.filter(function() {
+                        const text = $(this).find('.input-checkbox__text').text().toLowerCase();
+                        $(this).toggle(text.trim() == '' || text.indexOf(query) > -1);
+                    });
+                });
+                dropdownFilter.off('pointerdown.open').on('pointerdown.open', (e)=>{
+                    const target = $(e.target);
+                    if(target.closest('.input-select__clear-button').length>0) return;
                     
+                    if(target.closest('.input-select__button-icon').length>0){
+                        dropdownFilter.toggleClass('is-open');
+                    } else{
+                        dropdownFilter.addClass('is-open');
+                    }
+                    const filterBody = contents.find('body');
+                    if(dropdownFilter.hasClass('is-open')){
+                        
+                        filterBody.off('click.closeFilter').on('click.closeFilter', function(e){
+                            if($(e.target).closest('.qa-monster-filters_source_category').length>0){
+                                return;
+                            }
+                            dropdownFilter.removeClass('is-open');
+                            filterBody.off('click.closeFilter');
+                        })
+                    } else{
+                        filterBody.off('click.closeFilter');
+                    }
+                   
+                })
+                const setNumberOfFilterText = function(filter, filterName){
+                    const numberOfChecked = filter.find(".input-select__dropdown input:checked").length;
+                    
+                    filter.find('.input-select__button-text-count').remove();
+                    filter.find('.input-select__clear-button').remove();
+                    if(numberOfChecked == 0) return;
+                    
+
+                    const textCount = $(`<span aria-label="${numberOfChecked} selected" class="input-select__button-text-count">(${numberOfChecked})</span>`)
+                    filter.find('.input-select__button-text>span').append(textCount);
+
+                    const clearButton = $(`<button class="input-select__clear-button qa-input-select-dropdown_clear-button" title="Clear ${filterName}" type="button"><svg class="" xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect x="0" y="40" width="100" height="20"></rect></g><g transform="rotate(45 50 50)"><rect x="0" y="40" width="100" height="20"></rect></g></svg></button>`)
+                    clearButton.off('pointerdown.clearFilter').on('pointerdown.clearFilter', (e) =>{
+                        filter.find(".input-select__dropdown input:checked").prop("checked", false);
+                        filter.find('.input-select__button-text-count').remove();
+                        filter.find('.input-select__clear-button').remove();
+                    })    
+                    filter.find('.input-select__button-text').append(clearButton);
+                }
+                dropdownFilter.off('input.showNumber').on('input.showNumber', 'input[type="checkbox"]', function(){
+                    setNumberOfFilterText(dropdownFilter, "Source Category");
+                })
+                setNumberOfFilterText(dropdownFilter, "Source Category");
+                dropdownFilter.off('blur.close').on('blur.close', (e)=>{
+                    dropdownFilter.removeClass('is-open');
+                })
                 let closeButton = build_close_button();
                 closeButton.css({
                     "position": "absolute",
@@ -4166,13 +4456,13 @@ function display_monster_filter_modal() {
                     clickEvent.stopPropagation();
                     close_monster_filter_iframe();
                 });
-                $(event.target).contents().find(".qa-monster-filters").prepend(closeButton);
+                contents.find(".qa-monster-filters").prepend(closeButton);
 
                 tokensPanel.remove_sidebar_loading_indicator();
                 iframe.css({ "z-index": 10 });
             }
         });
-        filter_observer.observe(mutation_target,mutation_config);
+        window.filter_observer.observe(mutation_target,mutation_config);
         console.groupEnd()
     });
     iframe.attr("src", `https://www.dndbeyond.com/encounter-builder`);
@@ -4182,11 +4472,18 @@ function display_monster_filter_modal() {
 function close_monster_filter_iframe() {
     let sidebarMonsterFilter = $("#monster-filter-iframe");
     let ownedFilter = sidebarMonsterFilter.contents().find('.qa-monster-filters_accessible-content input')[0]?.checked 
+    const checkedSourceCategories = sidebarMonsterFilter.contents().find('.qa-monster-filters_source_category input[type="checkbox"]:checked').map(function() {
+            return $(this).val();
+        }).get();
+    
    
     if(localStorage.getItem('DDBEB-monster-filters') != null) {
         // the user has the "remember filters" option checked... let's grab our data and move on
-        if(ownedFilter != undefined)
+        if(ownedFilter != undefined)      
             localStorage.setItem(`${gameId}-ownedMonsterFilter`, ownedFilter);
+        if(checkedSourceCategories != undefined)
+            localStorage.setItem(`${gameId}-sourceCategoryMonsterFilter`, JSON.stringify(checkedSourceCategories))
+   
         read_local_monster_search_filters();
         sidebarMonsterFilter.remove();
         tokensPanel.remove_sidebar_loading_indicator(); // if the user double clicks, we might remove iframe before dismissing the loading indicator
@@ -4199,8 +4496,10 @@ function close_monster_filter_iframe() {
         rememberButton.click();
         setTimeout(function() { // make sure we let the "remember filter" click propagate before we harvest that data
             read_local_monster_search_filters();
-            localStorage.removeItem(`${gameId}-ownedMonsterFilter`, ownedFilter);
+            localStorage.removeItem(`${gameId}-ownedMonsterFilter`);
+            localStorage.removeItem(`${gameId}-sourceCategoryMonsterFilter`)
             window.ownedMonstersOnly = ownedFilter; 
+            window.sourceCategoryMonsterFilter = checkedSourceCategories?.length>0 ? checkedSourceCategories : [];
             rememberButton.click();
             sidebarMonsterFilter.remove();
             tokensPanel.remove_sidebar_loading_indicator(); // if the user double clicks, we might remove iframe before dismissing the loading indicator
@@ -4216,6 +4515,8 @@ function read_local_monster_search_filters() {
         monster_search_filters = $.parseJSON(localStorage.getItem('DDBEB-monster-filters'))    
         if(localStorage.getItem(`${gameId}-ownedMonsterFilter`) != 'undefined' && $.parseJSON(localStorage.getItem(`${gameId}-ownedMonsterFilter`)) != null)
             window.ownedMonstersOnly = $.parseJSON(localStorage.getItem(`${gameId}-ownedMonsterFilter`));
+        if(localStorage.getItem(`${gameId}-sourceCategoryMonsterFilter`) != 'undefined' && JSON.parse(localStorage.getItem(`${gameId}-sourceCategoryMonsterFilter`)) != null)
+            window.sourceCategoryMonsterFilter = JSON.parse(localStorage.getItem(`${gameId}-sourceCategoryMonsterFilter`));
     } else {
         monster_search_filters = {};
     }
@@ -4225,7 +4526,7 @@ function read_local_monster_search_filters() {
     } else {
         $(".monster-filter-button").css("color", "#838383");
     }
-    console.log("monster_search_filters", monster_search_filters);
+    noisy_log("monster_search_filters", monster_search_filters);
 }
 
 /** @returns {string} the query params to use when searching for monsters via the DDB API */
@@ -4250,15 +4551,17 @@ function register_custom_token_image_context_menu() {
         selector: ".custom-token-image-item, #token-change-image-modal .example-token",
         build: function(element, e) {
             let items = {};
-            let foundElement = find_sidebar_list_item(element)
-            let tokenChangeImage = element.parents().find('#token-change-image-modal').length>0
+            let itemToPlace = find_sidebar_list_item(element)
+            let tokenChangeImage = element.parents().find('#token-change-image-modal').length>0;
             if (!element.hasClass("change-token-image-item") && !tokenChangeImage) {
+                const rootId = RootFolder.allValues().find(d => itemToPlace.folderPath.includes(d.path) && d.name !='')?.id;
+                const tokenCustomization = find_or_create_token_customization(itemToPlace.type, itemToPlace.id, itemToPlace.parentId, rootId);
+                const defaultImage = tokenCustomization?.tokenOptions?.defaultImage;
+                const imgSrc = element.find(".token-image").attr("data-src");
                 items.place = {
                     name: "Place Token",
                     callback: function (itemKey, opt, originalEvent) {
-                        let itemToPlace = find_sidebar_list_item(opt.$trigger);
                         let specificImage = undefined;
-                        let imgSrc = opt.$trigger.find(".token-image").attr("src");
                         if (imgSrc !== undefined && imgSrc.length > 0) {
                             specificImage = imgSrc;
                         }
@@ -4268,15 +4571,39 @@ function register_custom_token_image_context_menu() {
                 items.placeHidden = {
                     name: "Place Hidden Token",
                     callback: function (itemKey, opt, originalEvent) {
-                        let itemToPlace = find_sidebar_list_item(opt.$trigger);
                         let specificImage = undefined;
-                        let imgSrc = opt.$trigger.find(".token-image").attr("src");
                         if (imgSrc !== undefined && imgSrc.length > 0) {
                             specificImage = imgSrc;
                         }
                         create_and_place_token(itemToPlace, true, specificImage);
                     }
                 };
+                
+                const alternativeImages = alternative_images_for_item(itemToPlace);
+                if(alternativeImages?.length>1){
+                    items.setAsDefault = {
+                        name: defaultImage == imgSrc ? "Disable Default Image" : "Set as Default Image",
+                        callback: function (itemKey, opt, originalEvent) {
+                            let specificImage = undefined;
+                            const currentDefault = $('.default-token-image');
+                            currentDefault.addClass('removeTransition');
+                            currentDefault.removeClass('default-token-image');
+                            if (defaultImage != imgSrc && imgSrc !== undefined && imgSrc.length > 0) {
+                                tokenCustomization.tokenOptions.defaultImage = imgSrc;
+                                opt.$trigger.addClass('default-token-image');
+                            } else{
+                                delete tokenCustomization.tokenOptions.defaultImage
+                            }
+                            setTimeout(function(){
+                                currentDefault.removeClass('removeTransition');
+                            }, 200)
+                            const row = build_sidebar_list_row(itemToPlace);
+                            enable_draggable_token_creation(row);                  
+                            $(`.sidebar-list-item-row[id="${itemToPlace.id}"]`).replaceWith(row);
+                            persist_token_customization(tokenCustomization);
+                        }
+                    };
+                }
             }
             items.copy = {
                 name: "Copy Url",
@@ -4309,7 +4636,7 @@ function register_custom_token_image_context_menu() {
                     window.MB.inject_chat(msgdata)
                 }
             };
-            if (!$('.token-image-modal-url-label-add-wrapper .token-image-modal-footer-title').text().includes('Replace') && !element.hasClass("change-token-image-item") && foundElement?.type !== 'builtinToken' && foundElement?.type !== 'ddbToken') {
+            if (!$('.token-image-modal-url-label-add-wrapper .token-image-modal-footer-title').text().includes('Replace') && !element.hasClass("change-token-image-item") && itemToPlace?.type !== 'builtinToken' && itemToPlace?.type !== 'ddbToken') {
                 items.border = "---";
                 items.remove = {
                     name: "Remove",
@@ -4492,8 +4819,12 @@ function create_token_copy_inside(listItem, open5e = false){
         options.sizeId = listItem.monsterData.sizeId;
         // TODO: handle custom sizes
     }
-
-    let darkvision = 0;
+    
+    let vision = {
+        darkvision: 0,
+        devilsight: 0,
+        truesight: 0
+    }
     if(window.monsterListItems){
         let monsterSidebarListItem = open5e ? window.open5eListItems.filter((d) => listItem.id == d.id)[0] : window.monsterListItems.filter((d) => listItem.id == d.id)[0]; 
         if(!monsterSidebarListItem){
@@ -4507,18 +4838,21 @@ function create_token_copy_inside(listItem, open5e = false){
            
         if(monsterSidebarListItem){
             if(monsterSidebarListItem.monsterData.senses.length > 0){
-                for(let i=0; i < monsterSidebarListItem.monsterData.senses.length; i++){
-                    const ftPosition = monsterSidebarListItem.monsterData.senses[i].notes.indexOf('ft.')
-                    const range = parseInt(monsterSidebarListItem.monsterData.senses[i].notes.slice(0, ftPosition));
-                    if(range > darkvision)
-                        darkvision = range;
-                }
+                vision = get_monster_senses(monsterSidebarListItem.monsterData.senses, vision);
             }
         }
     } 
     options.vision = {
-        feet: darkvision.toString(),
+        feet: foundOptions.vision?.feet == undefined ? vision.darkvision.toString() : foundOptions.vision.feet,
         color: (window.TOKEN_SETTINGS?.vision?.color) ? window.TOKEN_SETTINGS.vision.color : 'rgba(142, 142, 142, 1)'
+    }
+    options.truesight = {
+        feet: foundOptions.truesight?.feet == undefined ? vision.truesight.toString() : foundOptions.truesight.feet,
+        color: (window.TOKEN_SETTINGS?.truesight?.color) ? window.TOKEN_SETTINGS.truesight.color : 'rgba(142, 142, 142, 1)'
+    }
+    options.devilsight = {
+        feet: foundOptions.devilsight?.feet == undefined ? vision.devilsight.toString() : foundOptions.devilsight.feet,
+        color: (window.TOKEN_SETTINGS?.devilsight?.color) ? window.TOKEN_SETTINGS.devilsight.color : 'rgba(142, 142, 142, 1)'
     }
     
     options.monster = 'customStat'
@@ -4529,7 +4863,7 @@ function create_token_copy_inside(listItem, open5e = false){
 
     options.imgsrc = random_image_for_item(listItem);
 
-    // TODO: figure out if we still need to do this, and where they are coming from
+
     delete options.undefined;
     delete options[""];
     const statBlock = build_stat_block_for_copy(listItem, options, open5e)
@@ -4576,17 +4910,17 @@ function display_change_image_modal(placedToken) {
             }
         }
         alternativeImages = [...new Set(alternativeImages)]; // clear out any duplicates
-        console.log("display_change_image_modal", alternativeImages);
+        noisy_log("display_change_image_modal", alternativeImages);
         alternativeImages.forEach(imgUrl => {
             if (!imgUrl || sidebarPanel.body.find(`.example-token[data-src='${imgUrl}']`).length>0)
                 return;
             let html;
             let video = false;
             if(token?.options.videoToken == true || (['.mp4', '.webm', '.m4v'].some(d => imgUrl.includes(d)))){
-                html = $(`<video disableRemotePlayback muted autoplay='false' data-src='${imgUrl}'  class="example-token" data-token-id='${token?.options.id}' loading="lazy" alt="alternative image" />`);  
+                html = $(`<video disableRemotePlayback muted autoplay='false' data-src='${imgUrl}'  class="example-token" data-token-id='${token?.options.id}' alt="alternative image" />`);  
                 video = true;   
             } else{
-                html = $(`<img class="example-token" loading="lazy" data-src='${imgUrl}' data-token-id='${token?.options.id}' alt="alternative image" />`);
+                html = $(`<img class="example-token" data-src='${imgUrl}' data-token-id='${token?.options.id}' alt="alternative image" />`);
             }
             updateImgSrc(imgUrl, html, video);
             // the user is changing their token image, allow them to simply click an image
@@ -4601,11 +4935,13 @@ function display_change_image_modal(placedToken) {
                     if(token){ 
                         
                         if (token.options.alternativeImagesCustomizations != undefined) {
-                            token.options = {
-                                ...token.options,
-                                ...token.options.alternativeImagesCustomizations[imgSrc],
-                            }
-                            const newSize = token.options.tokenSize * hpps
+                            token.options = $.extend(true, {}, 
+                                token.options,
+                                token.options.alternativeImagesCustomizations[imgSrc],
+                            );
+                            const newSize = token.options.tokenSize 
+                                                ? token.options.tokenSize * hpps 
+                                                : token.options.size ?? hpps ;
                             token.size(newSize);
                         }
                         token.options.imgsrc = imgSrc; 
@@ -4758,7 +5094,7 @@ function display_change_image_modal(placedToken) {
 }
 
 const fetch_and_cache_scene_monster_items = mydebounce( () => {
-    console.log("fetch_and_cache_scene_monster_items");
+    noisy_log("fetch_and_cache_scene_monster_items");
     let monsterIds = [];
     let open5emonsterIds = []
     for (let id in window.TOKEN_OBJECTS) {
@@ -4782,10 +5118,10 @@ const fetch_and_cache_scene_monster_items = mydebounce( () => {
         }
     }
     if (monsterIds.length === 0 && open5emonsterIds === 0) {
-        console.log("fetch_and_cache_scene_monster_items no monsters to fetch");
+        noisy_log("fetch_and_cache_scene_monster_items no monsters to fetch");
         return;
     }
-    console.log("fetch_and_cache_scene_monster_items calling fetch_monsters with ids: ", monsterIds);
+    noisy_log("fetch_and_cache_scene_monster_items calling fetch_monsters with ids: ", monsterIds);
     fetch_monsters(monsterIds, async function (response) {
         if (response !== false) {
             update_monster_item_cache(response.map(m => SidebarListItem.Monster(m)));
@@ -4793,7 +5129,7 @@ const fetch_and_cache_scene_monster_items = mydebounce( () => {
     });
 });
 
-const fetch_and_cache_monsters = mydebounce( (monsterIds, callback, open5e) => {
+const fetch_and_cache_monsters = mydebounce( (monsterIds, callback=()=>{}, open5e) => {
     if(open5e){
         const cachedIds = Object.keys(cached_open5e_items);
         const monstersToFetch = monsterIds.filter(id => !cachedIds.includes(id) && id != 'customStat');
@@ -4810,7 +5146,6 @@ const fetch_and_cache_monsters = mydebounce( (monsterIds, callback, open5e) => {
             if (response !== false) {
                 update_monster_item_cache(response.map(m => SidebarListItem.Monster(m)), function(){callback()});
             }
- 
         });
     }
     
@@ -4833,7 +5168,7 @@ function update_open5e_item_cache(newItems, callback=()=>{}) {
    
    const promise = new Promise((resolve, reject) =>{
         newItems.forEach(async (item, index, array) => {
-            cached_open5e_items[item.monsterData.slug] = item
+            cached_open5e_items[item.monsterData.key] = item
             if(index === array.length-1) {
               resolve();
             }
@@ -4844,31 +5179,32 @@ function update_open5e_item_cache(newItems, callback=()=>{}) {
 }
 function convert_open5e_monsterData(monsterData){
         monsterData.isHomebrew = true;
+        monsterData.open5e = true;
         monsterData.stats = [
         {
             "statId": 1,
             "name": null,
-            "value": monsterData.strength
+            "value": monsterData.ability_scores?.strength
         },
         {
             "statId": 2,
             "name": null,
-            "value": monsterData.dexterity
+            "value": monsterData.ability_scores?.dexterity
         },
         {
             "statId": 3,
             "name": null,
-            "value": monsterData.constitution
+            "value": monsterData.ability_scores?.constitution
         },
         {
             "statId": 4,
             "name": null,
-            "value": monsterData.intelligence
+            "value": monsterData.ability_scores?.intelligence
         },
         {
             "statId": 5,
             "name": null,
-            "value": monsterData.wisdom
+            "value": monsterData.ability_scores?.wisdom
         },
         {
             "statId": 6,
@@ -4876,93 +5212,48 @@ function convert_open5e_monsterData(monsterData){
             "value": monsterData.charisma
         }];
 
-        monsterData.passivePerception = monsterData.perception + 10;
-   
-
-        if(monsterData.special_abilities?.length>0){
-            monsterData.specialTraitsDescription = monsterData.special_abilities.map(action => {
+        monsterData.passivePerception = monsterData.passive_perception || monsterData.skill_bonuses_all?.perception + 10;
+        
+        const convertOpen5eEntry = (entry) => {
+          return entry.map(action => {
                 let desc = ``
                 if(action.desc == undefined && action.description != undefined){
                     action.desc = action.description;
                 }else if(action.desc == undefined){
                     action.desc ='';
                 }
-                if(action.name == 'Spellcasting'){
-                    actionDesc = action.desc.replace(/Cantrips|[0-9]+[A-Za-z][A-Za-z]-level|[0-9]+[A-Za-z][A-Za-z]\slevel/g, '</p><p>$&');
+                if(action.name.includes('Spellcasting')){
+                    actionDesc = action.desc.replaceAll(/_([^_]+)_/g, '$1').replaceAll(/(-\s+)?\*\*([^*]+)\*\*/g, '$2 ').replaceAll(/At Will|Cantrips|[0-9]+[A-Za-z][A-Za-z]-level|[0-9]+[A-Za-z][A-Za-z]\slevel|\d+\/Day/gi, '<br><br>$&');
                     desc = `<p><em><strong>${action.name}.</strong></em> ${actionDesc}</p>`;
                 }
                 else{
-                    desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc.replace(/\n/g, `<br />`)}</p>`
+                    desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc.replace(/\n/g, `<br />`).replaceAll(/_([^_]+)_/g, '<em>$1</em>').replaceAll(/(-\s+)?\*\*([^*]+)\*\*/g, '<strong>$2</strong>')}</p>`
                 }
                 desc = desc.replace(/\d\dd\d\d\s[+-]\s\d|\d\dd\d\s[+-]\s\d|\dd\d\d\s[+-]\s\d|\dd\d\s[+-]\s\d|\d\dd\d\d|\d\dd\d|\dd\d\d|\dd\d/g, `<span data-dicenotation='$&' data-rolltype='damage' data-rollaction='damage'>$&</span>`);
                 desc = desc.replace(/\s[+-]\d\d\s|\s[+-]\d\s/g, `<span data-dicenotation='1d20$&' data-rollaction='attack'>$&</span> `);
                 desc = desc.replace(`(<span`, `<span`).replace(`span>)`, `span>`);
                 return desc;
-            }).join("");
+            }).join(""); 
+        };
+
+
+        if(monsterData.traits?.length>0){
+            monsterData.specialTraitsDescription = convertOpen5eEntry(monsterData.traits);
         }
-               
+        
         if(monsterData.actions?.length>0){
-            monsterData.actionsDescription = monsterData.actions.map(action => {
-                if(action.desc == undefined && action.description != undefined){
-                    action.desc = action.description;
-                }else if(action.desc == undefined){
-                    action.desc ='';
-                }
-                let desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc}</p>`
-                desc = desc.replace(/\d\dd\d\d\s[+-]\s\d|\d\dd\d\s[+-]\s\d|\dd\d\d\s[+-]\s\d|\dd\d\s[+-]\s\d|\d\dd\d\d|\d\dd\d|\dd\d\d|\dd\d/g, `<span data-dicenotation='$&' data-rolltype='damage' data-rollaction='damage'>$&</span>`);
-                desc = desc.replace(/\s[+-]\d\d\s|\s[+-]\d\s/g, `<span data-dicenotation='1d20$&' data-rollaction='attack'>$&</span> `);
-                desc = desc.replace(`(<span`, `<span`).replace(`span>)`, `span>`);
-                return desc;
-            }).join("");
+            const actions = monsterData.actions.filter(action => action.action_type == "ACTION");
+            const reactions = monsterData.actions.filter(action => action.action_type == "REACTION");
+            const bonusActions = monsterData.actions.filter(action => action.action_type == "BONUS_ACTION");
+            const legendaryActions = monsterData.actions.filter(action => action.action_type == "LEGENDARY_ACTION");
+            monsterData.actionsDescription = convertOpen5eEntry(actions);
+            monsterData.reactionsDescription = convertOpen5eEntry(reactions);
+            monsterData.bonusActionsDescription = convertOpen5eEntry(bonusActions);
+            monsterData.legendaryActionsDescription = convertOpen5eEntry(legendaryActions);
         }
-    
-        if(monsterData.bonus_actions?.length>0){
-            monsterData.bonusActionsDescription = monsterData.bonus_actions.map(action => {
-                if(action.desc == undefined && action.description != undefined){
-                    action.desc = action.description;
-                }else if(action.desc == undefined){
-                    action.desc ='';
-                }
-                let desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc}</p>`
-                desc = desc.replace(/\d\dd\d\d\s[+-]\s\d|\d\dd\d\s[+-]\s\d|\dd\d\d\s[+-]\s\d|\dd\d\s[+-]\s\d|\d\dd\d\d|\d\dd\d|\dd\d\d|\dd\d/g, `<span data-dicenotation='$&' data-rolltype='damage' data-rollaction='damage'>$&</span>`);
-                desc = desc.replace(/\s[+-]\d\d\s|\s[+-]\d\s/g, `<span data-dicenotation='1d20$&' data-rollaction='attack'>$&</span> `);
-                desc = desc.replace(`(<span`, `<span`).replace(`span>)`, `span>`);
-                return desc;
-            }).join("");
-        }
-   
-        if(monsterData.reactions?.length>0){
-            monsterData.reactionsDescription = monsterData.reactions.map(action => {
-                if(action.desc == undefined && action.description != undefined){
-                    action.desc = action.description;
-                }else if(action.desc == undefined){
-                    action.desc ='';
-                }
-                let desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc}</p>`
-                desc = desc.replace(/\d\dd\d\d\s[+-]\s\d|\d\dd\d\s[+-]\s\d|\dd\d\d\s[+-]\s\d|\dd\d\s[+-]\s\d|\d\dd\d\d|\d\dd\d|\dd\d\d|\dd\d/g, `<span data-dicenotation='$&' data-rolltype='damage' data-rollaction='damage'>$&</span>`);
-                desc = desc.replace(/\s[+-]\d\d\s|\s[+-]\d\s/g, `<span data-dicenotation='1d20$&' data-rollaction='attack'>$&</span> `);
-                desc = desc.replace(`(<span`, `<span`).replace(`span>)`, `span>`);
-                return desc;
-            }).join("");
-        }
- 
-        if(monsterData.legendary_actions?.length>0){
-            monsterData.legendaryActionsDescription = monsterData.legendary_actions.map(action => {
-                if(action.desc == undefined && action.description != undefined){
-                    action.desc = action.description;
-                }else if(action.desc == undefined){
-                    action.desc ='';
-                }
-                let desc = `<p><em><strong>${action.name}.</strong></em> ${action.desc}</p>`
-                desc = desc.replace(/\d\dd\d\d\s[+-]\s\d|\d\dd\d\s[+-]\s\d|\dd\d\d\s[+-]\s\d|\dd\d\s[+-]\s\d|\d\dd\d\d|\d\dd\d|\dd\d\d|\dd\d/g, `<span data-dicenotation='$&' data-rollaction='damage'>$&</span>`);
-                desc = desc.replace(/\s[+-]\d\d\s|\s[+-]\d\s/g, `<span data-dicenotation='1d20$&' data-rollaction='attack'>$&</span> `);
-                desc = desc.replace(`(<span`, `<span`).replace(`span>)`, `span>`);
-                return desc;
-            }).join("");
-        }
-       
+
         let convertedSkills = [];
-        Object.entries(monsterData.skills).forEach(([key, value]) => {  
+        Object.entries(monsterData.skill_bonuses).forEach(([key, value]) => {  
             if(key == "athletics"){
                 convertedSkills.push({skillId: 2, value: value, additionalBonus: null})
             }
@@ -5022,114 +5313,122 @@ function convert_open5e_monsterData(monsterData){
 
 
         let convertedSenses = [];
-
-        monsterData.senses = monsterData.senses.split(', ');
-        let sensesArray = [];
-        for(let i = 0; i < monsterData.senses.length; i++){
-            let currentSense = monsterData.senses[i].split(' ');
-            if(currentSense[0] == "blindsight"){
-                convertedSenses.push({senseId: 1, notes: `${currentSense[1]} ${currentSense[2]}`})
-            }
-            else if(currentSense[0] == "darkvision"){
-                convertedSenses.push({senseId: 2, notes: `${currentSense[1]} ${currentSense[2]}`})
-            }
-            else if(currentSense[0] == "tremorsense"){
-                convertedSenses.push({senseId: 3, notes: `${currentSense[1]} ${currentSense[2]}`})
-            }        
-            else if(currentSense[0] == "truesight"){
-                convertedSenses.push({senseId: 4, notes: `${currentSense[1]} ${currentSense[2]}`})
-            }  
-
+        //TO DO VISION UPDATE: senseId's here to reference for fetching other senses
+        if(monsterData.blindsight_range){
+            convertedSenses.push({senseId: 1, notes: `${monsterData.blindsight_range} ft.`})
         }
+        if(monsterData.darkvision_range){
+            convertedSenses.push({senseId: 2, notes: `${monsterData.darkvision_range} ft.`})
+        }
+        if(monsterData.tremorsense_range){
+            convertedSenses.push({senseId: 3, notes: `${monsterData.tremorsense_range} ft.`})
+        }
+        if(monsterData.truesight_range){
+            convertedSenses.push({senseId: 4, notes: `${monsterData.truesight_range} ft.`})
+        }
+         
         monsterData.senses = convertedSenses;
 
-        if(monsterData.cr >= 1){
-          monsterData.challengeRatingId = monsterData.cr + 4
+        if(monsterData.challenge_rating >= 1){
+          monsterData.challengeRatingId = monsterData.challenge_rating + 4
         }
-        else if(monsterData.cr == 0){
+        else if(monsterData.challenge_rating == 0){
           monsterData.challengeRatingId = 1
         }
-        else if(monsterData.cr == 0.125){
+        else if(monsterData.challenge_rating == 0.125){
           monsterData.challengeRatingId = 2
         }
-        else if(monsterData.cr == 0.25){
+        else if(monsterData.challenge_rating == 0.25){
           monsterData.challengeRatingId = 3
         }
-        else if(monsterData.cr == 0.5){
+        else if(monsterData.challenge_rating == 0.5){
           monsterData.challengeRatingId = 4
         }
-        monsterData.sourceId = monsterData.document__title;    
-        monsterData.sourcePageNumber = monsterData.page_no;
+        monsterData.sourceId = monsterData.document?.key;    
         monsterData.hitPointDice = {};
+        if(!monsterData.hit_dice){
+            monsterData.hitPointDice.diceCount = 0;
+            monsterData.hitPointDice.diceValue = 0;
+            monsterData.hitPointDice.fixedValue = monsterData.hit_points;
+        }else{
+            const hitDiceMatch = monsterData.hit_dice.match(/(\d*)d(\d+)(\+(\d+))?/);
+            if(hitDiceMatch){
+                monsterData.hitPointDice.diceCount = hitDiceMatch[1] ? parseInt(hitDiceMatch[1]) : 1;
+                monsterData.hitPointDice.diceValue = parseInt(hitDiceMatch[2]);
+                if(hitDiceMatch[4]){
+                    monsterData.hitPointDice.fixedValue = parseInt(hitDiceMatch[4]);
+                }
+            }
+        }
+        
         monsterData.hitPointDice.diceString = monsterData.hit_dice;
         monsterData.averageHitPoints = monsterData.hit_points;
         monsterData.armorClass = monsterData.armor_class;
-        monsterData.armorClassDescription = monsterData.armor_desc;  
+        monsterData.armorClassDescription = monsterData.armor_detail;  
 
-        if(monsterData.size == 'Tiny'){
+        if(monsterData.size.name == 'Tiny'){
             monsterData.sizeId = 2
         }
-        else if(monsterData.size == 'Small' ){
+        else if(monsterData.size.name == 'Small' ){
             monsterData.sizeId = 3
         }
-        else if(monsterData.size == 'Medium' ){
+        else if(monsterData.size.name == 'Medium' ){
             monsterData.sizeId = 4
         }
-        else if(monsterData.size == 'Large' ){
+        else if(monsterData.size.name == 'Large' ){
             monsterData.sizeId = 5
         }
-        else if(monsterData.size == 'Huge' ){
+        else if(monsterData.size.name == 'Huge' ){
             monsterData.sizeId = 6
         }
-        else if(monsterData.size == 'Gargantuan' ){
+        else if(monsterData.size.name == 'Gargantuan' ){
             monsterData.sizeId = 7
         }
 
         monsterData.savingThrows = [];
-        if(monsterData.strength_save != null){
-            monsterData.savingThrows.push({statId: 1, bonusModifier: null})
-        }
-        if(monsterData.dexterity_save != null){
-            monsterData.savingThrows.push({statId: 2, bonusModifier: null})
-        }
-        if(monsterData.constitution_save != null){
-            monsterData.savingThrows.push({statId: 3, bonusModifier: null})
-        }
-        if(monsterData.intelligence_save != null){
-            monsterData.savingThrows.push({statId: 4, bonusModifier: null})
-        }
-        if(monsterData.wisdom_save != null){
-            monsterData.savingThrows.push({statId: 5, bonusModifier: null})
-        }
-        if(monsterData.charisma_save != null){
-            monsterData.savingThrows.push({statId: 6, bonusModifier: null})
-        }
-        
-        
-
-        monsterData.movements = [];
-        Object.entries(monsterData.speed).forEach(([key, value]) => {
-          key = key.replace(/\b[a-z]/g, function(letter) {
-            return letter.toUpperCase();
-          });
-          if(key == 'Walk'){
-            monsterData.movements.push({movementId: 1, speed: value, name: key})
-          }
-          else if(key == 'Burrow'){
-            monsterData.movements.push({movementId: 2, speed: value, name: key})
-          }
-          else if(key == 'Climb'){
-            monsterData.movements.push({movementId: 3, speed: value, name: key})
-          }
-          else if(key == 'Fly'){
-            monsterData.movements.push({movementId: 4, speed: value, name: key})
-          }
-          else if(key == 'Swim'){
-            monsterData.movements.push({movementId: 5, speed: value, name: key})
-          }
+        Object.entries(monsterData.saving_throws).forEach(([key, value]) => {
+            if(key == "strength"){
+                monsterData.savingThrows.push({statId: 1, bonusModifier: value})
+            }
+            else if(key == "dexterity"){
+                monsterData.savingThrows.push({statId: 2, bonusModifier: value})
+            }
+            else if(key == "constitution"){
+                monsterData.savingThrows.push({statId: 3, bonusModifier: value})
+            }
+            else if(key == "intelligence"){
+                monsterData.savingThrows.push({statId: 4, bonusModifier: value})
+            }
+            else if(key == "wisdom"){
+                monsterData.savingThrows.push({statId: 5, bonusModifier: value})
+            }
+            else if(key == "charisma"){
+                monsterData.savingThrows.push({statId: 6, bonusModifier: value})
+            }
         });
 
+        monsterData.movements = [];
+        const distanceUnit = monsterData.speed.unit;
+        const hover = monsterData.speed.hover;
+        Object.entries(monsterData.speed).forEach(([key, value]) => {
+            if(key == "walk"){
+                monsterData.movements.push({movementId: 1, speed: `${value} ${distanceUnit}`, name: "walk"})
+            }
+            else if(key == "burrow"){
+                monsterData.movements.push({movementId: 2, speed: `${value} ${distanceUnit}`, name: "burrow"})
+            }
+            else if(key == "climb"){
+                monsterData.movements.push({movementId: 3, speed: `${value} ${distanceUnit}`, name: "climb"})
+            }
+            else if(key == "fly"){
+                monsterData.movements.push({movementId: 4, speed: `${value} ${distanceUnit}`, name: hover == true ? "hover" : "fly"})
+            }
+            else if(key == "swim"){
+                monsterData.movements.push({movementId: 5, speed: `${value} ${distanceUnit}`, name: "swim"})
+            }
+        })
 
+        monsterData.languages = monsterData.languages.as_string;
 
         return monsterData;
 }

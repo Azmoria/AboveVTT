@@ -8,81 +8,37 @@ window.onbeforeunload = function(event)
 		tabCommunicationChannel.postMessage({
       		msgType: 'removeObserver'
     	})
-		console.log("refreshing page, storing zoom first");
+		noisy_log("refreshing page, storing zoom first");
 		add_zoom_to_storage();
 		window.PeerManager.send(PeerEvent.goodbye());
 
 	}
 };
 
+function getGameLogButton() {
+	let btn = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']");
+	if(btn.length === 0){
+		// Fallback SVG selector
+		btn = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]');
+	}
+	return btn;
+}
 
+const DISCORD_LINK_MAP = {
+  'https://cdn.discordapp.com/attachments/1083353621778923581/1110550133134852206/lightbulb.png': 'https://www.googleapis.com/drive/v3/files/1_QnkvmGct2dzeu-pBO9ofT-828pWvCcn?alt=media&key=AIzaSyBcA_C2gXjTueKJY2iPbQbDvkZWrTzvs5I',
+  'https://cdn.discordapp.com/attachments/1083353621778923581/1083353624891105290/star.png': 'https://drive.google.com/uc?id=1F868fVhQnzFALTcnEIXUDeAl3UKZccKA',
+  'https://cdn.discordapp.com/attachments/1083353621778923581/1083353624652038215/skull.png': 'https://drive.google.com/uc?id=1of0nmVMh8rnt9pz6iri9gtq-mCQmgCWA',
+  'https://cdn.discordapp.com/attachments/1083353621778923581/1083353625113399376/mappin.png': 'https://drive.google.com/uc?id=1excaNtaLfn_Hj5EHuH-h8iimpzC36i0M',
+  'https://cdn.discordapp.com/attachments/1083353621778923581/1148091041589756005/flame1.gif': 'https://drive.google.com/uc?id=1eWHXQsHloLuocYOuHnvvd0zymZQMH7sm'
+};
+function update_old_discord_link(link) {
+  return DISCORD_LINK_MAP[link] || link;
+}
 
 /** Parses the given URL for GoogleDrive or Dropbox semantics and returns an updated URL.
  * @param {String} url to parse
  * @return {String} a sanitized and possibly modified url to help with loading maps */
-function parse_img(url) {
-		let retval = url;
-		if (typeof retval !== "string") {
-			console.log("parse_img is converting", url, "to an empty string");
-			retval = "";
-		} else if (retval.trim().startsWith("data:")) {
-			console.warn("parse_img is removing a data url because those are not allowed"); 
-			retval = "";
-		} else if (retval.includes("https://drive.google.com") && !retval.match(/id=([a-zA-Z0-9_-]+)/g)) {
-			const parsed = 'https://drive.google.com/thumbnail?id=' + retval.split('/')[5] +'&sz=w3000';
-			retval = parsed;
-			return retval;		
-		} 
-		else if (retval.startsWith("https://drive.google.com") || (retval.includes("https://drive.usercontent.google.com")) && retval.match(/id=([a-zA-Z0-9_-]+)/g)) {
-			const parsed = 'https://drive.google.com/thumbnail?id=' + retval.matchAll(/id=([a-zA-Z0-9_-]+)/g).next().value[1] +'&sz=w3000';
-			retval = parsed;
-			return retval;		
-		} 
-		else if(retval.startsWith("https://www.googleapis.com/drive/v3/files/")){ // fix due to 1.5/1.6 beta 
-			const fileid = retval.split('files/')[1].split('?')[0];
-			const parsed = 'https://drive.google.com/thumbnail?id=' + fileid +'&sz=w3000';
-			retval = parsed;
-			return retval;
-		}
-		else if(retval.includes("dropbox.com")){
-			const splitUrl = url.split('dropbox.com');
-			const parsed = `https://dl.dropboxusercontent.com${splitUrl[splitUrl.length-1]}`
-			retval = parsed;
-		}
-		else if(retval.includes("https://1drv.ms/"))
-		{
-			if(retval.split('/')[4].length == 1){
-				retval = retval;
-			}
-			else{
-				retval = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
-			}
-		}
-		if(retval.includes("discordapp.com")){
-			retval = update_old_discord_link(retval)
-		}
-		return retval;	
-}
-
-function update_old_discord_link(link){
-  if(link == 'https://cdn.discordapp.com/attachments/1083353621778923581/1110550133134852206/lightbulb.png'){
-    link = 'https://www.googleapis.com/drive/v3/files/1_QnkvmGct2dzeu-pBO9ofT-828pWvCcn?alt=media&key=AIzaSyBcA_C2gXjTueKJY2iPbQbDvkZWrTzvs5I'
-  }
-  else if(link == "https://cdn.discordapp.com/attachments/1083353621778923581/1083353624891105290/star.png"){
-   link = 'https://drive.google.com/uc?id=1F868fVhQnzFALTcnEIXUDeAl3UKZccKA';
-  }
-  else if(link == "https://cdn.discordapp.com/attachments/1083353621778923581/1083353624652038215/skull.png"){
-    link = "https://drive.google.com/uc?id=1of0nmVMh8rnt9pz6iri9gtq-mCQmgCWA"
-  }
-  else if(link == "https://cdn.discordapp.com/attachments/1083353621778923581/1083353625113399376/mappin.png"){
-    link = "https://drive.google.com/uc?id=1excaNtaLfn_Hj5EHuH-h8iimpzC36i0M"
-  }
-  else if(link == "https://cdn.discordapp.com/attachments/1083353621778923581/1148091041589756005/flame1.gif"){
-    link = "https://drive.google.com/uc?id=1eWHXQsHloLuocYOuHnvvd0zymZQMH7sm"
-  }
-  return link;
-}
-
+const GOOGLE_DRIVE_ID_REGEX = /id=([a-zA-Z0-9_-]+)/;
 
 
 /**
@@ -114,9 +70,9 @@ function clamp (number, min, max) {
  * @param {String} url Youtube video URL
  * @returns String | false
  */
+const YT_REGEX = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
 function youtube_parser(url) {
-	let regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-	let match = url.match(regExp);
+	const match = url.match(YT_REGEX);
 	return (match && match[7].length == 11) ? match[7] : false;
 }
 
@@ -125,8 +81,9 @@ function youtube_parser(url) {
  * @param {string} value any URL
  * @returns boolean
  */
+const URL_VALIDATION_REGEX = /^(?:(?:(?:https?|ftp):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)(?:\.(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)*(?:\.(?:[a-z\u00a1-\uffff]{2,})))(?::\d{2,5})?(?:[/?#]\S*)?$/i;
 function validateUrl(value) {
-  return /^(?:(?:(?:https?|ftp):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!(?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)(?:\.(?:[a-z\u00a1-\uffff0-9]-*)*[a-z\u00a1-\uffff0-9]+)*(?:\.(?:[a-z\u00a1-\uffff]{2,})))(?::\d{2,5})?(?:[/?#]\S*)?$/i.test(value);
+  return URL_VALIDATION_REGEX.test(value);
 }
 
 const MAX_ZOOM = 5
@@ -150,7 +107,7 @@ const debounce_font_change = mydebounce(function(){
  */
 function change_zoom(newZoom, x, y, reset = false) {
 	console.group("change_zoom")
-	console.log("zoom", newZoom, x , y)
+	noisy_log("zoom", newZoom, x , y)
 	let zoomCenterX = x || $(window).width() / 2
 	let zoomCenterY = y || $(window).height() / 2
 	// window.VTTMargin is the size of the black area to the left and top of the map
@@ -163,19 +120,20 @@ function change_zoom(newZoom, x, y, reset = false) {
 	if($('#projector_zoom_lock.enabled > [class*="is-active"]').length>0 && window.DM)
 		$(window).off('scroll.projectorMode')
 	
+    if(!window.WIZARDING)
+		draw_svg_grid(); // scale grid so lines are always visible
 
-
-	if(reset != true){
-		$(window).scrollLeft(pageX);
-		$(window).scrollTop(pageY);	
-	}
 
 	$('#VTTWRAPPER').css({
 		"--window-zoom": window.ZOOM,
 	})
 	debounce_font_change();	
 	set_default_vttwrapper_size();
-	if(reset == true){
+	if(reset != true){
+		$(window).scrollLeft(pageX);
+		$(window).scrollTop(pageY);	
+	}
+	else {
 		//this was changed from scrollIntoView to calculate the center and scrollTo as if loaded in an iframe it would scroll the parent window in firefox
 		const sceneMap = $("#scene_map")[0];
 
@@ -185,7 +143,7 @@ function change_zoom(newZoom, x, y, reset = false) {
 		let scrollX = Math.max(0, sceneMapCenterX - Math.round(window.innerWidth / 2));
 		const scrollY = Math.max(0, sceneMapCenterY - Math.round(window.innerHeight / 2));
 		if ($('#hide_rightpanel').hasClass('point-right') && $('.ct-sidebar.ct-sidebar--hidden').length == 0)
-			scrollX += 170 // 170 half of game log		
+			scrollX += get_sidebar_width() / 2 // offset by half the sidebar width so the scene centers in the visible area
 		window.scrollTo({ left: scrollX, top: scrollY, behavior: 'auto' });			
 	}
 
@@ -203,29 +161,31 @@ function change_zoom(newZoom, x, y, reset = false) {
 */
 function add_zoom_to_storage() {
 	console.group("add_zoom_to_storage");
-	console.log("storing zoom");
+	noisy_log("storing zoom");
 
-	if(window.ZOOM !== get_reset_zoom()) {
-		const zooms = JSON.parse(localStorage.getItem('zoom')) || [];
-		const zoomIndex = zooms.findIndex(zoom => zoom.title === window.CURRENT_SCENE_DATA.title);
-		const centerView = center_of_view(); 
-		const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
-		if (zoomIndex !== -1) {
-			zooms[zoomIndex].zoom = window.ZOOM;
-			zooms[zoomIndex].leftOffset = window.scrollX + window.innerWidth/2 - sidebarSize/2;
-			zooms[zoomIndex].topOffset = window.scrollY + window.innerHeight/2;
-		}
-		else{
-			// zoom doesn't exist
-			zooms.push({
-				"title": window.CURRENT_SCENE_DATA.title,
-				"zoom":window.ZOOM,
-				"leftOffset": window.scrollX + window.innerWidth/2 - sidebarSize/2,
-				"topOffset": window.scrollY + window.innerHeight/2
-			});
-		}
-		localStorage.setItem('zoom', JSON.stringify(zooms));
-	} else {console.log("zoom has not changed, skipping storage")}
+	const currentDate = Date.now();
+	const zooms = JSON.parse(localStorage.getItem('zoom'))?.filter(z=> !z.title && z.expiryDate != undefined && z.expiryDate>currentDate) || []; // filter out old data that used to be based on scene title rather then id and remove older data to prevent long term storage issues
+	const centerView = center_of_view(); 
+	const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
+	const saved = zooms.find(zoom => zoom.id === window.CURRENT_SCENE_DATA.id);
+	if (saved != undefined) {
+		saved.zoom = window.ZOOM;
+		saved.leftOffset = window.scrollX + window.innerWidth/2 - sidebarSize/2;
+		saved.topOffset = window.scrollY + window.innerHeight/2;
+		saved.expiryDate = currentDate + (30 * 24 * 60 * 60 * 1000) ;
+	}
+	else{
+		// zoom doesn't exist
+		zooms.push({
+			"zoom":window.ZOOM,
+			"leftOffset": window.scrollX + window.innerWidth/2 - sidebarSize/2,
+			"topOffset": window.scrollY + window.innerHeight/2,
+			"id": window.CURRENT_SCENE_DATA.id,
+			"expiryDate": currentDate + (30 * 24 * 60 * 60 * 1000) // 30 days from now
+		});
+	}
+	localStorage.setItem('zoom', JSON.stringify(zooms));
+	
 
 	console.groupEnd("add_zoom_to_storage")
 }
@@ -234,20 +194,24 @@ function add_zoom_to_storage() {
 * Sets default values for VTTWRAPPER and black_layer based off zoom.
 */
 function set_default_vttwrapper_size() {
-	$("#VTTWRAPPER").width($("#scene_map").width() * window.CURRENT_SCENE_DATA.scale_factor * window.ZOOM + 1400);
-	$("#VTTWRAPPER").height($("#scene_map").height() * window.CURRENT_SCENE_DATA.scale_factor * window.ZOOM + 1400);
-	$("#black_layer").width(($("#scene_map").width()) * window.CURRENT_SCENE_DATA.scale_factor * window.ZOOM + 2000 + window.VTTMargin );
-	$("#black_layer").height(($("#scene_map").height()) * window.CURRENT_SCENE_DATA.scale_factor * window.ZOOM + 2000 + window.VTTMargin );
+	const black_layer = $("#black_layer");
+	const sceneMapSize = getSceneMapSize();
+	const w = sceneMapSize.sceneWidth * window.ZOOM * window.CURRENT_SCENE_DATA.scale_factor;
+	const h = sceneMapSize.sceneHeight * window.ZOOM * window.CURRENT_SCENE_DATA.scale_factor;
+	black_layer.width(w + 2000 + window.VTTMargin);
+	black_layer.height(h + 2000 + window.VTTMargin);
+
 }
 
 /**
  * Removes the zoom for the current scene from local storage, applied when user click "fit zoom" button.
  */
-function remove_zoom_from_storage() {
-	const zooms = JSON.parse(localStorage.getItem('zoom')) || [];
-	const zoomIndex = zooms.findIndex(zoom => zoom.title === window.CURRENT_SCENE_DATA.title);
+function remove_zoom_from_storage(sceneId = window.CURRENT_SCENE_DATA.id) {
+	const currentDate = Date.now();
+	const zooms = JSON.parse(localStorage.getItem('zoom'))?.filter(z=> !z.title && z.expiryDate != undefined && z.expiryDate>currentDate) || [];
+	const zoomIndex = zooms.findIndex(zoom => zoom.id === sceneId);
 	if (zoomIndex !== -1) {
-		console.log("removing zoom from storage", zooms[zoomIndex]);
+		noisy_log("removing zoom from storage", zooms[zoomIndex]);
 		zooms.splice(zoomIndex, 1);
 	}
 	localStorage.setItem('zoom', JSON.stringify(zooms));
@@ -258,7 +222,7 @@ function remove_zoom_from_storage() {
 */
 function apply_zoom_from_storage() {
 	console.group("apply_zoom_from_storage");
-	const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
+	const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
 	let initial_x = isNaN(parseInt(window.CURRENT_SCENE_DATA.initial_x)) ? undefined : window.CURRENT_SCENE_DATA.initial_x - window.innerWidth/2 + sidebarSize/2;
 	let initial_y =  isNaN(parseInt(window.CURRENT_SCENE_DATA.initial_y)) ? undefined : window.CURRENT_SCENE_DATA.initial_y - window.innerHeight/2;
 	let initial_zoom =  isNaN(parseInt(window.CURRENT_SCENE_DATA.initial_zoom)) ? undefined : window.CURRENT_SCENE_DATA.initial_zoom;
@@ -271,10 +235,11 @@ function apply_zoom_from_storage() {
 	else{
 		const zoomState = localStorage.getItem("zoom");
 		if (zoomState != null) {
-			const zooms = JSON.parse(zoomState);
-			const zoomIndex = zooms.findIndex(zoom => zoom.title === window.CURRENT_SCENE_DATA.title);
+			const currentDate = Date.now();
+			const zooms = JSON.parse(zoomState)?.filter(z => !z.title && z.expiryDate != undefined && z.expiryDate>currentDate) || [];
+			const zoomIndex = zooms.findIndex(zoom => zoom.id === window.CURRENT_SCENE_DATA.id);
 			if(zoomIndex !== -1) {
-				console.log("restoring zoom level", zooms[zoomIndex]);
+				noisy_log("restoring zoom level", zooms[zoomIndex]);
 				change_zoom(zooms[zoomIndex].zoom)
 
 				if(initial_x != undefined && initial_y != undefined)
@@ -284,7 +249,7 @@ function apply_zoom_from_storage() {
 			}
 			else{
 				// Zooms in storage but not for this scene
-				console.log("scene does not have a zoom stored")
+				noisy_log("scene does not have a zoom stored")
 				reset_zoom()
 				if(initial_x != undefined && initial_y != undefined)
 					window.scrollTo(initial_x, initial_y)
@@ -292,7 +257,7 @@ function apply_zoom_from_storage() {
 		}
 		else{
 			// no zooms in storage
-			console.log("no zooms in storage")
+			noisy_log("no zooms in storage")
 			reset_zoom()
 			if(initial_x != undefined && initial_y != undefined)
 				window.scrollTo(initial_x, initial_y)
@@ -304,85 +269,92 @@ function apply_zoom_from_storage() {
 	console.groupEnd()
 }
 
-var zoomBusy = false;
-var zoomQ = [];
-var lastZoom;	  
-//each zoom event [amt, typ, off, x, y] typ = 0(relative) 1(absolute) 2(offset)
-//keep a queue - which can mostly be squashed except for some offset events
-function throttledZoom(amount, typeFlag, zx, zy)  {
-	if(typeFlag === 2) {
-		if(zoomQ.length == 0) {
-			zoomQ = [[1.0,0,amount,zx,zy]];				
-		} else {
-			last = zoomQ[zoomQ.length-1];
-			if(last[1] === 0) {
-				last[2] = amount;
-			} else { //last[1] == 1
-				last[0] += amount;
-			}
-		}
-	} else if(zoomQ.length == 0 || typeFlag === 1) {
-		zoomQ = [[amount,typeFlag, 0, zx, zy]];
-	} else { //relative
-		last = zoomQ[zoomQ.length-1];
-		if(last[2] === 0) { //no offset
-			last[0] = last[0] * amount;
-		} else { //complex case where we need sequence
-			zoomQ.push([amount,typeFlag, 0, zx, zy]);
-		}
-	}
-	if(!zoomBusy) {
-		zoomBusy = true;
-		function applyOrDone() {
-			if(zoomQ.length) { //add all the queue events together based on current zoom
-				let z = window.ZOOM;
-				let zoomX, zoomY;
-				let doit = false;
-				if(zoomQ.length) {
-					while(zoomQ.length) {
-						e = zoomQ.pop(0);
-						z = ((e[1] === 0) ? z * e[0] : e[0]) + e[2];
-						zoomX = e[3];
-						zoomY = e[4];
-					}
-					z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
-					if(z != window.ZOOM) doit = true;
-					zoomQ = [];
+
+//encapsulate
+const throttledZoom = function(){
+	let zoomBusy = false;
+	let zoomQ = [];
+	let lastZoom;
+	function applyOrDone() {
+		if(zoomQ.length) { //add all the queue events together based on current zoom
+			let z = window.ZOOM;
+			let zoomX, zoomY;
+			let doit = false;
+			if(zoomQ.length) {
+				while(zoomQ.length) {
+					let e = zoomQ.shift(); //was: pop(0) -- not a thing
+					z = ((e[1] === 0) ? z * e[0] : e[0]) + e[2];
+					zoomX = e[3];
+					zoomY = e[4];
 				}
-				if(doit && lastZoom && Date.now() - lastZoom < 2) {
-					//throttle by time
-					setTimeout(() => {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-						requestAnimationFrame(applyOrDone)
-					}, 1);
-				} else {
-					if(doit) {
-						change_zoom(z, zoomX, zoomY);
-						lastZoom = Date.now();
-					}
-					requestAnimationFrame(applyOrDone);
-				} 
+				z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+				if(z != window.ZOOM) doit = true;
+			}
+			if(doit && lastZoom && Date.now() - lastZoom < 2) {
+				//throttle by time
+				setTimeout(() => {
+					change_zoom(z, zoomX, zoomY);
+					lastZoom = Date.now();
+					requestAnimationFrame(applyOrDone)
+				}, 1);
 			} else {
-				zoomBusy = false;
+				if(doit) {
+					change_zoom(z, zoomX, zoomY);
+					lastZoom = Date.now();
+				}
+				requestAnimationFrame(applyOrDone);
+			} 
+		} else {
+			zoomBusy = false;
+		}
+	}
+
+	//each zoom event [amt, typ, off, x, y] typ = 0(relative) 1(absolute) 2(offset)
+	//keep a queue - which can mostly be squashed except for some offset events
+	function throttledZoom(amount, typeFlag, zx, zy)  {
+		if(typeFlag === 2) {
+			if(zoomQ.length === 0) {
+				zoomQ = [[1.0,0,amount,zx,zy]];				
+			} else {
+				let last = zoomQ[zoomQ.length-1];
+				if(last[1] === 0) {
+					last[2] = amount;
+				} else { //last[1] == 1
+					last[0] += amount;
+				}
+			}
+		} else if(zoomQ.length == 0 || typeFlag === 1) {
+			zoomQ = [[amount,typeFlag, 0, zx, zy]];
+		} else { //relative
+			let last = zoomQ[zoomQ.length-1];
+			if(last[2] === 0) { //no offset
+				last[0] = last[0] * amount;
+			} else { //complex case where we need sequence
+				zoomQ.push([amount,typeFlag, 0, zx, zy]);
 			}
 		}
-		requestAnimationFrame(applyOrDone);
+		if(!zoomBusy) {
+			zoomBusy = true;
+			requestAnimationFrame(applyOrDone);
+		}
 	}
-}
+	return throttledZoom;}();
 
 /**
 * Gets the zoom values that will fit the map to the viewport
 * @return {Number}
 */
 function get_reset_zoom() {
-	const sidebar_open = ($('#hide_rightpanel').hasClass('point-right') && $('.ct-sidebar.ct-sidebar--hidden').length == 0) ? 340 : 0;
-	const wH = $(window).height();
-	const mH = $("#scene_map").height()*window.CURRENT_SCENE_DATA.scale_factor;
-	const wW = $(window).width()-sidebar_open;
-	const mW = $("#scene_map").width()*window.CURRENT_SCENE_DATA.scale_factor;
+	const w = $(window);
+	const scene_map = $("#scene_map");
+	const sf = window.CURRENT_SCENE_DATA.scale_factor;
+	const sidebar_open = ($('#hide_rightpanel').hasClass('point-right') && $('.ct-sidebar.ct-sidebar--hidden').length == 0) ? get_sidebar_width() : 0;
+	const wH = w.height();
+	const mH = scene_map.height()*sf;
+	const wW = w.width()-sidebar_open;
+	const mW = scene_map.width()*sf;
 
-	console.log(wH, mH, wW, mW);
+	noisy_log(wH, mH, wW, mW);
 	return Math.min((wH / mH), (wW / mW));
 }
 
@@ -392,7 +364,7 @@ function get_reset_zoom() {
 */
 function reset_zoom() {
 	console.group("reset_zoom");
-	console.log("zooming on centre of map");
+	noisy_log("zooming on centre of map");
 	// change_zoom is great for mouse zooming, but tricky when just hitting the centre of the map
 	// so don't give it any x/y and just use the scrollIntoView center instead
 	change_zoom(get_reset_zoom(), undefined, undefined, true);
@@ -432,14 +404,14 @@ function map_load_error_cb(e) {
 	$('#loadingStyles').remove();
 	console.error("map_load_error_cb src", src, e);
 	if (typeof src === "string") {
-		let specificMessage = `Please make sure the image is accessible to anyone on the internet.`;
-		if (src.includes("drive.google") || window.CURRENT_SCENE_DATA.map.includes("drive.google")) {
+		if (src.includes("drive.google")) {
 			showGoogleDriveWarning();
 		}
-		else if (confirm(`Map could not be loaded!\n${specificMessage}\nYou may also need to disable ad blockers.\nWould you like to try loading the image in a separate tab to verify that it's accessible? If you are currently logged in to google, you will need to log out or open the image in a different browser or an incognito window to truly test it.`)) {
-			if (window.DM || confirm(`SPOILER ALERT!!!\nIf you click OK, you might see the entire map without fog of war. However, the map isn't loading at all so you will probably see a broken link. Are you sure you want to test this image?`)) {
-				window.open(window.CURRENT_SCENE_DATA.map, '_blank');
-			}
+		else {
+			let mapUrl = window.CURRENT_SCENE_DATA?.map || '';
+			let spoilerWarning = !window.DM ? '<br><b>Spoiler warning:</b> clicking this link may reveal the scene image if it is only failing to load in AboveVTT.<br>' : '';
+			let openLink = mapUrl ? `${spoilerWarning}<br><a target="_blank" href="${mapUrl}">Open map image in new tab</a>` : '';
+			showErrorMessage("Map could not be loaded.", `<p>Possible issues:</p>• The map URL may be blank or invalid<br>• If using a video map ensure the "video map" toggle is enabled<br>• The file may not be publicly accessible (check share settings on the host)<br>• The host may have rate limits or has removed the file<br>• An adblocker, VPN, or content filter may be blocking the image host${openLink}`);
 		}
 	}
 	delete window.LOADING;
@@ -458,6 +430,8 @@ function remove_loading_overlay() {
 	$("#loading_overlay").animate({ "opacity": 0 }, 1000, function() {
 		$("#loading_overlay").hide();
 	});
+	//convenient here to make the export before things get started and it's distracting
+	checkForExportRemind();
 }
 
 /**
@@ -480,7 +454,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 		window.YTTIMEOUT = null;
 	}
 	$("#youtube_controls_button").css('visibility', 'hidden');
-	console.log("is video? " + is_video);
+
 	if (url.includes("youtube.com") || url.includes("youtu.be")) {
 		$("#youtube_controls_button").css('visibility', '');
 		$("#scene_map_container").toggleClass('video', true);
@@ -510,15 +484,15 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 						e.target.setVolume(25);
 					e.target.playVideo();
 
-	        const loopTime = window.YTPLAYER.playerInfo.duration - 0.15;
+	        		const loopTime = window.YTPLAYER.playerInfo.duration - 0.15;
 
-	        window.YTINTERVAL = setInterval(function (){
-	          const current_time = window.YTPLAYER.getCurrentTime();
-	          if (current_time > loopTime) {
-	            	window.YTPLAYER.seekTo(0);
+					window.YTINTERVAL = setInterval(function (){
+						const current_time = window.YTPLAYER.getCurrentTime();
+						if (current_time > loopTime) {
+								window.YTPLAYER.seekTo(0);
 								window.YTPLAYER.playVideo();
-	          }
-	        }, 10);
+						}
+					}, 10);
 				}			
 			}
 		});
@@ -564,7 +538,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 
 	}
 	else {
-		console.log("LOAD MAP " + width + " " + height);
+		noisy_log("LOAD MAP " + width + " " + height);
 		$("#scene_map_container").toggleClass('video', true);
 		let newmapSize = 'width: 100vw; height: 100vh;';
 		if (width != null) {
@@ -606,8 +580,8 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 
 		if (width == null) {
 			newmap.off("loadedmetadata").on("loadedmetadata", function (e) {
-				console.log("video width:", this.videoWidth);
-				console.log("video height:", this.videoHeight);
+				noisy_log("video width:", this.videoWidth);
+				noisy_log("video height:", this.videoHeight);
 				$('#scene_map').width(this.videoWidth);
 				$('#scene_map').height(this.videoHeight);
 				$("#scene_map_container").toggleClass('map-loading', false);
@@ -631,6 +605,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
  * @param {Boolean} dontscroll prevent scrolling
  */
 function set_pointer(data, dontscroll = false) {
+	const w = $(window);
 
 	let marker = $("<div></div>");
 	marker.css({
@@ -660,9 +635,9 @@ function set_pointer(data, dontscroll = false) {
 	// Calculate pageX and pageY and scroll there!
 
 	if(!dontscroll){
-		let pageX = Math.round(data.x * window.ZOOM - ($(window).width() / 2));
-		let pageY = Math.round(data.y * window.ZOOM - ($(window).height() / 2));
-		let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
+		let pageX = Math.round(data.x * window.ZOOM - (w.width() / 2));
+		let pageY = Math.round(data.y * window.ZOOM - (w.height() / 2));
+		let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
 		$("html,body").animate({
 			scrollTop: pageY + window.VTTMargin,
 			scrollLeft: pageX + window.VTTMargin + sidebarSize/2,
@@ -744,11 +719,7 @@ function change_sidbar_tab(clickedTab, isCharacterSheetInfo = false) {
 		// This only happens when `is_character_page() == true` and the user clicked the gamelog tab.
 		// This is an important distinction, because we switch to the gamelog tab when the user clicks info on their character sheet that causes details to be displayed instead of the gamelog.
 		// Since the user clicked the tab, we need to show the gamelog instead of any detail info that was previously shown.
-		let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']")
-		if(gameLogButton.length == 0){
-		gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
-		}
-		gameLogButton.click()
+		getGameLogButton().click();
 	}
 }
 
@@ -773,65 +744,86 @@ function should_use_iframes_for_monsters() {
 	return window.fetchMonsterStatBlocks;
 }
 
+
+
 async function popout_all_selected_token_stat(){
-	const selectedTokens = window.CURRENTLY_SELECTED_TOKENS;
-	if(!selectedTokens || selectedTokens.length < 1)
-		return;
-	for(let id of selectedTokens){
-		let container;
-		const token = window.TOKEN_OBJECTS[id];
-		if(token.isPlayer()){
-			continue;
-		}
+	const fetchMonsters =[];
+	const tokens = [];
+	forSelTokens((token) => {
 		if (token.options.statBlock) {
-			let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
-			let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
-			if (pcURL) {
-				continue;
-			} 
-			container = await load_monster_stat(undefined, token.options.id, customStatBlock);
+			const {customStatBlock, pcURL} = token.getCustomPcUrl();
+			if (pcURL || customStatBlock) return;
 		}
-		else if(token.options.monster){
-			container = await load_monster_stat(token.options.monster, token.options.id);
+		if(token.options.monster){
+			fetchMonsters.push(token.options.monster)
 		}
-		const windowName = `${token.options.name}_${token.options.id}`.replaceAll(/(\r\n|\n|\r)/gi, "").trim();
-		popoutWindow(windowName, container.find(".avtt-stat-block-container"));
-		$(window.childWindows[windowName].document).find(".avtt-roll-button").on("contextmenu", function (contextmenuEvent) {
-			$(window.childWindows[windowName].document).find("body").append($("div[role='presentation']").clone(true, true));
-			let popoutContext = $(window.childWindows[windowName].document).find(".dcm-container");
-			let maxLeft = window.childWindows[windowName].innerWidth - popoutContext.width();
-			let maxTop = window.childWindows[windowName].innerHeight - popoutContext.height();
-			if (parseInt(popoutContext.css("left")) > maxLeft) {
-				popoutContext.css("left", maxLeft)
+		tokens.push(token);
+
+	})
+	fetch_and_cache_monsters(fetchMonsters, function () {
+		tokens.every(async (token) => {
+			let container = $(`<div class='popout-prep'></div>`);
+			if(token.isPlayer()) return;
+
+			const allowedToOpen = window.DM || token.options.player_owned;
+			if(!allowedToOpen)
+				return;
+			if (token.options.statBlock) {
+				const {customStatBlock, pcURL} = token.getCustomPcUrl();
+				if (pcURL) return;
+				const monsterId = !customStatBlock && token.options.statBlock == token.options.monster ? token.options.monster : undefined;
+				if(!customStatBlock && !monsterId)
+					return;
+				await load_monster_stat(monsterId, token.options.id, customStatBlock, container);
 			}
-			if (parseInt(popoutContext.css("top")) > maxTop) {
-				popoutContext.css("top", maxTop)
+			else if(token.options.monster){
+				await load_monster_stat(token.options.monster, token.options.id, undefined, container);
 			}
-			$(window.childWindows[windowName].document).find("div[role='presentation']").on("click", function (clickEvent) {
-				$(window.childWindows[windowName].document).find("div[role='presentation']").remove();
+			await async_sleep(1);
+			const windowName = `${token.options.name}_${token.options.id}`.replaceAll(/(\r\n|\n|\r)/gi, "").trim();
+			popoutWindow(windowName, container.find(".avtt-stat-block-container"));
+			$(window.childWindows[windowName].document).find(".avtt-roll-button").on("contextmenu", function (contextmenuEvent) {
+				$(window.childWindows[windowName].document).find("body").append($("div[role='presentation']").clone(true, true));
+				let popoutContext = $(window.childWindows[windowName].document).find(".dcm-container");
+				let maxLeft = window.childWindows[windowName].innerWidth - popoutContext.width();
+				let maxTop = window.childWindows[windowName].innerHeight - popoutContext.height();
+				if (parseInt(popoutContext.css("left")) > maxLeft) {
+					popoutContext.css("left", maxLeft)
+				}
+				if (parseInt(popoutContext.css("top")) > maxTop) {
+					popoutContext.css("top", maxTop)
+				}
+				$(window.childWindows[windowName].document).find("div[role='presentation']").on("click", function (clickEvent) {
+					$(window.childWindows[windowName].document).find("div[role='presentation']").remove();
+				});
+				$(".dcm-backdrop").remove();
 			});
-			$(".dcm-backdrop").remove();
+			close_player_monster_stat_block();
 		});
-		close_player_monster_stat_block();
-	}
+	});
+	
 }
 function open_selected_token_stat() {
 	const selectedTokens = window.CURRENTLY_SELECTED_TOKENS;
 	if (!selectedTokens || selectedTokens.length < 1)
 		return;
-
+	
 	const token = window.TOKEN_OBJECTS[selectedTokens[0]];
-	if (token.isPlayer()) {
+	const isPlayerToken = token.isPlayer();
+	const allowedToOpen = window.DM || isPlayerToken || token.options.player_owned;
+	if(!allowedToOpen)
+		return;
+	if (isPlayerToken) {
 		open_player_sheet(token.options.sheet, undefined, token.options.name);
 	}
 	else if (token.options.statBlock) {
-		let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
-		let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
+		const {customStatBlock, pcURL} = token.getCustomPcUrl();
 		if (pcURL) {
 			open_player_sheet(pcURL, undefined, token.options.name);
 		}
 		else{
-			load_monster_stat(undefined, token.options.id, customStatBlock);
+			const monsterId = !customStatBlock && token.options.statBlock == token.options.monster ? token.options.monster : undefined;
+			load_monster_stat(monsterId, token.options.id, customStatBlock);
 		}
 	}
 	else if (token.options.monster) {
@@ -844,33 +836,39 @@ function open_selected_token_stat() {
  * @param {Number} monsterId given monster ID
  * @param {UUID} tokenId selected token ID
  */
-function load_monster_stat(monsterId, tokenId, customStatBlock=undefined) {
+async function load_monster_stat(monsterId, tokenId, customStatBlock=undefined, container) {
+	const token = window.TOKEN_OBJECTS[tokenId] || window.all_token_objects[tokenId];
+	if (!token) {
+		return null;
+	}
+	container = container ?? build_draggable_monster_window(tokenId)
 	if(customStatBlock){
-		let container = build_draggable_monster_window(tokenId);
-		display_stat_block_in_container(customStatBlock, container, tokenId, customStatBlock);
+		await display_stat_block_in_container(customStatBlock, container, tokenId, customStatBlock);
 		$(".sidebar-panel-loading-indicator").remove();
-		container.attr('data-name', window.all_token_objects[tokenId].options.name);
+		container.attr('data-name', token.options.name);
 		return container;
 	}
-	if(window.all_token_objects[tokenId].options.monster == 'open5e'){
-		let container = build_draggable_monster_window(tokenId);
-		build_and_display_stat_block_with_id(window.all_token_objects[tokenId].options.stat, container, tokenId, function () {
-			$(".sidebar-panel-loading-indicator").remove();
-			container.attr('data-name', window.all_token_objects[tokenId].options.name);
-		}, true);
-
+	if(token.options.monster == 'open5e'){
+		await new Promise((resolve) => {
+			build_and_display_stat_block_with_id(token.options.stat, container, tokenId, function () {
+				$(".sidebar-panel-loading-indicator").remove();
+				container.attr('data-name', token.options.name);
+				resolve();
+			}, true);
+		});
 		return container;
 	}
 	if (should_use_iframes_for_monsters()) {
-		const container = build_draggable_monster_window(tokenId);
 		container.find('.avtt-stat-block-container').remove();
 		container.append(load_monster_stat_iframe(monsterId, tokenId));
 		return container;
 	}
-	let container = build_draggable_monster_window(tokenId);
-	build_and_display_stat_block_with_id(monsterId, container, tokenId, function () {
-		$(".sidebar-panel-loading-indicator").remove();
-		container.attr('data-name', window.all_token_objects[tokenId].options.name);
+	await new Promise((resolve) => {
+		build_and_display_stat_block_with_id(monsterId, container, tokenId, function () {
+			$(".sidebar-panel-loading-indicator").remove();
+			container.attr('data-name', token.options.name);
+			resolve();
+		});
 	});
 	return container;
 }
@@ -906,17 +904,17 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 
 	window.StatHandler.getStat(monsterId, function(stats) {
 		iframe.on("load", function(event) {
-			console.log('carico mostro');
-			$(event.target).contents().find("body[class*='marketplace']").replaceWith($("<div id='noAccessToContent' style='height: 100%;text-align: center;width: 100%;padding: 10px;font-weight: bold;color: #944;'>You do not have access to this content on DndBeyond.</div>"));
-			$(event.target).contents().find("#mega-menu-target").remove();
-			$(event.target).contents().find(".site-bar").remove();
-			$(event.target).contents().find(".page-header").remove();
-			$(event.target).contents().find(".homebrew-comments").remove();
-			$(event.target).contents().find("header").hide();
-			$(event.target).contents().find("#site-main").css("padding", "0px");
-			$(event.target).contents().find("#footer").remove();
-			const img = $(event.target).contents().find(".detail-content").find(".image");
-			const statblock = $(event.target).contents().find(".mon-stat-block");
+			const contents = $(event.target).contents()
+			contents.find("body[class*='marketplace']").replaceWith($("<div id='noAccessToContent' style='height: 100%;text-align: center;width: 100%;padding: 10px;font-weight: bold;color: #944;'>You do not have access to this content on DndBeyond.</div>"));
+			contents.find("#mega-menu-target").remove();
+			contents.find(".site-bar").remove();
+			contents.find(".page-header").remove();
+			contents.find(".homebrew-comments").remove();
+			contents.find("header").hide();
+			contents.find("#site-main").css("padding", "0px");
+			contents.find("#footer").remove();
+			const img = contents.find(".detail-content").find(".image");
+			const statblock = contents.find(".mon-stat-block");
 			if (img.length == 1) {
 				img.insertAfter(statblock);
 				const sendToGamelog = $("<button>Send IMG To Gamelog</button>");
@@ -936,8 +934,8 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 			}
 
 
-			scan_monster($(event.target).contents(), stats, tokenId);
-			$(event.target).contents().find("a").attr("target", "_blank");
+			scan_monster(contents, stats, tokenId);
+			contents.find("a").attr("target", "_blank");
 			$(".sidebar-panel-loading-indicator").hide()
 			$("#monster_block").fadeIn("slow")
 			console.groupEnd()
@@ -1018,7 +1016,7 @@ function build_draggable_monster_window(tokenId) {
 	/*Set draggable and resizeable on monster sheets for players. Allow dragging and resizing through iFrames by covering them to avoid mouse interaction*/
 	if($("#monster_close_title_button").length==0) {
 		const monster_close_title_button = $('<div id="monster_close_title_button"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>');
-		$("#resizeDragMon").append(monster_close_title_button);
+		container.append(monster_close_title_button);
 		monster_close_title_button.click(function() {
 			close_player_monster_stat_block();
 		});
@@ -1026,7 +1024,7 @@ function build_draggable_monster_window(tokenId) {
 	let popoutButton = $("#resizeDragMon .popout-button");
 	if (popoutButton.length==0){
 		popoutButton =$('<div class="popout-button"><svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"/></svg></div>')
-		$("#resizeDragMon").append(popoutButton);
+		container.append(popoutButton);
 	}
 	popoutButton.off('click.popout').on('click.popout', function() {
 		let name = $("#resizeDragMon .avtt-stat-block-container .mon-stat-block__name-link").text();
@@ -1050,14 +1048,14 @@ function build_draggable_monster_window(tokenId) {
 		});
 		monster_close_title_button.click();
 	});
-	$("#resizeDragMon").addClass("moveableWindow");
-	if(!$("#resizeDragMon").hasClass("minimized")) {
-		$("#resizeDragMon").addClass("restored");
+	container.addClass("moveableWindow");
+	if(!container.hasClass("minimized")) {
+		container.addClass("restored");
 	}
 	else{
-		$("#resizeDragMon").dblclick();
+		container.dblclick();
 	}
-	$("#resizeDragMon").resizable({
+	container.resizable({
 		addClasses: false,
 		handles: "all",
 		containment: "#windowContainment",
@@ -1070,11 +1068,8 @@ function build_draggable_monster_window(tokenId) {
 		minWidth: 200,
 		minHeight: 200
 	});
-
-	$("#resizeDragMon").mousedown(function() {
-		frame_z_index_when_click($(this));
-	});
-	$("#resizeDragMon").draggable({
+	frame_z_index_when_click(container, true);
+	container.draggable({
 		addClasses: false,
 		scroll: false,
 		containment: "#windowContainment",
@@ -1083,9 +1078,10 @@ function build_draggable_monster_window(tokenId) {
 		},
 		stop: function() {
 			$('.iframeResizeCover').remove();
-		}
+		},
+		cancel: '[contenteditable]'
 	});
-	minimize_player_monster_window_double_click($("#resizeDragMon"));
+	minimize_player_monster_window_double_click(container);
 
 	return container;
 }
@@ -1096,7 +1092,6 @@ function build_draggable_monster_window(tokenId) {
  */
 function close_player_monster_stat_block() {
 	$("#resizeDragMon.minimized").dblclick();
-	console.debug("close_player_monster_stat_block is closing the stat block");
 	$("#resizeDragMon").addClass("hideMon");
 }
 
@@ -1105,7 +1100,9 @@ function close_player_monster_stat_block() {
  * @param {DOMObject} titleBar the window's title bar
  */
 function minimize_player_monster_window_double_click(titleBar) {
-	titleBar.off('dblclick').on('dblclick', function() {
+
+	titleBar.off('dblclick').on('dblclick', function(e) {
+		if(e.target.id != titleBar[0].id && !e.target.classList.contains("monster_title")) return
 		if (titleBar.hasClass("restored")) {
 			titleBar.data("prev-height", titleBar.height());
 			titleBar.data("prev-width", titleBar.width() - 3);
@@ -1156,11 +1153,7 @@ async function init_controls() {
 	$(".sidebar").css("height", "calc(100vh - 24px)");
 
 	$(".ct-sidebar__inner button[aria-label='Unlocked']").click(); // Click on the padlock icon  // This is safe to call multiple times
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']")
- 	if(gameLogButton.length == 0){
-   	gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
- 	}
- 	gameLogButton.click();
+	getGameLogButton().click();
 
 	init_sidebar_tabs();
 	let sidebarControlsParent = is_characters_page() ? $(".ct-sidebar__inner>[class*='styles_controls']") : $(".sidebar__controls");
@@ -1276,6 +1269,8 @@ const MAX_ZOOM_STEP = 20
  * Register event for mousewheel zoom.
  */
 function init_mouse_zoom() {
+	if(window.mouseZoomInitialized) return;
+	window.mouseZoomInitialized = true;
 	window.addEventListener('wheel', function (e) {
 		if (e.ctrlKey) {
 			e.preventDefault();
@@ -1341,7 +1336,7 @@ function init_mouse_zoom() {
 		document.addEventListener("touchcancel", function (e) {
 			//still needs to be tested - not sure how to trigger
 			if ((e.touches == undefined || e.touches.length === 0) && touchMode === 2) {
-				console.log("Touch interrupted. Resetting.");
+				noisy_log("Touch interrupted. Resetting.");
 				touchMode = 0;
 				throttledZoom(start_scale, 1); //todo: x,y?
 			}
@@ -1358,18 +1353,13 @@ function init_mouse_zoom() {
 
 
 /**
- * Start sending google analytics heartbeat events.
- */
-
-/**
  * Creates and displays splash screen
- * Also starts Google Analytics heartbeat.
  */
 function init_splash() {
 
 	if (!get_avtt_setting_value("alwaysShowSplash") && localStorage.getItem("AboveVttLastUsedVersion") === window.AVTT_VERSION) {
 		// the user only wants to see the splash screen when there's a new version, and this is not a new version
-		console.log("not showing splash screen", localStorage.getItem("AboveVttLastUsedVersion"), window.AVTT_VERSION)
+		noisy_log("not showing splash screen", localStorage.getItem("AboveVttLastUsedVersion"), window.AVTT_VERSION)
 		return;
 	}
 	localStorage.setItem("AboveVttLastUsedVersion", window.AVTT_VERSION);
@@ -1412,7 +1402,7 @@ function init_splash() {
 	ul.append("<li><a style='font-weight:bold;text-decoration: underline;' target='_blank' href='https://www.patreon.com/AboveVTT'>Patreon</a></li>");
 	cont.append(ul);*/
 	cont.append("");
-	cont.append("<div style='padding-top:10px'>Contributors: <b>SnailDice (Nadav),Stumpy, Palad1N, KuzKuz, Coryphon, Johnno, Hypergig, JoshBrodieNZ, Kudolpf, Koals, Mikedave, Jupi Taru, Limping Ninja, Turtle_stew, Etus12, Cyelis1224, Ellasar, DotterTrotter, Mosrael, Bain, Faardvark, Azmoria, Natemoonlife, Pensan, H2, CollinHerber, Josh-Archer, TachyonicSpace, TheRyanMC, j3f (jeffsenn), MonstraG, Wyrmwood, Drenam1, Lauriel, Disil, WhoctorDo, HeroDragon33, Grimshok, SirWaltonOfSmeg</b></div>");
+	cont.append("<div style='padding-top:10px'>Contributors: <b>SnailDice (Nadav),Stumpy, Palad1N, KuzKuz, Coryphon, Johnno, Hypergig, JoshBrodieNZ, Kudolpf, Koals, Mikedave, Jupi Taru, Limping Ninja, Turtle_stew, Etus12, Cyelis1224, Ellasar, DotterTrotter, Mosrael, Bain, Faardvark, Azmoria, Natemoonlife, Pensan, H2, CollinHerber, Josh-Archer, TachyonicSpace, TheRyanMC, j3f (jeffsenn), MonstraG, Wyrmwood, Drenam1, Lauriel, Disil, WhoctorDo, HeroDragon33, Grimshok, SirWaltonOfSmeg, Jumbalicious79, Valamorde</b></div>");
 
 	cont.append("<br>AboveVTT is an hobby opensource project. It's completely free (like in Free Speech). The resources needed to pay for the infrastructure are kindly donated by the supporters through <a style='font-weight:bold;text-decoration: underline;' target='_blank' href='https://www.patreon.com/AboveVTT'>Patreon</a> , what's left is used to buy wine for cyruzzo");
 
@@ -1436,15 +1426,19 @@ function init_splash() {
 
 	patreons.append(patrons_list);
 	cont.append(patreons);
-	cont.click(function() {
-		$("#splash").remove();
-
-	});
 
 	let closeButton = $(`<button class="ddbeb-modal__close-button qa-modal_close" title="Close Modal" ><svg class="" xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect x="0" y="45" width="100" height="10"></rect></g><g transform="rotate(45 50 50)"><rect x="0" y="45" width="100" height="10"></rect></g></svg></button>`);
 	cont.append(closeButton);
 
 	$(window.document.body).append(cont);
+	window.addEventListener("pointerdown", close_splash_if_not_link);
+}
+function close_splash_if_not_link(event) {
+	if (!event.target.closest('a')) close_splash();
+}
+function close_splash() {
+	$("#splash").remove();
+	window.removeEventListener("pointerdown", close_splash_if_not_link);
 }
 
 
@@ -1539,54 +1533,21 @@ function minimize_player_window_double_click(titleBar) {
  * Move frames behind each other in the order they were clicked
  * @param {DOMObject} moveableFrame
  */
-function frame_z_index_when_click(moveableFrame){
-
-	if(moveableFrame.css('z-index') != 90000) {
-		moveableFrame.css('z-index', 90000);
-		$(".moveableWindow, [role='dialog']").not(moveableFrame).each(function() {
-			$(this).css('z-index',($(this).css('z-index')-1));
+function frame_z_index_when_click(moveableFrame, install=false){
+	if(install) {
+		moveableFrame.on('pointerdown', (e) => frame_z_index_when_click($(e.currentTarget)));;
+	}
+	const moveableWindows = $(".moveableWindow, [role='dialog']");
+	const someFrameNotSet = moveableWindows.not("[style*='z-index']").length > 0;
+	if (someFrameNotSet || moveableFrame.css('z-index') != 100000 || !moveableFrame.attr('style')?.includes('z-index')) {
+		moveableFrame.css('z-index', 100000);
+		moveableWindows.not(moveableFrame).each(function() {
+			if($(this).css('z-index') > 100000) return;
+			$(this).css('z-index',(Math.min($(this).css('z-index')-1, 99999)));
 		});
 	}
 }
 
-/**
- * Deprecated?
- * NOTE: No reference found within the project
- */
-function observe_character_sheet_companion(documentToObserve){
-	console.group("observe_character_sheet_companion")
-	let mutation_target = documentToObserve.get(0);
-	let mutation_config = { attributes: false, childList: true, characterData: false, subtree: true };
-
-	function handle_observe_character_sheet_companion(e) {
-		e.stopPropagation();
-		console.log(e)
-		let tokenName = $(this).parent().find('.ddbc-extra-name').find("span").text()
-		console.log("pretending to add a companion ", tokenName)
-	}
-
-	let companion_observer = new MutationObserver(function() {
-		let extras = documentToObserve.find(".ct-extra-row__preview:not('.above-vtt-visited')");
-		if (extras.length > 0){
-			extras.wrap(function() {
-				$(this).addClass("above-vtt-visited");
-				let button = $("<button class='above-aoe integrated-dice__container' aria-label=Add "+$(this.closest(".ddbc-extra-name"))+" to encounter></button>");
-				button.css("border-width","1px");
-				button.css("min-height","34px");
-				button.click((e) => handle_observe_character_sheet_companion(e))
-				button.attr("data-shape", "set-me");
-				button.attr("data-style", "set-me");
-				button.attr("data-size", "set-me");
-				set_full_path(button, SidebarListItem.Aoe(shape, style, size).fullPath());
-				enable_draggable_token_creation(button);
-				return button;
-			})
-			console.log(`${extras.length} companions discovered`);
-		}
-	});
-	companion_observer.observe(mutation_target,mutation_config);
-	console.groupEnd()
-}
 
 
 /**
@@ -1639,7 +1600,7 @@ function  init_sheet() {
 	
 	
 		reload_button.click(function() {
-			let iframe = $("#sheet").find("iframe");
+			let iframe = container.find("iframe");
 			let currentSrc = iframe.attr('src');
 			iframe.attr('src', currentSrc);
 		});
@@ -1649,11 +1610,11 @@ function  init_sheet() {
 	
 	
 		/*Set draggable and resizeable on player sheets. Allow dragging and resizing through iFrames by covering them to avoid mouse interaction*/
-		$("#sheet").addClass("moveableWindow");
-		if(!$("#sheet").hasClass("minimized")){
-			$("#sheet").addClass("restored");
+		container.addClass("moveableWindow");
+		if(!container.hasClass("minimized")){
+			container.addClass("restored");
 		}
-		$("#sheet").resizable({
+		container.resizable({
 			addClasses: false,
 			handles: "all",
 			containment: "#windowContainment",
@@ -1666,11 +1627,8 @@ function  init_sheet() {
 			minWidth: 200,
 			minHeight: 200
 		});
-	
-		$("#sheet").mousedown(function(){
-			frame_z_index_when_click($(this));
-		});
-		$("#sheet").draggable({
+		frame_z_index_when_click(container, true);
+		container.draggable({
 			addClasses: false,
 			scroll: false,
 			containment: "#windowContainment",
@@ -1699,7 +1657,7 @@ function open_player_sheet(sheet_url, closeIfOpen = true, playerName = '') {
 	if($("#sheet.minimized").length > 0) {
 		$("#sheet.minimized").dblclick();
 	}
-	console.log("open_player_sheet"+sheet_url);
+	noisy_log("open_player_sheet"+sheet_url);
 
 	
 	close_player_sheet(); // always close before opening
@@ -1720,49 +1678,11 @@ function open_player_sheet(sheet_url, closeIfOpen = true, playerName = '') {
 	// lock this sheet
 	window.MB.sendMessage("custom/myVTT/lock", { player_sheet: sheet_url });
 	iframe.off("load").on("load", function(event) {
-		console.log("fixing up the character sheet");
+		noisy_log("fixing up the character sheet");
+		const where = $(event.target)[0].contentDocument;
 
-		let scripts = [
-		    // External Dependencies
-		    { src: "jquery-3.6.0.min.js" },
-		    { src: "jquery.contextMenu.js" },
-			{ src: "ajaxQueue/ajaxQueueIndex.js", type: "module" },
-		    // AboveVTT Files
-		    { src: "CoreFunctions.js" }, // Make sure CoreFunctions executes first
-		    { src: "DDBApi.js" },
-		    { src: "MonsterDice.js" },
-		    { src: "DiceRoller.js" },
-		    { src: "DiceContextMenu/DiceContextMenu.js" },
-		    { src: "MessageBroker.js" },
-		    { src: "rpg-dice-roller.bundle.min.js" },
-		    // AboveVTT files that execute when loaded
-		    { src: "CharactersPage.js" } // Make sure CharactersPage executes last
-		]
+		window.AVTT_INJECT("char", where);
 
-		// Too many of our scripts depend on each other.
-		// This ensures that they are loaded sequentially to avoid any race conditions.
-		let injectScript = function () {
-		    if (scripts.length === 0) {
-		        return;
-		    }
-		    let nextScript = scripts.shift();
-		    let s = $(event.target)[0].contentDocument.createElement('script');
-		    s.src = `${window.EXTENSION_PATH}${nextScript.src}`;
-		    if (nextScript.type !== undefined) {
-		        s.setAttribute('type', nextScript.type);
-		    }
-		    console.log(`attempting to append ${nextScript.src}`);
-		    s.onload = function() {
-		        console.log(`finished injecting ${nextScript.src}`);
-		        injectScript();
-		    };
-		    ($(event.target)[0].contentDocument.head || $(event.target)[0].contentDocument.documentElement).appendChild(s);
-		}
-		injectScript();
-		
-		
-		$(event.target).contents().find("head").append($(`<link type="text/css" rel="Stylesheet" href="${window.EXTENSION_PATH}DiceContextMenu/DiceContextMenu.css" />`));
-		$(event.target).contents().find("head").append($(`<link type="text/css" rel="Stylesheet" href="${window.EXTENSION_PATH}jquery.contextMenu.css" />`));
 		$(event.target).contents().find("head").append(`
 			<style>
 			button.avtt-roll-button,
@@ -1835,17 +1755,11 @@ function open_player_sheet(sheet_url, closeIfOpen = true, playerName = '') {
 			}
 			</style>
 		`);
-		console.log("removing headers");
-		$(event.target).contents().find("body").append(`<div id='extensionpath' data-path='${window.EXTENSION_PATH}'></div>`)
+		noisy_log("removing headers");
 
 		if (window.JOINTHEDICESTREAM) {
 			joinDiceRoom();
 		}
-
-
-		// WIP to allow players to add in tokens from their extra tab
-		// observe_character_sheet_companion($(event.target).contents());
-
 
 
 		setTimeout(function() {
@@ -1967,14 +1881,9 @@ function init_character_page_sidebar() {
 		}, 1000);
 		return;
 	}
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']")
-	if(gameLogButton.length == 0){
-	  gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
-	}
 	// Open the gamelog, and lock it open
-
 	if(window.showPanel == undefined || window.showPanel == true)
-		gameLogButton.click()
+		getGameLogButton().click()
 	$(".ct-sidebar__control--unlock, [class*='styles_controls'] [aria-label='Unlocked']").click();
 
 	$("#site-main").css({"display": "block", "visibility": "hidden"});
@@ -2005,31 +1914,11 @@ function init_character_page_sidebar() {
 
 	$(".ct-sidebar__inner").off("click.setCondition").on("click.setCondition", ".set-conditions-button", function(clickEvent) {
 		let conditionName = $(clickEvent.target).parent().find("span").text();
-		$('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}</style>`);
-		$('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
-		setTimeout(function(){
-			$('.ct-condition-manage-pane').css('visibility', 'hidden');
-			$(`.ct-sidebar__inner .ct-condition-manage-pane__condition-name:contains('${conditionName}') ~ .ct-condition-manage-pane__condition-toggle>[class*='styles_toggle'][aria-pressed="false"]`).click();
-		}, 30)
-		setTimeout(function(){
-			$(`#switch_gamelog`).click();
-			$("#condition-click").remove();
-		}, 40)
+		click_condition(conditionName, false);
 	});	
 	$(".ct-sidebar__inner").off("click.removeCondition").on("click.removeCondition", ".remove-conditions-button", function(clickEvent) {
 		let conditionName = $(clickEvent.target).parent().find("span").text();
-		$('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}</style>`);
-
-		$('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
-		setTimeout(function(){
-			$('.ct-condition-manage-pane').css('visibility', 'hidden');
-			$(`.ct-sidebar__inner .ct-condition-manage-pane__condition-name:contains('${conditionName}') ~ .ct-condition-manage-pane__condition-toggle>[class*='styles_toggle'][aria-pressed="true"]`).click();
-		}, 30)
-		setTimeout(function(){
-			$(`#switch_gamelog`).click();
-			$("#condition-click").remove();
-		}, 40)
-
+		click_condition(conditionName);
 	});
 	$(".ct-character-header-info__content").on("click", function(){
 		setTimeout(function(){
@@ -2054,11 +1943,7 @@ function init_character_page_sidebar() {
  * Any time they do that, we need to react to those changes.
  */
 function monitor_character_sidebar_changes() {
-	let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']")
-	 if(gameLogButton.length == 0){
-	   gameLogButton = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
-	 }
-	gameLogButton.click(function(event) {
+	getGameLogButton().click(function(event) {
 		if (event.originalEvent !== undefined) {
 			// the user actually clicked the button. Make sure we switch tabs
 			$("#switch_gamelog").click();
@@ -2070,11 +1955,99 @@ function monitor_character_sidebar_changes() {
 
 
 
+const SIDEBAR_MIN_WIDTH = 340;
+const SIDEBAR_MAX_WIDTH = 600;
+
+function get_sidebar_width() {
+	const stored = get_avtt_setting_value('sidebarWidth');
+	const n = parseInt(stored, 10);
+	return (!isNaN(n) && n >= SIDEBAR_MIN_WIDTH && n <= SIDEBAR_MAX_WIDTH) ? n : SIDEBAR_MIN_WIDTH;
+}
+
+function apply_sidebar_width(newWidth) {
+	newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, parseInt(newWidth, 10) || SIDEBAR_MIN_WIDTH));
+	document.documentElement.style.setProperty('--sidebar-width', newWidth + 'px');
+	const widthStr = is_sidebar_visible() ? newWidth + 'px' : '0px';
+	$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', widthStr);
+	$('canvas.streamer-canvas').css('--sidebar-width', widthStr);
+	if (is_characters_page()) {
+		// On the characters page, .ct-sidebar__portal must stay at width:100% (see abovevtt.css ~6464)
+		// so popovers/menus position correctly. The visible sidebar inside it is sized via the
+		// --sidebar-width CSS var on .ct-sidebar[class*='styles_sidebar'] [class*='styles_content'].
+		$(".ct-sidebar__portal").css("width", "");
+	} else {
+		$(".sidebar--right").css("width", newWidth + "px");
+		$(".ct-sidebar__pane-content").css("width", newWidth + "px");
+	}
+	$(".sidebar__controls").width(newWidth);
+	const zoomOffset = $("#zoom_buttons").data("zoom-offset");
+	if (zoomOffset !== undefined) {
+		$("#zoom_buttons").css("right", (newWidth + zoomOffset) + "px");
+	}
+	if (is_characters_page()) {
+		reposition_player_sheet();
+	}
+	window.dispatchEvent(new Event('resize'));
+}
+
+function init_sidebar_resize_handle() {
+	$('#avtt-sidebar-resize-handle').remove();
+	const handle = $('<div id="avtt-sidebar-resize-handle"></div>');
+	$('body').append(handle);
+
+	let startX, startWidth;
+
+	handle.on('mousedown', function(e) {
+		e.preventDefault();
+		startX = e.clientX;
+		startWidth = get_sidebar_width();
+		$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet")
+			.append($('<div class="iframeResizeCover"></div>'));
+
+		$(document).on('mousemove.sidebarResize', function(e) {
+			const delta = startX - e.clientX;
+			const newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta));
+			document.documentElement.style.setProperty('--sidebar-width', newWidth + 'px');
+			if (!is_characters_page()) {
+				$(".sidebar--right").css("width", newWidth + "px");
+				$(".ct-sidebar__pane-content").css("width", newWidth + "px");
+			}
+			$(".sidebar__controls").width(newWidth);
+			$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', newWidth + 'px');
+			$('canvas.streamer-canvas').css('--sidebar-width', newWidth + 'px');
+			const zoomOffset = $("#zoom_buttons").data("zoom-offset");
+			if (zoomOffset !== undefined) {
+				$("#zoom_buttons").css("right", (newWidth + zoomOffset) + "px");
+			}
+		});
+
+		function cleanupSidebarDrag() {
+			$(document).off('mousemove.sidebarResize');
+			$(window).off('mouseup.sidebarResize blur.sidebarResize');
+			$('.iframeResizeCover').remove();
+		}
+
+		$(window).one('mouseup.sidebarResize', function(e) {
+			cleanupSidebarDrag();
+			const delta = startX - e.clientX;
+			const newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta));
+			set_avtt_setting_value('sidebarWidth', newWidth);
+		});
+
+		$(window).one('blur.sidebarResize', function() {
+			cleanupSidebarDrag();
+			const cssVarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'));
+			const currentWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, cssVarWidth || SIDEBAR_MIN_WIDTH));
+			set_avtt_setting_value('sidebarWidth', currentWidth);
+		});
+	});
+}
+
 /**
  * Initializes the user interface.
  */
 function init_ui() {
-	console.log("init_ui");
+	noisy_log("init_ui");
 
 	// On iOS make sure browser zoom is zero-d out
 	if (isIOS()) { //might also be useful on other mobile. not sure.
@@ -2089,12 +2062,11 @@ function init_ui() {
 	// ATTIVA GAMELOG
 	$(".glc-game-log").addClass("sidepanel-content");
 	$(".sidebar").css("z-index", 9999);
-	if (is_characters_page()) {
-		reposition_player_sheet();
-	}
-	$(".sidebar__controls").width(340);
 	// $(".ct-sidebar__control").width(340);
 	$("body").css("overflow", "scroll");
+	$('#lightbox, #lightboxOverlay').remove();
+	apply_sidebar_width(get_sidebar_width());
+	init_sidebar_resize_handle();
 
 	inject_chat_buttons();
 
@@ -2103,131 +2075,164 @@ function init_ui() {
         <link rel="stylesheet" href="/content/1-0-2027-0/js/libs/lightbox2/dist/css/lightbox.min.css">
 	`);
 
-	const background = $("<img id='scene_map'>");
-	background.css("top", "0");
-	background.css("left", "0");
-	background.css("position", "absolute");
+	const background = $("<img id='scene_map' class='TLA'/>");
 	background.css("z-index", "10");
 	
-	const drawOverlayUnderFogDarkness = $("<canvas id='draw_overlay_under_fog_darkness'></canvas>");
-	drawOverlayUnderFogDarkness.css("position", "absolute");
-	drawOverlayUnderFogDarkness.css("top", "0");
-	drawOverlayUnderFogDarkness.css("left", "0");
+	const drawOverlayUnderFogDarkness = $("<canvas id='draw_overlay_under_fog_darkness' class='TLA'></canvas>");
 	drawOverlayUnderFogDarkness.css("z-index", "11");
 
-	const mapItems = $("<div id='map_items'></div>");
-	mapItems.css("top", "0");
-	mapItems.css("left", "0");
-	mapItems.css("position", "absolute");
+	const mapItems = $("<div id='map_items' class='TLA'/>");
 	mapItems.css("z-index", "11");
 
-	const tokenMapItems = $("<div id='token_map_items'></div>")
-	tokenMapItems.css("top", "0");
-	tokenMapItems.css("left", "0");
-	tokenMapItems.css("position", "absolute");
+	const tokenMapItems = $("<div id='token_map_items' class='TLA'/>")
 	tokenMapItems.css("z-index", "12");
+	
+	const mapContainer = $("<div id='scene_map_container' class='TLA'/>");
 
-	const mapContainer = $("<div id='scene_map_container' />");
-	mapContainer.css("top", "0");
-	mapContainer.css("left", "0");
-	mapContainer.css("position", "absolute");
-
-	lightContainer = $("<div id='light_container'/>");
-	lightContainer.css("top", "0");
-	lightContainer.css("left", "0");
+	lightContainer = $("<div id='light_container' class='TLA'/>");
 	lightContainer.css("bottom", "0");
 	lightContainer.css("right", "0");
-	lightContainer.css("position", "absolute");
 
-	const drawOverlay = $("<canvas id='draw_overlay'></canvas>");
-	drawOverlay.css("position", "absolute");
-	drawOverlay.css("top", "0");
-	drawOverlay.css("left", "0");
+	const drawOverlay = $("<canvas id='draw_overlay' class='TLA'/>");
 	drawOverlay.css("z-index", "22");
 
-	const lightOverlay = $("<canvas id='light_overlay'></canvas>");
-	lightOverlay.css("position", "absolute");
-	lightOverlay.css("top", "0");
-	lightOverlay.css("left", "0");
+	const lightOverlay = $("<canvas id='light_overlay' class='TLA'/>");
 	lightOverlay.css("z-index", "9");
 	lightOverlay.css("mix-blend-mode", "lighten");
 
-	const outer_light_container = $("<div id='outer_light_container'></canvas>");
-	outer_light_container.css("position", "absolute");
-	outer_light_container.css("top", "0");
-	outer_light_container.css("left", "0");
+	const outer_light_container = $("<div id='outer_light_container' class='TLA'/>");
 	outer_light_container.css("z-index", "9");
 	outer_light_container.css("width", "100%");
 	outer_light_container.css("height", "100%");
 
 
-	const textDiv = $("<div id='text_div'></div>");
-	textDiv.css("position", "absolute");
-	textDiv.css("top", "0");
-	textDiv.css("left", "0");
-	textDiv.css("z-index", "20");
+	const textDiv = $("<div id='text_div' class='TLA'/>");
+	textDiv.css({ "z-index": "20" });	
 
-	const grid = $("<canvas id='grid_overlay'></canvas>");
-	grid.css("position", "absolute");
-	grid.css("top", "0");
-	grid.css("left", "0");
-	grid.css("z-index", "19");
+	const grid_svg_underlay = $("<div id='grid_svg_underlay' class='grid-svg-tile'/>");
+	grid_svg_underlay.css("z-index", "11");	//over map but under mapdrawing
+	const grid = $("<div id='grid_svg_overlay' class='grid-svg-tile'/>");
+	grid.css("display", "var(--grid-overlay-on)");
+	const grid_svg_overlay_container = $("<div id='grid_svg_overlay_container' class='TLA'/>")
+	grid_svg_overlay_container.css({ 
+		"transform": "scale(var(--scene-scale))", 
+		"transform-origin": "top left",
+		"pointer-events": "none",
+		"z-index": "22"
+	});
 
-	const walls = $("<canvas id='walls_layer'></canvas>");
-	walls.css("position", "absolute");
-	walls.css("top", "0");
-	walls.css("left", "0");
+	grid_svg_overlay_container.append(grid);
+	//change the wizbox styling here
+	const wizbox = $(
+`<svg id="wizbox" class="TLA" style="display: block; width: 100%; height: 100%;" xmlns="http://www.w3.org/2000/svg">
+        <style>
+            .grid-box {
+                fill: none;
+                stroke: #ff0000;
+                stroke-width: min(5px, calc(1px / var(--window-zoom)));
+				stroke-dasharray:5, 5;
+                vector-effect: non-scaling-stroke;
+                transition: fill 0.2s;
+            }
+        </style>
+        <defs>
+            <polygon id="wiz-hex" class="grid-box" 
+                     points="0,-1 0.866,-0.5 0.866,0.5 0,1 -0.866,0.5 -0.866,-0.5" />
+        </defs>
+        <g id="wizbox-grid" visibility="hidden">
+            <path class="grid-box" d="M 0 0 L 0 1 L 1 1 L 1 0 L 0 0 M 0.33 0 L 0.33 1 M 0.67 0 L 0.67 1 M 0 0.33 L 1 0.33 M 0 0.67 L 1 0.67"/>
+        </g>
+        <g id="wizbox-hex" visibility="hidden">
+            <use href="#wiz-hex" x="0" y="0" />
+            <use href="#wiz-hex" transform="translate(0, -1.5) translate(0.866, 0)" /> <use href="#wiz-hex" transform="translate(0.866, 1.5)" />  <use href="#wiz-hex" transform="translate(-0.866, 1.5)" /> <use href="#wiz-hex" transform="translate(-1.732, 0)" />   <use href="#wiz-hex" transform="translate(-0.866, -1.5)" /><use href="#wiz-hex" transform="translate(1.732, 0)" />    </g>
+    </svg>
+`
+	);
+	wizbox.css("z-index", "19");
+
+	//Set up drag box, select box and rotation grabbers
+	const dragSelectBox = $(
+     `<svg id="dragbox" xmlns="http://www.w3.org/2000/svg">
+        <g id="dragbox-region">
+            <g id="dragbox-rect" visibility="hidden"> 
+            <path id="dragbox-rect1" d="M 0 0 L 0 1 M 1 0 L 1 1 M 0 0 L 1 0 M 0 1 L 1 1"  class="drag-box-b"/>
+            <path id="dragbox-rect2" d="M 0 0 L 0 1 M 1 0 L 1 1 M 0 0 L 1 0 M 0 1 L 1 1"  class="drag-box-w"/>
+            </g>
+            <rect id="selbox-rect" class="sel-box" visibility="hidden" x="0" y="0" width="1" height="1" rx="0.01" />
+        
+		
+		</g>
+      </svg>`);
+
+	const rotDragbox = $(
+		`<svg id="rotDragbox" xmlns="http://www.w3.org/2000/svg">
+			<g id="rot-grab" class="grabber" visibility="hidden"> <g class="grabber-icon-c">
+				<circle fill="#ced9e080" cx="12.5" cy="12.5" r="12.5" />
+				<path d="M12.5,17.125 c-2.59,0-4.695-2.1-4.695-4.697
+				c0-2.592,2.102-4.695,4.695-4.695 c2.595,0,4.697,2.103,4.697,4.695 C17.197,15.025,15.095,17.125,12.5,17.125z
+				M24.75,12.5 c0,0-6.147-6.637-12.25-6.637 C6.397,5.863,0.25,12.5,0.25,12.5 s6.147,6.635,12.25,6.635
+				c3.26,0,6.53-1.892,8.872-3.655 M12.5,10.127 c-1.27,0-2.3,1.033-2.3,2.302 c0,1.267,1.033,2.302,2.3,2.302
+				c1.27,0,2.302-1.033,2.302-2.302 C14.802,11.16,13.77,10.127,12.5,10.127z" />
+			</g></g>
+			<g id="group-rot-grab" class="grabber" visibility="hidden"> <g class="grabber-icon-r">
+				<circle fill="#ced9e080" cx="12.5" cy="12.5" r="12.5" />
+				<g id="aoeRotateSvg" transform="translate(3,1) scale(2.2)">
+					<polygon points="1.22 8.06 3.17 1.94 7.43 6.74 1.22 8.06" style="fill: #ced9e080; stroke: #000; stroke-miterlimit: 10;"/>
+					<g>
+						<path d="M1.22,8.78c-.06,0-.12,0-.18-.02-.19-.05-.34-.17-.44-.33-.1-.17-.12-.36-.07-.55.08-.32.37-.54.7-.54.06,0,.12,0,.18.02.19.05.34.17.44.33.1.17.12.36.07.55-.08.32-.37.54-.7.54Z" style="fill: #000;"/>
+						<path d="M1.22,7.84s.04,0,.06,0c.12.03.19.15.16.27-.03.11-.13.17-.21.17-.02,0-.04,0-.06,0-.12-.03-.19-.15-.16-.27.03-.11.13-.17.21-.17M1.22,6.84c-.54,0-1.04.36-1.18.91-.17.65.22,1.32.87,1.49.1.03.21.04.31.04.54,0,1.04-.36,1.18-.91.17-.65-.22-1.32-.87-1.49-.1-.03-.21-.04-.31-.04h0Z" style="fill: #000;"/>
+					</g>
+					<g>
+						<path d="M8.6,5.11c-.24-2.24-1.49-3.65-3.73-4.23" style="fill: none; stroke: #000; stroke-linecap: round; stroke-linejoin: round;"/>
+						<polygon points="9.55 4.78 8.63 6.55 7.55 4.87 9.55 4.78" style="fill: #000;"/>
+						<polygon points="5.34 0 3.45 .64 4.96 1.96 5.34 0" style="fill: #000;"/>
+					</g>
+				</g>
+				<g id="groupRotateSvg">
+					<path d="M12.499 14.453 Q11.693 14.453 11.12 13.88 q-0.573-0.574-0.573-1.38
+					Q10.547 11.693 11.121 11.12 q0.574-0.573 1.38-0.573 Q13.307 10.547 13.88 11.121 q0.573 0.574 0.573 1.38
+					Q14.453 13.307 13.879 13.88 q-0.574 0.573-1.38 0.573 Z M12.5 21.875 q-3.906 0-6.641-2.747 T3.125 12.474
+					h1.563 q0 3.255 2.278 5.547 T12.5 20.313 q3.264 0 5.539-2.274 Q20.313 15.765 20.313 12.5 t-2.274-5.539
+					Q15.765 4.688 12.5 4.688 q-1.797 0-3.359 0.794 T6.406 7.63 h2.709 v1.563 H3.698 V3.776 h1.563 v2.76
+					q1.38-1.615 3.261-2.513 T12.5 3.125 q1.953 0 3.659 0.742 t2.969 2.005 q1.263 1.263 2.005 2.969 T21.875 12.5
+					q0 1.953-0.742 3.659 t-2.005 2.969 q-1.263 1.263-2.969 2.005 T12.5 21.875 Z"/>
+				</g>
+			</g>
+		</svg>		
+		`
+	)
+
+	const walls = $("<canvas id='walls_layer' class='TLA'/>");
 	walls.css("z-index", "19");
 
-	const elev = $("<canvas id='elev_overlay'></canvas>");
-	elev.css("position", "absolute");
-	elev.css("top", "0");
-	elev.css("left", "0");
-	elev.css("z-index", "19");
+	const elev = $("<canvas id='elev_overlay' class='TLA'/>");
+	elev.css("z-index", "23");
 
-	const weather = $("<canvas id='weather_overlay'></canvas>");
-	weather.css("position", "absolute");
-	weather.css("top", "0");
-	weather.css("left", "0");
+	const weather = $("<canvas id='weather_overlay' class='TLA'/>");
 	weather.css("z-index", "55");
 
-	const weatherLight = $("<canvas id='weather_light'></canvas>");
-	weatherLight.css("position", "absolute");
-	weatherLight.css("top", "0");
-	weatherLight.css("left", "0");
+	const weatherLight = $("<canvas id='weather_light' class='TLA'/>");
 	weatherLight.css("z-index", "25");
 
-	const fog = $("<canvas id='fog_overlay'></canvas>");
-	fog.css("top", "0");
-	fog.css("left", "0");
-	fog.css("position", "absolute");
+	const fog = $("<canvas id='fog_overlay' class='TLA'/>");
 	fog.css("z-index", "21");
 
 
-	const rayCasting = $("<canvas id='raycastingCanvas'></canvas>");
-	rayCasting.css({"top": "0", "left": "0", "position": "absolute", "z-index": "22"});
+	const rayCasting = $("<canvas id='raycastingCanvas' class='TLA'/>");
+	rayCasting.css("z-index", "22");
 
 	// this overlay sits above other canvases, but below tempOverlay
 	// when peers stream their rulers, this canvas is where we draw them
-	const peerOverlay = $("<canvas id='peer_overlay'></canvas>");
-	peerOverlay.css("position", "absolute");
-	peerOverlay.css("top", "0");
-	peerOverlay.css("left", "0");
+	const peerOverlay = $("<canvas id='peer_overlay' class='TLA'/>");
 	peerOverlay.css("z-index", "15"); // below fog
 
 	// this overlay sits above all other canvases
 	// we draw to this and then bake the image into the corresponding
 	// canvas, based on the drawing function
-	const tempOverlay = $("<canvas id='temp_overlay'></canvas>");
-	tempOverlay.css("position", "absolute");
-	tempOverlay.css("top", "0");
-	tempOverlay.css("left", "0");
+	const tempOverlay = $("<canvas id='temp_overlay' class='TLA'/>");
 	tempOverlay.css("z-index", "25");
 
-	const darknessLayer = $("<div id='darkness_layer'></div>");
-	darknessLayer.css("position", "absolute");
-	darknessLayer.css("top", "0");
-	darknessLayer.css("left", "0");
+	const darknessLayer = $("<div id='darkness_layer' class='TLA'/>");
 
 	tempOverlay.dblclick(function(e) {
 		if(window.DRAWFUNCTION != 'select')
@@ -2237,7 +2242,7 @@ function init_ui() {
 		let  mousex = Math.round((e.pageX - window.VTTMargin) * (1.0 / window.ZOOM));
 		let  mousey = Math.round((e.pageY - window.VTTMargin) * (1.0 / window.ZOOM));
 
-		console.log("mousex " + mousex + " mousey " + mousey);
+		noisy_log("mousex " + mousex + " mousey " + mousey);
 
 		data = {
 			x: mousex,
@@ -2269,34 +2274,33 @@ function init_ui() {
 	window.ZOOM = 1.0;
 
 	
-	const VTT = $(`<div id='VTT' style='position:absolute; top:0px;left:0px;  '/>`);
+	const VTT = $(`<div id='VTT' class="TLA"'/>`);
 
 	//VTT.css("margin-left","200px");
 	//VTT.css("margin-top","200px");
 	//VTT.css("padding-right","400px");
 	//VTT.css("padding-bottom","400px");
 
-	let tokens = $("<div id='tokens'></div>");
-	tokens.css("position", "absolute");
-	tokens.css("top", 0);
-	tokens.css("left", 0);
-
-	VTT.append(tokens);
-
+	VTT.append($("<div id='tokens' class='TLA'/>")); //(40)
 	VTT.append(mapContainer);
 	VTT.append(peerOverlay);
 	VTT.append(drawOverlayUnderFogDarkness);
 	VTT.append(fog);
-	VTT.append(grid);
+	VTT.append(grid_svg_overlay_container);
 	VTT.append(drawOverlay);
 	VTT.append(textDiv);
 	VTT.append(tempOverlay);
+	VTT.append(dragSelectBox, rotDragbox);
 	VTT.append(walls);
 	VTT.append(elev);
 	VTT.append(weather);
 	mapItems.append(tokenMapItems);
+	mapItems.append(grid_svg_underlay);
+	
 	mapContainer.append(outer_light_container);
 	mapContainer.append(mapItems);
+	if (window.DM) grid_svg_overlay_container.append(wizbox);
+	
 	mapContainer.append(darknessLayer);
 	outer_light_container.append(rayCasting);
 	outer_light_container.append(lightContainer);
@@ -2306,34 +2310,22 @@ function init_ui() {
 	mapItems.append(background);
 	mapItems.append(drawOverlayUnderFogDarkness);
 
-
-
-	wrapper = $("<div id='VTTWRAPPER'/>");
+	wrapper = $("<div id='VTTWRAPPER' class='TLA'/>");
 	wrapper.css("margin-left", `${window.VTTMargin}px`);
 	wrapper.css("margin-top", `${window.VTTMargin}px`);
-	wrapper.css("paddning-right", "200px");
+	wrapper.css("padding-right", "200px");
 	wrapper.css("padding-bottom", "200px");
-	wrapper.css("position", "absolute");
-	wrapper.css("top", "0px");
-	wrapper.css("left", "0px");
-	wrapper.width(window.width);
-	wrapper.height(window.height);
+
 
 	wrapper.append(VTT);
 	$("body").append(wrapper);
 
-	black_layer = $("<div id='black_layer'/>");
-	black_layer.width(window.width+window.VTTMargin);
-	black_layer.height(window.height+window.VTTMargin);
-	black_layer.css("position", "absolute");
-	black_layer.css("top", "0px");
-	black_layer.css("left", "0px");
+	black_layer = $("<div id='black_layer' class='TLA'/>");
 	black_layer.css("background", "black");
 	black_layer.css("opacity", "0");
 	$("body").append(black_layer);
 	black_layer.animate({ opacity: "1" }, 1000);
 	black_layer.css("z-index", "1");
-
 	black_layer.off('contextmenu').on('contextmenu', function(e){
 		e.preventDefault();
 	})
@@ -2356,12 +2348,22 @@ function init_ui() {
 
 	token_menu();
 	
-
-	// EXPERRIMENTAL DRAG TO MOVE
+	install_grabbers(); //do it once instead of every time
+	// EXPERIMENTAL DRAG TO MOVE
 	let  curDown = false,
 		curYPos = 0,
 		curXPos = 0;
 
+	let scrollRequested = false;
+	const throttleScroll = throttle((scrollOptions) => {
+		if(scrollRequested)
+			return;
+		scrollRequested = true;
+		requestAnimationFrame(function(){
+			window.scrollTo(scrollOptions);
+			scrollRequested = false; 
+		})
+	}, 1000/240);
 	// Function separated so it can be dis/enabled
 	function mousemove(m) {
 		if (curDown) {
@@ -2370,9 +2372,7 @@ function init_ui() {
 				top: window.scrollY + curYPos - m.pageY,
 				behavior: "instant"
 			}
-			requestAnimationFrame(function(){
-				window.scrollTo(scrollOptions)
-			});
+			throttleScroll(scrollOptions);
 		}
 	}
 
@@ -2410,9 +2410,6 @@ function init_ui() {
 		curDown = false;
 		$("#VTT, #black_layer").css("cursor", "");
 
-		if (event.target.tagName.toLowerCase() !== 'a') {
-			$("#splash").remove(); // don't remove the splash screen if clicking an anchor tag otherwise the browser won't follow the link
-		}
 		if (sidebar_modal_is_open() && event.which === 1 && !window.MODALDOWN) {
 			// check if the click was within the modal or within an element that we specifically don't want to close the modal
 			let modal = event.target.closest(".sidebar-modal");
@@ -2440,23 +2437,32 @@ function init_ui() {
 			}
 		}
 	}
-
+	function set_paste_location(event){
+		window.cursor_x = event.pageX;
+		window.cursor_y = event.pageY;
+	}
+	function enable_paste_mouse_move(){
+		document.addEventListener('mousemove', set_paste_location, { passive: true });
+	}
+	function disable_paste_mouse_move(){
+		document.removeEventListener('mousemove', set_paste_location);
+	}
 	// Helper function to disable window mouse handlers, required when we
 	// do token dragging operations with measure paths
 	window.disable_window_mouse_handlers = function () {
-
 		$(window.document).off("mousemove.mouseHandler", mousemove);
 		$(window.document).off("mousedown.mouseHandler", mousedown);
 		$(window.document).off("mouseup.mouseHandler", mouseup);
+		disable_paste_mouse_move();
 	}
 
 	// Helper function to enable mouse handlers, required when we
 	// do token dragging operations with measure paths
 	window.enable_window_mouse_handlers = function () {
-
 		$(window.document).on("mousemove.mouseHandler", mousemove);
 		$(window.document).on("mousedown.mouseHandler", mousedown);
 		$(window.document).on("mouseup.mouseHandler", mouseup);
+		enable_paste_mouse_move();
 	}
 
 	window.enable_window_mouse_handlers();
@@ -2486,7 +2492,7 @@ function init_buttons() {
 	if ($("#fog_menu").length > 0) {
 		return; // only need to do this once
 	}
-	let buttons = $(`<div class="ddbc-tab-options--layout-pill"></div>`);
+	let buttons = $(`<div class="ddbc-tab-options--layout-pill main-top-buttons"></div>`);
 	$("body").append(buttons);
 
 	buttons.append($("<button style='display:inline; width:75px;' id='select-button' data-name='Select (S)' class='drawbutton hasTooltip hideable ddbc-tab-options__header-heading' data-shape='rect' data-function='select'><spam class='button-text'><u>S</u>ELECT</span></button>"));
@@ -2540,7 +2546,7 @@ function init_zoom_buttons() {
 	let zoom_section = $("<div id='zoom_buttons' />");
 	const youtube_controls_button = $(`<div id='youtube_controls_button' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Quick toggle youtube controls'></div>`);
 	youtube_controls_button.click(function (event) {
-		console.log("youtube_controls_button", event);
+		noisy_log("youtube_controls_button", event);
 		const iconWrapper = $(event.currentTarget).find(".ddbc-tab-options__header-heading");
 		if (iconWrapper.hasClass('ddbc-tab-options__header-heading--is-active')) {
 			iconWrapper.removeClass('ddbc-tab-options__header-heading--is-active');
@@ -2557,7 +2563,7 @@ function init_zoom_buttons() {
 	zoom_section.append(youtube_controls_button);
 	if(window.DM) {
 		
-		const dm_screen_button = $(`<div id='dm_screen_button' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Show/Hide DM Screen'> 
+		const dm_screen_button = $(`<div id='dm_screen_button' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Open DM Screen'> 
 			<div class="ddbc-tab-options__header-heading">
 					<span class="material-symbols-outlined" style="font-size: 20px;">
 						scrollable_header
@@ -2565,7 +2571,7 @@ function init_zoom_buttons() {
 			</div></div>
 			`);
 		dm_screen_button.click(function (event) {
-			console.log("dm_screen_button", event);
+			noisy_log("dm_screen_button", event);
 			const dmScreen = $(`#dmScreenDragContainer`);
 			if (dmScreen.length > 0){
 				dmScreen.show();
@@ -2581,25 +2587,22 @@ function init_zoom_buttons() {
 
 
 		projector_toggle.click(function (event) {
-			console.log("projector_toggle", event);
+			noisy_log("projector_toggle", event);
 			const iconWrapper = $(event.currentTarget).find(".ddbc-tab-options__header-heading");
 			if (iconWrapper.hasClass('ddbc-tab-options__header-heading--is-active')) {
 				iconWrapper.removeClass('ddbc-tab-options__header-heading--is-active');
-				window.ProjectorEnabled = false;
 			} else {
 				iconWrapper.addClass('ddbc-tab-options__header-heading--is-active');
-				window.ProjectorEnabled = false;
 			}
 		});
 		projector_toggle.append(`<div class="ddbc-tab-options__header-heading"><span style="font-size: 20px;" class="material-symbols-outlined">cast</span></div>`);
 		if(defaultValues.projectorMode != undefined){
-			projector_toggle.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active', defaultValues.projectorMode) 
-			window.ProjectorEnabled = defaultValues.projectorMode;
+			projector_toggle.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active', defaultValues.projectorMode)
 		}
 				
 		const projector_zoom_lock = $(`<div id='projector_zoom_lock' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Quick toggle projector zoom lock'></div>`);
 		projector_zoom_lock.click(function (event) {
-			console.log("projector_toggle", event);
+			noisy_log("projector_toggle", event);
 			const iconWrapper = $(event.currentTarget).find(".ddbc-tab-options__header-heading");
 			if (iconWrapper.hasClass('ddbc-tab-options__header-heading--is-active')) {
 				iconWrapper.removeClass('ddbc-tab-options__header-heading--is-active');
@@ -2627,7 +2630,7 @@ function init_zoom_buttons() {
 
 		const cursor_ruler_toggle = $(`<div id='cursor_ruler_toggle' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Send Cursor/Ruler To Players'></div>`);
 		cursor_ruler_toggle.click(function (event) {
-			console.log("cursor_ruler_toggle", event);
+			noisy_log("cursor_ruler_toggle", event);
 			const iconWrapper = $(event.currentTarget).find(".ddbc-tab-options__header-heading");
 			if (iconWrapper.hasClass('ddbc-tab-options__header-heading--is-active')) {
 				iconWrapper.removeClass('ddbc-tab-options__header-heading--is-active');
@@ -2672,7 +2675,7 @@ function init_zoom_buttons() {
 
 		let select_locked = $(`<div id='select_locked' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='Toggle Locked Tokens Selectable'> 
 		<div class="ddbc-tab-options__header-heading ddbc-tab-options__header-heading--is-active">
-				<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20px" height="20px" x="0px" y="0px"
+				<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20px" height="20px" x="0px" y="0px"
 		 viewBox="0 0 24 24" style="enable-background:new 0 0 24 24;" xml:space="preserve">
 			<style type="text/css">
 				#select_locked .st0{fill:none;}
@@ -2879,14 +2882,80 @@ function init_zoom_buttons() {
 			window.SelectedTokenVision = true;
 		}
 		redraw_light();	
-    if(window.DM && !window.SelectedTokenVision)
-      do_check_token_visibility();
+		if(window.DM && !window.SelectedTokenVision)
+			do_check_token_visibility();
 	});
 	if(defaultValues.selectedTokenVision != undefined){
 		selected_token_vision.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active', defaultValues.selectedTokenVision); 
 		window.SelectedTokenVision = defaultValues.selectedTokenVision;
 	}
 	zoom_section.append(selected_token_vision);
+
+	if(is_spectator_page()){
+		const lockView = $(`<div id='lock_view_button' class='ddbc-tab-options--layout-pill hideable'><div class='ddbc-tab-options__header-heading hasTooltip button-icon' data-name='Lock View (Shift+K)'><span class='material-symbols-outlined md-16 button-icon'>visibility_lock</span></div></div>`);
+		zoom_section.append(lockView);
+		const resetPos = mydebounce(() => {
+			change_zoom(window.lockViewPos.zoom);
+			window.scrollTo({top: window.lockViewPos.scrollY, left: window.lockViewPos.scrollX, behavior: "smooth"});		
+		}, 2000)
+		lockView.off('pointerdown.lockView').on('pointerdown.lockView', (e) =>{
+			const button = $(e.currentTarget);
+			const enabled = button.find('.ddbc-tab-options__header-heading').hasClass('ddbc-tab-options__header-heading--is-active')
+			button.find('.ddbc-tab-options__header-heading').toggleClass('ddbc-tab-options__header-heading--is-active')
+			
+			if(!enabled){
+				window.lockViewPos = {
+					scrollX: window.scrollX,
+					scrollY: window.scrollY,
+					zoom: window.ZOOM
+				}
+				$(window).off('scroll.resetToLockedPos').on('scroll.resetToLockedPos', resetPos);
+				return;
+			}
+			
+			delete window.lockViewPos;
+			$(window).off('scroll.resetToLockedPos')
+		})
+	}
+
+	const displayGridZoomConversion = window.EXPERIMENTAL_SETTINGS?.gridZoomConversion;
+	const gridZoomConversion = $(`<div id='grid_zoom_conversion' style='${displayGridZoomConversion ? '' : 'display: none;'}' class='ddbc-tab-options--layout-pill hideable'><div class='ddbc-tab-options__header-heading hasTooltip button-icon' data-name='Set grid visual size to match stored size'><svg data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24.73 24.74">
+  <g>
+    <path d="M1.5,8.5c.15,0-1.39,0-1.24,0h.72" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="3.67" y1="8.5" x2="21.14" y2="8.5" style="fill: none; stroke: var(--font-color, #231f20); stroke-dasharray: 3.58 2.69; stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="22.48" y1="8.5" x2="24.48" y2="8.5" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+  </g>
+  <g>
+    <path d="M8.32.86c0,.15,0-.75,0-.6v1.34" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="8.32" y1="4.22" x2="8.32" y2="21.19" style="fill: none; stroke: var(--font-color, #231f20); stroke-dasharray: 3.48 2.61; stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="8.32" y1="22.49" x2="8.32" y2="24.49" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+  </g>
+  <g>
+    <line x1=".26" y1="16.68" x2="2.26" y2="16.68" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="4.79" y1="16.68" x2="21.22" y2="16.68" style="fill: none; stroke: var(--font-color, #231f20); stroke-dasharray: 3.37 2.53; stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="22.48" y1="16.68" x2="24.48" y2="16.68" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+  </g>
+  <g>
+    <line x1="16.31" y1=".27" x2="16.31" y2="2.27" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="16.31" y1="4.8" x2="16.31" y2="21.23" style="fill: none; stroke: var(--font-color, #231f20); stroke-dasharray: 3.37 2.53; stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+    <line x1="16.31" y1="22.49" x2="16.31" y2="24.49" style="fill: none; stroke: var(--font-color, #231f20); stroke-linecap: round; stroke-linejoin: round; stroke-width: .5px;"/>
+  </g>
+  <g>
+    <line x1="5.07" y1="19.83" x2="1.13" y2="23.78" style="fill: none; stroke: var(--font-color, #231f20); stroke-miterlimit: 10;"/>
+    <polygon points="1.34 21.17 1.34 23.57 3.74 23.57 2.72 24.58 .32 24.58 .32 22.19 1.34 21.17" style="fill: var(--font-color, #231f20);"/>
+  </g>
+  <g>
+    <line x1="19.18" y1="5.42" x2="23.19" y2="1.41" style="fill: none; stroke: var(--font-color, #231f20); stroke-miterlimit: 10;"/>
+    <polygon points="22.98 4.02 22.98 1.62 20.58 1.62 21.6 .6 24 .6 24 3 22.98 4.02" style="fill: var(--font-color, #231f20);"/>
+  </g>
+</svg></div></div>`);
+	zoom_section.append(gridZoomConversion);
+	gridZoomConversion.off('pointerdown.gridZoom').on('pointerdown.gridZoom', (e) =>{
+		if(window.EXPERIMENTAL_SETTINGS?.gridZoomConversion){
+			const zoom = window.EXPERIMENTAL_SETTINGS?.gridZoomConversion; 
+			change_zoom(zoom / parseFloat(window.CURRENT_SCENE_DATA.hpps));
+		}
+	})
 
 
 	let zoom_center = $("<div id='zoom_fit' class='ddbc-tab-options--layout-pill hasTooltip button-icon hideable' data-name='fit screen (0)'><div class='ddbc-tab-options__header-heading'><span class='material-icons button-icon'>fit_screen</span></div></div>");
@@ -2913,12 +2982,55 @@ function init_zoom_buttons() {
 	zoom_section.append(hide_interface);
 
 	$(".avtt-sidebar-controls").append(zoom_section);
-	if (window.DM || is_spectator_page()) {
-		zoom_section.css("right","371px");
-	} else {
-		zoom_section.css("right","420px");
+	const zoomOffset = (window.DM || is_spectator_page()) ? 31 : 80;
+	zoom_section.css("right", (get_sidebar_width() + zoomOffset) + "px");
+	zoom_section.data("zoom-offset", zoomOffset);
+}
+
+function checkForExportRemind() {
+	if(!window.DM) return;
+	function daysPassedSinceExport(campaignId) {
+		const storageKey = `AVTT-exportStamp-${campaignId || window.CAMPAIGN_INFO.id}`;	
+		const lastSaved = localStorage.getItem(storageKey);
+		return lastSaved ? (Date.now() - parseInt(lastSaved, 10)) / 86400000 : NaN;
+	}
+
+	function showExportReminder() {
+		let exportReminder = $(`#exportReminder`);
+		if(exportReminder.length > 0) {
+			exportReminder.show();
+			return;
+		}
+		exportReminder = find_or_create_generic_draggable_window("exportReminder", "Export Reminder", false, false, '#exportReminder', 'fit-content', '10%', '10%', '10%', false, '', false, true);	
+		exportReminder.append(
+			$(`<div style="background: var(--background-color, #fff);
+								padding: 20px;
+								display: flex;
+								flex-direction: column;
+								gap: 5px;
+								font-size: 16px;
+								font-weight: bold;
+								top: -2px;
+								position: relative;
+								border-radius: 0px 0px 5px 5px;
+							">
+			<span>It is time to do an export of this campaign.</span>
+			<button id="exportRemindButton">Export</button>
+			</div>`)
+		);
+		$('#exportRemindButton').click(function (e) {
+			e.stopPropagation();
+			export_file('', true);
+			$(`#exportReminder .title_bar_close_button`).click();
+		});
+	}
+	const remindSetting = get_avtt_setting_value('exportRemind');
+	const days = daysPassedSinceExport();
+	if(remindSetting != 0 && (isNaN(days) || days > parseInt(remindSetting))) {
+		showExportReminder();
 	}
 }
+
 
 /**
  * Show loading screen.
@@ -2960,6 +3072,7 @@ function init_loading_overlay_beholder() {
  * Initializes the help menu.
  */
 function init_help_menu() {
+	const linkSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"></path></svg>`
 	$('body').append(`
 		<div id="help-container">
 			<div id="help-menu-outside"></div>
@@ -2967,7 +3080,8 @@ function init_help_menu() {
 				<div class="help-tabs">
 					<ul>
 						<li class="active"><a href="#tab1">Keyboard/Mouse shortcuts</a></li>
-						<li><a href="#tab19" class='popout' data-href="https://github.com/cyruzzo/AboveVTT/wiki" data-name='AboveVTT Wiki'>Wiki <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"></path></svg></a></li>
+						<li><a href="#" class='popout' data-href="https://github.com/cyruzzo/AboveVTT/wiki" data-name='AboveVTT Wiki'>Wiki ${linkSvg}</a></li>
+						<li><a href="#" class="popout" data-href="https://www.youtube.com/watch?v=AaSClv4jSbk&list=PLW0tvNe3gIM00xQCReTWi8CPrXBJyDQmG" data-name="AboveVTT Tutorial Playlist">Video Tutorial Playlist ${linkSvg}</a></li>
 						<li><a href="#tab2">FAQ</a></li>
 						<li><a href="#tab3">Scene Creation</a></li>
 						<li><a href="#tab4">Player UI</a></li>
@@ -2980,7 +3094,6 @@ function init_help_menu() {
 						<li><a href="#tab11">In-person tools</a></li>
 						<li><a href="#tab12">Performance Suggestions</a></li>
 						<!-- some unused numbers here for more tabs -->
-						<li><a href="#tab20">Video Tutorial Playlist</a></li>
 						<li><a href="#tab21">Get Help</a></li>		
 						<li><a href="#tab22">Compatible Tools</a></li>
 					</ul>
@@ -3004,6 +3117,10 @@ function init_help_menu() {
 						<dl>
 							<dt>Q</dt>
 							<dd>Show/hide sidebar</dd>
+						</dl>
+						<dl>
+							<dt>${getShiftKeyName()}+G</dt>
+							<dd>Show/hide high visibility grid</dd>
 						</dl>
 						<dl>
 							<dt>ESC</dt>
@@ -3074,7 +3191,8 @@ function init_help_menu() {
 							<dd>Rotate selected tokens as a group. Shift rotates in smaller increments</dd>
 						</dl>
 						<dl>
-							<dt>|</dt> <dt>${getShiftKeyName()}+\\</dt><dd>Flip selected tokens images</dd>
+							<dt>|</dt> <dt>${getShiftKeyName()}+\\</dt>
+							<dd>Flip selected tokens images</dd>
 						</dl>
 						<dl>
 							<dt>'</dt><dd>Move selected tokens to top of stack</dd>
@@ -3100,6 +3218,14 @@ function init_help_menu() {
 						<dl>
 							<dt>Enter</dt>
 							<dd>Roll added dice pool</dd>
+						</dl>
+						<dl>
+							<dt>F1 through F4</dt>
+							<dd>Load saved location and zoom</dd>
+						</dl>
+						<dl>
+							<dt>Shift+F1 through Shift+F4</dt>
+							<dd>Save current location and zoom</dd>
 						</dl>
 						<dl>
 							<dt>${getModKeyName()} (held)</dt>
@@ -3132,6 +3258,10 @@ function init_help_menu() {
 						<dl>
 							<dt>${getShiftKeyName()}+W</dt>
 							<dd>Toggle always show walls. Will also show 'hidden icon' doors/windows.</dd>
+						</dl>
+						<dl>
+							<dt>${getShiftKeyName()}+P</dt>
+							<dd>Open portal config window.</dd>
 						</dl>
 						<dl>
 							<dt>${getShiftKeyName()}+E</dt>
@@ -3174,8 +3304,12 @@ function init_help_menu() {
 							<dd>Force recenter camera and instant teleport token for those receiving the message. (Always does this for those clicking the portal)</dd>
 						</dl>
 						<dl>
-							<dt>${getModKeyName()}+A while edit wall points tool is selected</dt>
-							<dd>Select all wall points</dd>
+							<dt>${getModKeyName()}+A with Select tool</dt>
+							<dd>Selects all tokens</dd>
+						</dl>
+						<dl>
+							<dt>${getModKeyName()}+A with Walls tool : edit points</dt>
+							<dd>Selects all wall points</dd>
 						</dl>
 						<dl>
 							<dt>Hold ${getShiftKeyName()} while selecting wall points with edit point tool</dt>
@@ -3185,6 +3319,11 @@ function init_help_menu() {
 							<dt>Hold ${getShiftKeyName()} while editting wall points</dt>
 							<dd>Instead of moving all selected points, it will rescale all lines that have a point selected.</dd>
 						</dl>
+						<dl>
+							<dt>Hold ${getShiftKeyName()} while adding token(s) to map</dt>
+							<dd>Token(s) are added in hidden state</dd>
+						</dl>
+
 						<dl>
 							<dt>${getModKeyName()}+click scenes/tokens while reordering (DM only)</dt>
 							<dd>While reordering the scenes listing or token listing this will to add/remove scenes to multi-selection</dd>
@@ -3221,10 +3360,11 @@ function init_help_menu() {
 					<div id="tab10" class='googledoc bookmark' data-src="https://docs.google.com/document/d/e/2PACX-1vRSJ6Izvldq5c9z_d-9-Maa8ng1SUK2mGSQWkPjtJip0cy9dxAwAug58AmT9zRtJmiUx5Vhkp7hATSt/pub?embedded=true#h.it30rzhxilz3"></div>
 					<div id="tab11" class='googledoc bookmark' data-src="https://docs.google.com/document/d/e/2PACX-1vRSJ6Izvldq5c9z_d-9-Maa8ng1SUK2mGSQWkPjtJip0cy9dxAwAug58AmT9zRtJmiUx5Vhkp7hATSt/pub?embedded=true#h.6jh5zmtqvn3f"></div>
 					<div id="tab12" class='googledoc bookmark' data-src="https://docs.google.com/document/d/e/2PACX-1vRSJ6Izvldq5c9z_d-9-Maa8ng1SUK2mGSQWkPjtJip0cy9dxAwAug58AmT9zRtJmiUx5Vhkp7hATSt/pub?embedded=true#h.mob2z6z5azn2"></div>
-
+					<!-- Youtube iframe does not currently show playlist data, changed this to a external link
 					<div id="tab20">
 						<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/videoseries?list=PLW0tvNe3gIM00xQCReTWi8CPrXBJyDQmG&rel=0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-					</div>
+					</div> 
+					-->
 					<div id="tab21">
 						AboveVTT is an open source project. The developers build it in their free time, and rely on users to report and troubleshoot bugs. If you're experiencing a bug, here are a few options: 
 						<ul id="help-error-container">
@@ -3273,7 +3413,7 @@ function init_help_menu() {
 			$('.tabs-content>div#tab2').show();
 			let src = $(currentTab).attr('data-src');
 			$('.tabs-content>div#tab2').find('iframe').remove();
-			$('.tabs-content>div#tab2').append(`<iframe src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(src)}'
+			$('.tabs-content>div#tab2').append(`<iframe src='${window.EXTENSION_PATH}iframe.html?src=${encodeURIComponent(src).replace(/'/g, '%27')}'
 						allowfullscreen
 						webkitallowfullscreen
 						mozallowfullscreen></iframe>`)
@@ -3446,7 +3586,7 @@ function toggle_player_sheet_size() {
  */
 function reposition_player_sheet() {
 
-	let sidebarWidth = is_sidebar_visible() ? 340 : 0;
+	let sidebarWidth = is_sidebar_visible() ? get_sidebar_width() : 0;
 	let playableSpace = window.innerWidth - sidebarWidth;
 	let forceLayout = "none";
 
@@ -3504,7 +3644,7 @@ function resize_player_sheet_full_width() {
 function resize_player_sheet_thin() {
 	reset_character_sheet_css();
 	if (window.innerWidth < 1024) {
-		console.log("resize_player_sheet_thin calling is setting full, and calling reposition_player_sheet");
+		noisy_log("resize_player_sheet_thin calling is setting full, and calling reposition_player_sheet");
 		player_sheet_layout = "full";
 		reposition_player_sheet();
 		return;
@@ -3628,7 +3768,6 @@ function reset_character_sheet_css() {
 		"height": maxHeight,
 	});
 	let scrollBarWidth = $.position.scrollbarWidth();
-	console.debug("scrollBarWidth", scrollBarWidth);
 	$(".ct-sidebar").css({ "height": `calc(100vh - ${scrollBarWidth - 2}px)` });
 	$(".ct-character-header-tablet").css({ "background": "rgba(0, 0, 0, 0.85)" });
 }
@@ -3657,7 +3796,7 @@ function toggle_sidebar_visibility() {
  * It will also adjust the position of the character sheet .
  */
 function show_sidebar(dispatchResize = true) {
-
+	$('#avtt-sidebar-resize-handle').show();
 	let toggleButton = $("#hide_rightpanel");
 	toggleButton.addClass("point-right").removeClass("point-left");
 	toggleButton.attr('data-visible', 1);
@@ -3676,8 +3815,8 @@ function show_sidebar(dispatchResize = true) {
 	} else {
 		$("#sheet").removeClass("sidebar_hidden");
 	}
-	$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', '340px');
-	$('canvas.streamer-canvas').css('--sidebar-width', '340px');
+	$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', get_sidebar_width() + 'px');
+	$('canvas.streamer-canvas').css('--sidebar-width', get_sidebar_width() + 'px');
 	if(dispatchResize)
 		window.dispatchEvent(new Event('resize'));
 	addGamelogPopoutButton()
@@ -3746,6 +3885,14 @@ function popoutGamelogCleanup(){
 	$(childWindows["Gamelog"].document).find('head').append(`<style id='popoutGamelogCleanup'>
 		body{
 			overflow: hidden !important;
+		}
+
+		body .sidebar__pane-content {
+			--sidebar-width: 100%;
+			max-width: 100% !important;
+		}
+		body.body-rpgcampaign-details .gamelogcontainer>.sidebar {
+			top: 0 !important;
 		}
 		.sidebar__inner,
 		.sidebar,
@@ -3827,13 +3974,14 @@ function hide_sidebar(triggerResize = true) {
 	toggleButton.addClass("point-left").removeClass("point-right");
 	toggleButton.attr('data-visible', 0);
 	window.showPanel = false;
+	$('#avtt-sidebar-resize-handle').hide();
 	if (is_characters_page() && window.innerWidth < 1024) {
 		if($(`[class*='styles_mobileNav']>div`).length == 0)
 			$(`[class*='styles_mobileNav']>button`).click();
 		
 	} else {
 		let sidebar = is_characters_page() ? $(".ct-sidebar__portal") : $(".sidebar--right");
-		sidebar.css("transform", "translateX(340px)");
+		sidebar.css("transform", `translateX(${get_sidebar_width()}px)`);
 		$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', true)
 	}
 
@@ -3860,7 +4008,7 @@ function adjust_site_bar() {
 	let fullWidth = "100%";
 	if (!is_player_sheet_full_width()) {
 		let sheetWidth =  window.innerWidth < 1200 ? 550 : 620;
-		let sidebarWidth = is_sidebar_visible() ? 340 : 0;
+		let sidebarWidth = is_sidebar_visible() ? get_sidebar_width() : 0;
 		fullWidth = `${sheetWidth + sidebarWidth}px`;
 	}
 
@@ -3871,7 +4019,7 @@ function adjust_site_bar() {
 		fullWidth = "100%"; // when the DM is viewing, cover the entire thing
 	}
 
-	console.log(`adjust_site_bar setting width to ${fullWidth}`);
+	noisy_log(`adjust_site_bar setting width to ${fullWidth}`);
 	$(".site-bar").css({
 		"position": "fixed",
 		"height": "30px",

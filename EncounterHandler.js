@@ -64,7 +64,7 @@ class EncounterHandler {
 		}
 		let monsterIds = encounter.monsters.map(m => m.id);
 		if (monsterIds.length > 0) {
-			console.log("fetch_encounter_monsters starting");
+			noisy_log("fetch_encounter_monsters starting");
 			fetch_monsters(monsterIds, callback);
 		}
 	}
@@ -108,7 +108,7 @@ async function fetch_monsters(monsterIds, callback, open5e=false) {
 
 	   		        monsterData[i].treasure = treasure;
 	   		        monsterData[i].gear = gear;
-	   		       
+	   		       	monsterData[i]['5.5e'] = $(moreInfo)?.find('[class*="mon-stat-block-2024"]').length>0;
 
 	   		       resolve();
 		       }))

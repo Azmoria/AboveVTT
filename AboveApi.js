@@ -20,8 +20,9 @@ class AboveApiConfig {
 
 class AboveApi {
 
-  static #buildUrl(action, extraParams) {
-    const url = `${this.config.baseUrl}/services?action=${action}&campaign=${window.CAMPAIGN_SECRET}`;
+  static #buildUrl(action, extraParams, campaignSecret) {
+    const secret = campaignSecret || window.CAMPAIGN_SECRET;
+    const url = `${this.config.baseUrl}/services?action=${action}&campaign=${secret}`;
     const extraParamString = $.param(extraParams);
     if (extraParamString) {
       return `${url}&${extraParamString}`;
@@ -39,10 +40,27 @@ class AboveApi {
     }
   };
 
-  static async fetchJson(action, extraParams) {
-    const url = this.#buildUrl(action, extraParams);
-    const request = await fetch(url);
-    const response = await request.json();
+  static async fetchJson(action, extraParams, campaignSecret) {
+    const url = this.#buildUrl(action, extraParams, campaignSecret);
+    let request;
+    try {
+      request = await fetch(url);
+    } catch (error) {
+      const wrappedError = new Error(`AboveApi network error for '${action}': ${error.message}`);
+      throw wrappedError;
+    }
+    if (!request.ok) {
+      const errorText = await request.text().catch(() => 'Unknown error');
+      const httpError = new Error(`AboveApi HTTP ${request.status} for '${action}': ${errorText}`);
+      throw httpError;
+    }
+    let response;
+    try {
+      response = await request.json();
+    } catch (error) {
+      const parseError = new Error(`AboveApi: invalid JSON response for '${action}'`);
+      throw parseError;
+    }
     this.checkForErrors(response);
     return response;
   }
@@ -57,7 +75,8 @@ class AboveApi {
     if (!window.DM) return;
     const response = await this.fetchJson("getSceneList");
     if (response.Items && Array.isArray(response.Items)) {
-      console.log("AboveApi.getSceneList", response.Items);
+      console.log("AboveApi.getSceneList");
+      response.Items = await normalize_scene_urls(response.Items);
       return response.Items.map(item => item.data);
     } else {
       console.log("AboveApi.getSceneList returned an empty list");
@@ -98,21 +117,38 @@ class AboveApi {
       body: JSON.stringify({ cloud: 1, ...bodyExtras })
     }
     const url = this.#buildUrl("setCampaignData")
-    const request = await fetch(url, config);
-    const response = await request.json();
+    let request;
+    try {
+      request = await fetch(url, config);
+    } catch (error) {
+      const wrappedError = new Error(`AboveApi network error for 'setCampaignData': ${error.message}`);
+      throw wrappedError;
+    }
+    if (!request.ok) {
+      const errorText = await request.text().catch(() => 'Unknown error');
+      const httpError = new Error(`AboveApi HTTP ${request.status} for 'setCampaignData': ${errorText}`);
+      throw httpError;
+    }
+    let response;
+    try {
+      response = await request.json();
+    } catch (error) {
+      const parseError = new Error("AboveApi: invalid JSON response for 'setCampaignData'");
+      throw parseError;
+    }
     console.log("AboveApi.setCampaignData", response);
     return response;
   }
 
   static async getScene(sceneId) {
     const response = await this.fetchJson("getScene", {scene: sceneId});
-    console.log(`AboveApi.getScene(${sceneId})`, response);
+    noisy_log(`AboveApi.getScene(${sceneId})`, response);
     return response;
   }
 
-  static async exportScenes() {
-    const response = await this.fetchJson("export_scenes");
-    console.log(`AboveApi.exportScenes`, response);
+  static async exportScenes(campaignSecret) {
+    const response = await this.fetchJson("export_scenes", undefined, campaignSecret);
+    noisy_log(`AboveApi.exportScenes`, response);
     return response;
   }
 
@@ -125,12 +161,10 @@ class AboveApi {
       throw new Error(`AboveApi.migrateScenes received an empty list of scenes`);
     }
     for(let i = 0; i<scenes.length; i++){
-      if(Array.isArray(scenes[i].tokens)){
+      if(scenes[i].tokens !== null && typeof scenes[i].tokens === 'object'){
         let tokensObject = {}
-        for(let token in scenes[i].tokens){
-
-          let tokenId = scenes[i].tokens[token].id;
-          tokensObject[tokenId] = scenes[i].tokens[token];   
+        for(let token of Object.values(scenes[i].tokens)){
+          tokensObject[token.id] = token;   
         } 
         scenes[i].tokens = tokensObject;
       }
@@ -155,11 +189,26 @@ class AboveApi {
         body: JSON.stringify(sanitizedScenes)
       }
 
-      const request = await fetch(url, config);
+      let request;
+      try {
+        request = await fetch(url, config);
+      } catch (error) {
+        const wrappedError = new Error(`AboveApi network error for 'migrateScenes': ${error.message}`);
+        throw wrappedError
+      }
+      if (!request.ok) {
+        const errorText = await request.text().catch(() => 'Unknown error');
+        const httpError = new Error(`AboveApi HTTP ${request.status} for 'migrateScenes': ${errorText}`);
+        throw httpError;
+      }
       console.log("AboveApi.migrateScenes request", request);
       const response = await request.text();
       console.log("AboveApi.migrateScenes response", response);
-      localStorage.setItem(`Migrated${gameId}`, "1");
+      try {
+        localStorage.setItem(`Migrated${gameId}`, "1");
+      } catch (error) {
+        console.warn("AboveApi.migrateScenes: failed to save migration flag to localStorage", error);
+      }
     }
     
     return sanitizedScenes;

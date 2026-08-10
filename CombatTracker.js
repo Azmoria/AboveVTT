@@ -134,30 +134,30 @@ function init_combat_tracker(){
 
 	$(ct_title_bar).dblclick(function(){
 		if($(ct_title_bar).hasClass("restored")){
-			$(ct_title_bar).data("prev-height", $("#combat_tracker_inside").height());
-			$(ct_title_bar).data("prev-width", $("#combat_tracker_inside").width());
-			$(ct_title_bar).data("prev-top", $("#combat_tracker_inside").css("top"));
-			$(ct_title_bar).data("prev-left", $("#combat_tracker_inside").css("left"));
-			$("#combat_tracker_inside").css("top", $(ct_title_bar).data("prev-minimized-top"));
-			$("#combat_tracker_inside").css("left", $(ct_title_bar).data("prev-minimized-left"));
-			$("#combat_tracker_inside").height(25);
-			$("#combat_tracker_inside").width(200);
-			$("#combat_tracker_inside").css("visibility", "hidden");
+			$(ct_title_bar).data("prev-height", ct_inside.height());
+			$(ct_title_bar).data("prev-width", ct_inside.width());
+			$(ct_title_bar).data("prev-top", ct_inside.css("top"));
+			$(ct_title_bar).data("prev-left", ct_inside.css("left"));
+			ct_inside.css("top", $(ct_title_bar).data("prev-minimized-top"));
+			ct_inside.css("left", $(ct_title_bar).data("prev-minimized-left"));
+			ct_inside.height(25);
+			ct_inside.width(200);
+			ct_inside.css("visibility", "hidden");
 			$(ct_title_bar).css("visibility", "visible");
 			$(ct_title_bar).addClass("minimized");
 			$(ct_title_bar).removeClass("restored");
 			$(ct_title_bar).prepend("<div id='ct_text_title'>Combat Tracker</div>")
 		}
 		else if($(ct_title_bar).hasClass("minimized")){
-			$(ct_title_bar).data("prev-minimized-top", $("#combat_tracker_inside").css("top"));
-			$(ct_title_bar).data("prev-minimized-left", $("#combat_tracker_inside").css("left"));
-			$("#combat_tracker_inside").height($(ct_title_bar).data("prev-height"));
-			$("#combat_tracker_inside").width($(ct_title_bar).data("prev-width"));
-			$("#combat_tracker_inside").css("top", $(ct_title_bar).data("prev-top"));
-			$("#combat_tracker_inside").css("left", $(ct_title_bar).data("prev-left"));
+			$(ct_title_bar).data("prev-minimized-top", ct_inside.css("top"));
+			$(ct_title_bar).data("prev-minimized-left", ct_inside.css("left"));
+			ct_inside.height($(ct_title_bar).data("prev-height"));
+			ct_inside.width($(ct_title_bar).data("prev-width"));
+			ct_inside.css("top", $(ct_title_bar).data("prev-top"));
+			ct_inside.css("left", $(ct_title_bar).data("prev-left"));
 			$(ct_title_bar).addClass("restored");
 			$(ct_title_bar).removeClass("minimized");
-			$("#combat_tracker_inside").css("visibility", "visible");
+			ct_inside.css("visibility", "visible");
 			$("#ct_text_title").remove();
 		}
 	});
@@ -277,33 +277,12 @@ function init_combat_tracker(){
 		current=$("#combat_area tr[data-current=1]");
 		let currentTarget = current.attr('data-target');
 		if(current.length==0){
-			console.log('nessuno selezionato');
 			$($("#combat_area tr:not([skipTurn])")[0]).attr('data-current','1');
 			currentTarget = $("#combat_area tr[data-current=1]").attr('data-target');
 			if(window.TOKEN_OBJECTS[currentTarget] != undefined){
 				window.TOKEN_OBJECTS[currentTarget].options.current = true;
 				window.TOKEN_OBJECTS[currentTarget].update_and_sync();
-				let combatSettingData = getCombatTrackerSettings();
-				let group = false;
-				if(window.TOKEN_OBJECTS[currentTarget].options.combatGroupToken){
-					group = Object.values(window.TOKEN_OBJECTS).find(d=> d.options.combatGroup == window.TOKEN_OBJECTS[currentTarget].options.combatGroup && !d.options.combatGroupToken);
-				}
-				if(combatSettingData['scroll_to_next'] == '1'){
-					if(group){
-						window.TOKEN_OBJECTS[group.options.id].highlight();
-					}
-					else{
-						window.TOKEN_OBJECTS[currentTarget].highlight();
-					}				
-				}	
-				if(combatSettingData['select_next'] == '1'){
-					if(group){
-						$(`#tokens .token[data-id='${group.options.id}']`).click();
-					}
-					else{
-						$(`#tokens .token[data-id='${currentTarget}']`).click();
-					}	
-				}
+
 			}
 
 		}
@@ -340,36 +319,17 @@ function init_combat_tracker(){
 				adjust_reaction_condition(window.TOKEN_OBJECTS[newTarget]);
 				window.TOKEN_OBJECTS[newTarget].place_sync_persist();
 				let combatSettingData = getCombatTrackerSettings();
-				let group = false;
-				if(window.TOKEN_OBJECTS[newTarget].options.combatGroupToken){
-					group = Object.values(window.TOKEN_OBJECTS).find(d=> d.options.combatGroup == window.TOKEN_OBJECTS[newTarget].options.combatGroup && !d.options.combatGroupToken);
-				}
-				if(combatSettingData['scroll_to_next'] == '1'){
-					if(group){
-						window.TOKEN_OBJECTS[group.options.id].highlight();
-					}
-					else{
-						window.TOKEN_OBJECTS[newTarget].highlight();
-					}				
-				}	
-				if(combatSettingData['select_next'] == '1'){
-					if(group){
-						$(`#tokens .token[data-id='${group.options.id}']`).click();
-					}
-					else{
-						$(`#tokens .token[data-id='${newTarget}']`).click();
-					}	
-				}
+				highlight_scroll_next(newTarget);
 			}
 
 		}
 		debounceCombatPersist();
 		ct_update_popout();
 		if(window.childWindows['Combat Tracker'] != undefined)
-			$(window.childWindows['Combat Tracker'].document).find("tr[data-current=1]")[0].scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
-		$("#site tr[data-current=1]")[0].scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });	
+			$(window.childWindows['Combat Tracker'].document).find("tr[data-current=1]")[0]?.scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
+		$("#site tr[data-current=1]")[0]?.scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
 	});
-	
+
 	let prev=$("<button id='combat_prev_button'>PREV</button>");
 	prev.click(function(){
 		if($("#combat_area tr").length==0 || (document.getElementById('round_number').value <= 1 && $("#combat_area tr").first().attr('data-current') == 1))
@@ -405,33 +365,14 @@ function init_combat_tracker(){
 				window.TOKEN_OBJECTS[newTarget].place_sync_persist();
 				window.TOKEN_OBJECTS[newTarget].build_conditions(prev, true);
 				let combatSettingData = getCombatTrackerSettings();
-				let group = false;
-				if(window.TOKEN_OBJECTS[newTarget].options.combatGroupToken){
-					group = Object.values(window.TOKEN_OBJECTS).find(d=> d.options.combatGroup == window.TOKEN_OBJECTS[newTarget].options.combatGroup && !d.options.combatGroupToken);
-				}
-				if(combatSettingData['scroll_to_next'] == '1'){
-					if(group){
-						window.TOKEN_OBJECTS[group.options.id].highlight();
-					}
-					else{
-						window.TOKEN_OBJECTS[newTarget].highlight();
-					}				
-				}	
-				if(combatSettingData['select_next'] == '1'){
-					if(group){
-						$(`#tokens .token[data-id='${group.options.id}']`).click();
-					}
-					else{
-						$(`#tokens .token[data-id='${newTarget}']`).click();
-					}	
-				}
+				highlight_scroll_next(newTarget);
 			}
 		}
 		debounceCombatPersist();
 		ct_update_popout();
 		if(window.childWindows['Combat Tracker'] != undefined)
-			$(window.childWindows['Combat Tracker'].document).find("tr[data-current=1]")[0].scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
-		$("#site tr[data-current=1]")[0].scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });	
+			$(window.childWindows['Combat Tracker'].document).find("tr[data-current=1]")[0]?.scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
+		$("#site tr[data-current=1]")[0]?.scrollIntoView({ behavior: 'instant', block: 'center', start: 'inline' });
 	});
 
 	let endplayerturn=$('<button id="endplayerturn">E<u>n</u>d Turn</button>');
@@ -471,8 +412,8 @@ function init_combat_tracker(){
 
 	$("#site").append(ct);
 	/*draggable and resizeable combat tracker - set which frame should be on top and remove others. Cover iframes to prevent mouse interference*/
-	$("#combat_tracker_inside").addClass("moveableWindow");
-	$("#combat_tracker_inside").draggable({
+	ct_inside.addClass("moveableWindow");
+	ct_inside.draggable({
 			addClasses: false,
 			scroll: false,
 			containment: "#windowContainment",
@@ -484,7 +425,7 @@ function init_combat_tracker(){
 
 			}
 		});
-	$("#combat_tracker_inside").resizable({
+	ct_inside.resizable({
 		addClasses: false,
 		handles: "all",
 		containment: "#windowContainment",
@@ -497,14 +438,37 @@ function init_combat_tracker(){
 		minWidth: 215,
 		minHeight: 200
 	});
-	
-	$("#combat_tracker_inside").mousedown(function() {
-		frame_z_index_when_click($(this));
-	});
+	frame_z_index_when_click(ct_inside, true);
 
 	if(getCombatTrackerSettings().carousel == '1'){
 		init_carousel_combat_tracker()
 	}
+}
+function highlight_scroll_next(currentTarget){
+	let combatSettingData = getCombatTrackerSettings();
+	if(combatSettingData['scroll_to_next'] != '1' && combatSettingData['select_next'] != '1')
+		return;
+
+	let group = false;
+	if(window.TOKEN_OBJECTS[currentTarget].options.combatGroupToken){
+		group = Object.values(window.TOKEN_OBJECTS).find(d=> d.options.combatGroup == window.TOKEN_OBJECTS[currentTarget].options.combatGroup && !d.options.combatGroupToken);
+	}
+	const targetToken = group ? window.TOKEN_OBJECTS[group.options.id] : window.TOKEN_OBJECTS[currentTarget];
+	const tokenId = targetToken.options.id;
+	const domToken = $(`#tokens .token[data-id='${tokenId}']`)
+	const tokenVisible = window.DM || (targetToken.options.hidden !== true && domToken.is(':not(.notVisible)'));
+	const playerTokenId = $(`.token[data-id*='${window.PLAYER_ID}']`).attr("data-id");
+	const isPlayerToken = targetToken.isCurrentPlayer() || (playerTokenId == undefined && window.TOKEN_OBJECTS[tokenId].options.itemType == 'pc');
+	const tokenOwned = window.DM || isPlayerToken || targetToken.options.player_owned == true;
+	const tokenShared = tokenOwned || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[tokenId].options.share_vision && is_spectator_page()) 
+
+	if(combatSettingData['select_next'] == '1' && targetToken.selected == false && (tokenShared || tokenOwned)){
+		domToken.click();
+	}
+	if(combatSettingData['scroll_to_next'] == '1' && tokenVisible){	
+		targetToken.highlight();			
+	}	
+	
 }
 function init_carousel_combat_tracker(){
     $('#combat_carousel_container, #combat_area_carousel').remove();
@@ -790,16 +754,9 @@ function update_carousel_combat_tracker(){
 	    }
 
 	    table.find(`tr[data-target='${firstTokenId}']`).toggleClass('first-in-round', true);
-		const images = table.find(`tr td:first-of-type img[data-id^='above-bucket-not-a-url']`);
-
-		for(let image of images){
-			image = $(image);
-			const imageId = image.attr('data-id');
-			updateImgSrc(imageId, image, image.is('video'), true)
-		}
-
-
-	    if(window.DM){
+		const images = table.find(`tr td:first-of-type img`);
+	    
+		if(window.DM){
 	    		carouselContainer.find('#combat_prev_button, #combat_next_button').remove();
 	    		const prevButtonClone = $('#combat_prev_button').clone(true, true);
 			    const nextButtonClone = $('#combat_next_button').clone(true, true);
@@ -807,7 +764,7 @@ function update_carousel_combat_tracker(){
 			    prevButtonClone.text('<');
 			    nextButtonClone.text('>');
 			    carouselContainer.append(prevButtonClone, table, nextButtonClone);
-	    }
+	    }	
 	    else{
 
     		carouselContainer.find('#endplayerturn').remove();
@@ -817,6 +774,15 @@ function update_carousel_combat_tracker(){
 
 	    	
 	    }
+
+		for(let image of images){
+			image = $(image);
+			const imageId = image.attr('data-id');
+			updateImgSrc(imageId, image, image.is('video'), true)
+		}
+
+
+
     }
 
 
@@ -1264,11 +1230,7 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 		});
 		if(window.DM){
 			init.change(function(){	
-
 					window.all_token_objects[token.options.id].options.init = init.val()
-					window.all_token_objects[token.options.id].sync = mydebounce(function(options) {				
-						window.MB.sendMessage('custom/myVTT/token', options);
-					}, 300);
 				
 					token.options.init = init.val();
 					if(!!window.TOKEN_OBJECTS[token.options.id]){
@@ -1350,23 +1312,37 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 	// bind update functions to hp inputs, same as Token.js
 	// token update logic for hp pulls hp from token hpbar, so update hp bar manually
 	if (!token.isPlayer()) {
+		const debounceChange = mydebounce(function(token){
+			token.sync();
+		}, 1500)
 		hp_input.change(function(e) {
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
-		
-			if ($(this).val().trim().startsWith("+") || $(this).val().trim().startsWith("-")) {
-				$(this).val(Math.max(0, parseInt(token.hp) + parseInt($(this).val())));
+			let value = $(this).val().trim();
+			if (value.startsWith("+") || value.startsWith("-")) {
+				value = Math.max(0, parseInt(token.hp) + parseInt(value));
+				$(this).val(value);
+			} else{
+				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
+				value = Math.max(0, parseInt(eval(sanitizedString)));
+				$(this).val(value);
 			}
 
-			old.find(".hp").val($(this).val().trim());	
+			old.find(".hp").val(value);	
 
 			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].hp = $(this).val();
+				window.all_token_objects[token.options.id].hp = value;
+
+				debounceChange(window.all_token_objects[token.options.id]);
 			}			
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
-				window.TOKEN_OBJECTS[token.options.id].hp = $(this).val();
-				window.TOKEN_OBJECTS[token.options.id].update_and_sync();
-			}			
+				window.TOKEN_OBJECTS[token.options.id].hp = value;
+				window.TOKEN_OBJECTS[token.options.id].update_from_page();
+				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
+			}							
+				
+			window.all_token_objects[token.options.id].update_combat_tracker()
+			window.all_token_objects[token.options.id].update_quick_roll();	
 		});
 		hp_input.click(function(e) {
 			$(e.target).select();
@@ -1374,22 +1350,52 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 		maxhp_input.change(function(e) {
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
-
-			if ($(this).val().trim().startsWith("+") || $(this).val().trim().startsWith("-")) {
-				$(this).val(Math.max(0, token.maxHp + parseInt($(this).val())));
+			let value = $(this).val().trim();
+			if (value.startsWith("+") || value.startsWith("-")) {
+				value = Math.max(0, token.maxHp + parseInt(value));
+				$(this).val(value);
+			} else{
+				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
+				value = Math.max(0, parseInt(eval(sanitizedString)));
+				$(this).val(value)
 			}
 
-			old.find(".max_hp").val($(this).val().trim());
+			old.find(".max_hp").val(value);
 			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].maxHp = $(this).val();
+				window.all_token_objects[token.options.id].maxHp = value;
+				debounceChange(window.all_token_objects[token.options.id]);
 			}
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
-				window.TOKEN_OBJECTS[token.options.id].maxHp = $(this).val();
-				window.TOKEN_OBJECTS[token.options.id].update_and_sync();
-			}			
+				window.TOKEN_OBJECTS[token.options.id].maxHp = value;
+				window.TOKEN_OBJECTS[token.options.id].update_from_page();
+				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
+			}							
+			window.all_token_objects[token.options.id].update_combat_tracker()
+			window.all_token_objects[token.options.id].update_quick_roll();		
 		});
 		maxhp_input.click(function(e) {
 			$(e.target).select();
+		});
+
+		hp_input.on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(token.hp) || 0;
+			input.val(Math.max(0, current + delta));
+			input.trigger('change');
+		});
+		maxhp_input.on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(token.maxHp) || 0;
+			input.val(Math.max(1, current + delta));
+			input.trigger('change');
 		});
 	}
 	else {
@@ -1417,7 +1423,11 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 				window.TOKEN_OBJECTS[target].highlight();	     
 			}
 			else if(target in window.all_token_objects){
-				place_token_in_center_of_view(window.all_token_objects[target].options);
+				const tokenOptions = $.extend(true, {}, window.all_token_objects[target].options);
+				delete tokenOptions.size;
+				delete tokenOptions.left;
+				delete tokenOptions.top;
+				place_token_in_center_of_view(tokenOptions);
 			  	$(`#combat_area tr[data-target='${target}'] .findSVG`).remove();
 	           	let findSVG=$('<svg class="findSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 11c1.33 0 4 .67 4 2v.16c-.97 1.12-2.4 1.84-4 1.84s-3.03-.72-4-1.84V13c0-1.33 2.67-2 4-2zm0-1c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 .2C18 6.57 15.35 4 12 4s-6 2.57-6 6.2c0 2.34 1.95 5.44 6 9.14 4.05-3.7 6-6.8 6-9.14zM12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2z"/></svg>');	
 	            $(`#combat_area tr[data-target='${target}'] .findTokenCombatButton`).append(findSVG);
@@ -1446,7 +1456,7 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 
 
 
-	del=$('<button class="removeTokenCombatButton" style="font-size:10px;"><svg class="delSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg></button>');
+	const del=$('<button class="removeTokenCombatButton" style="font-size:10px;"><svg class="delSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg></button>');
 	del.click(
 		function(){
 			if(!token.options.combatGroupToken){
@@ -1478,16 +1488,17 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 	}
 	
 	if(!token.isPlayer()){
-		stat=$('<button class="openSheetCombatButton" style="font-size:10px;"><svg class="statSVG" xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><g><rect fill="none" height="24" width="24"/><g><path d="M19,5v14H5V5H19 M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3L19,3z"/></g><path d="M14,17H7v-2h7V17z M17,13H7v-2h10V13z M17,9H7V7h10V9z"/></g></svg></button>');
+		const stat=$('<button class="openSheetCombatButton" style="font-size:10px;"><svg class="statSVG" xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><g><rect fill="none" height="24" width="24"/><g><path d="M19,5v14H5V5H19 M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3L19,3z"/></g><path d="M14,17H7v-2h7V17z M17,13H7v-2h10V13z M17,9H7V7h10V9z"/></g></svg></button>');
 		
 		stat.click(function(){			
 			if(token.options.statBlock){
-				let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
-				let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
+				const {customStatBlock, pcURL} = token.getCustomPcUrl();
 				if(pcURL){
 					open_player_sheet(pcURL, undefined, token.options.name);
 				}else{
-					load_monster_stat(undefined, token.options.id, customStatBlock)
+					const monsterId = !customStatBlock && token.options.statBlock == token.options.monster ? token.options.monster : undefined;
+					if(!customStatBlock && !monsterId) return;
+					load_monster_stat(monsterId, token.options.id, customStatBlock)
 				}
 
 				return;
@@ -1501,13 +1512,13 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 			}
 
 
-			ct_show_checkbox = $(`<input id="`+token.options.id+`hideCombatTrackerInput"type='checkbox' class="combatHideFromPlayerInput" style="font-size:10px;" class='hideInPlayerCombatCheck' target_id='`+token.options.id+`' checked='`+token.options.ct_show+`'/>`);
+			const ct_show_checkbox = $(`<input id="`+token.options.id+`hideCombatTrackerInput"type='checkbox' class="combatHideFromPlayerInput" style="font-size:10px;" class='hideInPlayerCombatCheck' target_id='`+token.options.id+`' checked='`+token.options.ct_show+`'/>`);
 
 
-			eye_button = $('<button class="hideFromPlayerCombatButton" style="font-size:10px;"></button>');
+			const eye_button = $('<button class="hideFromPlayerCombatButton" style="font-size:10px;"></button>');
 
-			open_eye = $('<svg xmlns="http://www.w3.org/2000/svg" class="openEye" height="24" width="24" viewBox="0 0 24 24"><path xmlns="http://www.w3.org/2000/svg" d="M12 16Q13.875 16 15.188 14.688Q16.5 13.375 16.5 11.5Q16.5 9.625 15.188 8.312Q13.875 7 12 7Q10.125 7 8.812 8.312Q7.5 9.625 7.5 11.5Q7.5 13.375 8.812 14.688Q10.125 16 12 16ZM12 14.2Q10.875 14.2 10.088 13.412Q9.3 12.625 9.3 11.5Q9.3 10.375 10.088 9.587Q10.875 8.8 12 8.8Q13.125 8.8 13.913 9.587Q14.7 10.375 14.7 11.5Q14.7 12.625 13.913 13.412Q13.125 14.2 12 14.2ZM12 19Q8.35 19 5.35 16.962Q2.35 14.925 1 11.5Q2.35 8.075 5.35 6.037Q8.35 4 12 4Q15.65 4 18.65 6.037Q21.65 8.075 23 11.5Q21.65 14.925 18.65 16.962Q15.65 19 12 19ZM12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5ZM12 17Q14.825 17 17.188 15.512Q19.55 14.025 20.8 11.5Q19.55 8.975 17.188 7.487Q14.825 6 12 6Q9.175 6 6.812 7.487Q4.45 8.975 3.2 11.5Q4.45 14.025 6.812 15.512Q9.175 17 12 17Z"/></svg>');
-			closed_eye = $('<svg class="closedEye" xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 0 24 24"><path xmlns="http://www.w3.org/2000/svg" d="M16.1 13.3 14.65 11.85Q14.875 10.675 13.975 9.65Q13.075 8.625 11.65 8.85L10.2 7.4Q10.625 7.2 11.062 7.1Q11.5 7 12 7Q13.875 7 15.188 8.312Q16.5 9.625 16.5 11.5Q16.5 12 16.4 12.438Q16.3 12.875 16.1 13.3ZM19.3 16.45 17.85 15.05Q18.8 14.325 19.538 13.462Q20.275 12.6 20.8 11.5Q19.55 8.975 17.212 7.487Q14.875 6 12 6Q11.275 6 10.575 6.1Q9.875 6.2 9.2 6.4L7.65 4.85Q8.675 4.425 9.75 4.212Q10.825 4 12 4Q15.775 4 18.725 6.087Q21.675 8.175 23 11.5Q22.425 12.975 21.488 14.238Q20.55 15.5 19.3 16.45ZM19.8 22.6 15.6 18.45Q14.725 18.725 13.838 18.863Q12.95 19 12 19Q8.225 19 5.275 16.913Q2.325 14.825 1 11.5Q1.525 10.175 2.325 9.037Q3.125 7.9 4.15 7L1.4 4.2L2.8 2.8L21.2 21.2ZM5.55 8.4Q4.825 9.05 4.225 9.825Q3.625 10.6 3.2 11.5Q4.45 14.025 6.787 15.512Q9.125 17 12 17Q12.5 17 12.975 16.938Q13.45 16.875 13.95 16.8L13.05 15.85Q12.775 15.925 12.525 15.962Q12.275 16 12 16Q10.125 16 8.812 14.688Q7.5 13.375 7.5 11.5Q7.5 11.225 7.537 10.975Q7.575 10.725 7.65 10.45ZM13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725ZM9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Z"/></svg>');
+			const open_eye = $('<svg xmlns="http://www.w3.org/2000/svg" class="openEye" height="24" width="24" viewBox="0 0 24 24"><path xmlns="http://www.w3.org/2000/svg" d="M12 16Q13.875 16 15.188 14.688Q16.5 13.375 16.5 11.5Q16.5 9.625 15.188 8.312Q13.875 7 12 7Q10.125 7 8.812 8.312Q7.5 9.625 7.5 11.5Q7.5 13.375 8.812 14.688Q10.125 16 12 16ZM12 14.2Q10.875 14.2 10.088 13.412Q9.3 12.625 9.3 11.5Q9.3 10.375 10.088 9.587Q10.875 8.8 12 8.8Q13.125 8.8 13.913 9.587Q14.7 10.375 14.7 11.5Q14.7 12.625 13.913 13.412Q13.125 14.2 12 14.2ZM12 19Q8.35 19 5.35 16.962Q2.35 14.925 1 11.5Q2.35 8.075 5.35 6.037Q8.35 4 12 4Q15.65 4 18.65 6.037Q21.65 8.075 23 11.5Q21.65 14.925 18.65 16.962Q15.65 19 12 19ZM12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5Q12 11.5 12 11.5ZM12 17Q14.825 17 17.188 15.512Q19.55 14.025 20.8 11.5Q19.55 8.975 17.188 7.487Q14.825 6 12 6Q9.175 6 6.812 7.487Q4.45 8.975 3.2 11.5Q4.45 14.025 6.812 15.512Q9.175 17 12 17Z"/></svg>');
+			const closed_eye = $('<svg class="closedEye" xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 0 24 24"><path xmlns="http://www.w3.org/2000/svg" d="M16.1 13.3 14.65 11.85Q14.875 10.675 13.975 9.65Q13.075 8.625 11.65 8.85L10.2 7.4Q10.625 7.2 11.062 7.1Q11.5 7 12 7Q13.875 7 15.188 8.312Q16.5 9.625 16.5 11.5Q16.5 12 16.4 12.438Q16.3 12.875 16.1 13.3ZM19.3 16.45 17.85 15.05Q18.8 14.325 19.538 13.462Q20.275 12.6 20.8 11.5Q19.55 8.975 17.212 7.487Q14.875 6 12 6Q11.275 6 10.575 6.1Q9.875 6.2 9.2 6.4L7.65 4.85Q8.675 4.425 9.75 4.212Q10.825 4 12 4Q15.775 4 18.725 6.087Q21.675 8.175 23 11.5Q22.425 12.975 21.488 14.238Q20.55 15.5 19.3 16.45ZM19.8 22.6 15.6 18.45Q14.725 18.725 13.838 18.863Q12.95 19 12 19Q8.225 19 5.275 16.913Q2.325 14.825 1 11.5Q1.525 10.175 2.325 9.037Q3.125 7.9 4.15 7L1.4 4.2L2.8 2.8L21.2 21.2ZM5.55 8.4Q4.825 9.05 4.225 9.825Q3.625 10.6 3.2 11.5Q4.45 14.025 6.787 15.512Q9.125 17 12 17Q12.5 17 12.975 16.938Q13.45 16.875 13.95 16.8L13.05 15.85Q12.775 15.925 12.525 15.962Q12.275 16 12 16Q10.125 16 8.812 14.688Q7.5 13.375 7.5 11.5Q7.5 11.225 7.537 10.975Q7.575 10.725 7.65 10.45ZM13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725Q13.525 10.725 13.525 10.725ZM9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Q9.75 12.6 9.75 12.6Z"/></svg>');
 			eye_button.click(function(){
 				$("#"+token.options.id+"hideCombatTrackerInput").click();
 			});
@@ -1686,7 +1697,7 @@ function ct_load(data=null){
 					window.ROUND_NUMBER = data[i]['round_number'];
 					document.getElementById('round_number').value = window.ROUND_NUMBER;
 					const autoInit = trackerSettings.auto_init;
-					const tokenInCombat = $(`#combat_area tr[data-target='${window.pcs.find(d => d.sheet.includes(window.PLAYER_SHEET)).sheet}']`).length > 0;
+					const tokenInCombat = $(`#combat_area tr[data-target='${window.pcs.find(d => d.sheet.includes(window.PLAYER_SHEET))?.sheet}']`).length > 0;
 					if(autoInit == '1' && !window.DM && tokenInCombat == true){
 						$('.roll-init-button').click();
 					}
@@ -1698,9 +1709,6 @@ function ct_load(data=null){
 					if (window.TOKEN_OBJECTS[data[i]['data-target']]) {
 						window.all_token_objects[data[i]['data-target']].options.alternativeImages = window.TOKEN_OBJECTS[data[i]['data-target']].options.alternativeImages;
 					}
-					window.all_token_objects[data[i]['data-target']].sync = mydebounce(function(options) {				
-						window.MB.sendMessage('custom/myVTT/token', options);
-					}, 300);
 				}
 				const altImages = window.all_token_objects[data[i]['data-target']].options.alternativeImages;
 				const currAltImage = altImages ? [...altImages] : [];
@@ -1722,26 +1730,7 @@ function ct_load(data=null){
 				if(data[i]['current']){				
 					$("#combat_area tr[data-target='"+data[i]['data-target']+"']").attr("data-current","1");
 					if(window.TOKEN_OBJECTS[data[i]['data-target']] != undefined){
-						let group = false;
-						if(window.TOKEN_OBJECTS[data[i]['data-target']].options.combatGroupToken){
-							group = Object.values(window.TOKEN_OBJECTS).find(d=> d.options.combatGroup == window.TOKEN_OBJECTS[data[i]['data-target']].options.combatGroup && !d.options.combatGroupToken);
-						}
-						if(trackerSettings['scroll_to_next'] == '1'){
-							if(group){
-								window.TOKEN_OBJECTS[group.options.id].highlight();
-							}
-							else{
-								window.TOKEN_OBJECTS[data[i]['data-target']].highlight();
-							}				
-						}	
-						if(trackerSettings['select_next'] == '1'){
-							if(group){
-								$(`#tokens .token[data-id='${group.options.id}']`).click();
-							}
-							else{
-								$(`#tokens .token[data-id='${data[i]['data-target']}']`).click();
-							}	
-						}
+						highlight_scroll_next(data[i]['data-target']);
 					}
 					if(window.all_token_objects[data[i]['data-target']].isCurrentPlayer() || window.all_token_objects[data[i]['data-target']].options.player_owned){
 						$("#endplayerturn").toggleClass('enabled', true);
@@ -1779,7 +1768,7 @@ function ct_load(data=null){
 			$("#combat_area tr[data-target='"+data.current+"']").attr("data-current","1");
 			if(window.TOKEN_OBJECTS[data.current] != undefined){
 				window.TOKEN_OBJECTS[data.current].options.current = true;
-				window.TOKEN_OBJECTS[tokenID].place();
+				window.TOKEN_OBJECTS[data.current].place();
 			}
 			if(window.all_token_objects[data.current] != undefined){
 				if(window.all_token_objects[data.current].isCurrentPlayer() || window.all_token_objects[data.current].options.player_owned){

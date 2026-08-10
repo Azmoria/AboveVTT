@@ -19,7 +19,7 @@ class ChatObserver {
                     return;
                 }
                 let slashCommandMatch = value.match(diceRollCommandRegex);
-                const timerCommandRegex = /^\/timer\s([\w\s\d]+\s)?(\d+):(\d+)/gi; 
+                const timerCommandRegex = /^\/timer\s([\p{L}\p{N}\p{M}\p{P}\s]+\s)?(\d+):(\d+)/giu;  
                 let timerCommandMatch = timerCommandRegex.exec(value);
                 if (slashCommandMatch !== null) {
                     if (self.#parseSlashCommand(value)) {
@@ -39,7 +39,7 @@ class ChatObserver {
                         duration,
                         startTime
                     });
-                    create_gamelog_timer(message, duration, startTime);
+                    create_gamelog_timer(message, duration, startTime, true);
                     self.#didSubmit(input, value);
                 } else {
                     self.#sendChatMessage(value);
@@ -82,7 +82,7 @@ class ChatObserver {
         if (didSend === false) {
             // it was too complex so try to send it through rpgDiceRoller
             let expression = text.replace(diceRollCommandRegex, "").match(allowedExpressionCharactersRegex)?.[0];
-            didSend = send_ddb_dice_message(expression, window.pc?.name, window.pc?.image);
+            didSend = window.diceRoller.send_ddb_dice_message(expression, window.pc?.name, window.pc?.image);
         }
         return didSend;
     }
@@ -110,9 +110,12 @@ class ChatObserver {
 
         if (text.startsWith("/w")) {
             let matches = text.match(/\[(.*?)] (.*)/);
-            if (matches.length === 3) {
+            if (matches !== null && matches.length === 3) {
                 data.whisper = matches[1]
                 data.text = `<div class="custom-gamelog-message"style="position: relative;margin-bottom: 12px;"><span style='font-size: 9px;position: absolute;bottom: -18px;left: 0px;opacity: 0.5;margin-top: 10px;'><b>To: ${matches[1]}</b></span>${matches[2]}</div>`;
+            } else{
+                chat_command_error(`Invalid whisper command. Format: /w [player name] message`);
+                return;
             }
         } 
         else if(text.startsWith("/dm")){     

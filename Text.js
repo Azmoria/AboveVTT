@@ -1,6 +1,18 @@
 function apply_settings_from_storage(applyFromWindow = false){
     const buttonSelectedClasses = "button-enabled ddbc-tab-options__header-heading--is-active"
-    const settings = (applyFromWindow) ? window.TEXTDATA : JSON.parse(localStorage.getItem('textSettings'));
+    let settings;
+    if (applyFromWindow) {
+        settings = window.TEXTDATA;
+    } else {
+        try {
+            settings = JSON.parse(localStorage.getItem('textSettings'));
+        } catch(e) {
+            console.warn('textSettings corrupted in localStorage, resetting to defaults');
+            localStorage.removeItem('textSettings');
+            store_text_settings();
+            return;
+        }
+    }
     window.TEXTDATA = settings
     $(`#text_controller_inside button[id^='text_']`).removeClass(buttonSelectedClasses);
     $(`#text_font option`).removeAttr('selected');
@@ -86,37 +98,37 @@ function create_text_controller(applyFromWindow = false) {
     const textControllerTitleBarExit = $('<div id="text_controller_title_bar_exit"><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div>')
     textControllerTitleBarExit.click(function () {
         $(this).parent().parent().hide()
-        $("select-button").click();
+        $("#select-button").click();
     });
     textControllerTitleBar.append(textControllerTitleBarExit);
     textControllerInside.append(textControllerTitleBar);
 
     $(textControllerTitleBar).dblclick(function () {
         if ($(textControllerTitleBar).hasClass("restored")) {
-            $(textControllerTitleBar).data("prev-height", $("#text_controller_inside").height());
-            $(textControllerTitleBar).data("prev-width", $("#text_controller_inside").width());
-            $(textControllerTitleBar).data("prev-top", $("#text_controller_inside").css("top"));
-            $(textControllerTitleBar).data("prev-left", $("#text_controller_inside").css("left"));
-            $("#text_controller_inside").css("top", $(textControllerTitleBar).data("prev-minimized-top"));
-            $("#text_controller_inside").css("left", $(textControllerTitleBar).data("prev-minimized-left"));
-            $("#text_controller_inside").height(25);
-            $("#text_controller_inside").width(200);
-            $("#text_controller_inside").css("visibility", "hidden");
+            $(textControllerTitleBar).data("prev-height", textControllerInside.height());
+            $(textControllerTitleBar).data("prev-width", textControllerInside.width());
+            $(textControllerTitleBar).data("prev-top", textControllerInside.css("top"));
+            $(textControllerTitleBar).data("prev-left", textControllerInside.css("left"));
+            textControllerInside.css("top", $(textControllerTitleBar).data("prev-minimized-top"));
+            textControllerInside.css("left", $(textControllerTitleBar).data("prev-minimized-left"));
+            textControllerInside.height(25);
+            textControllerInside.width(200);
+            textControllerInside.css("visibility", "hidden");
             $(textControllerTitleBar).css("visibility", "visible");
             $(textControllerTitleBar).addClass("minimized");
             $(textControllerTitleBar).removeClass("restored");
             $(textControllerTitleBar).prepend("<div id='text_controller_title'>Text Settings</div>")
         }
         else if ($(textControllerTitleBar).hasClass("minimized")) {
-            $(textControllerTitleBar).data("prev-minimized-top", $("#text_controller_inside").css("top"));
-            $(textControllerTitleBar).data("prev-minimized-left", $("#text_controller_inside").css("left"));
-            $("#text_controller_inside").height($(textControllerTitleBar).data("prev-height"));
-            $("#text_controller_inside").width($(textControllerTitleBar).data("prev-width"));
-            $("#text_controller_inside").css("top", $(textControllerTitleBar).data("prev-top"));
-            $("#text_controller_inside").css("left", $(textControllerTitleBar).data("prev-left"));
+            $(textControllerTitleBar).data("prev-minimized-top", textControllerInside.css("top"));
+            $(textControllerTitleBar).data("prev-minimized-left", textControllerInside.css("left"));
+            textControllerInside.height($(textControllerTitleBar).data("prev-height"));
+            textControllerInside.width($(textControllerTitleBar).data("prev-width"));
+            textControllerInside.css("top", $(textControllerTitleBar).data("prev-top"));
+            textControllerInside.css("left", $(textControllerTitleBar).data("prev-left"));
             $(textControllerTitleBar).addClass("restored");
             $(textControllerTitleBar).removeClass("minimized");
-            $("#text_controller_inside").css("visibility", "visible");
+            textControllerInside.css("visibility", "visible");
             $("#text_controller_title").remove();
         }
     });
@@ -265,13 +277,11 @@ function create_text_controller(applyFromWindow = false) {
     })
 
     $(".sp-replacer.sp-light").each(function () {
-        console.log(this)
-        console.log($(this).prev().title)
         $(this).attr("title", $(this).prev().attr("title"))
     });
 
-    $("#text_controller_inside").addClass("moveableWindow");
-    $("#text_controller_inside").draggable({
+    textControllerInside.addClass("moveableWindow");
+    textControllerInside.draggable({
         addClasses: false,
         scroll: false,
         containment: "#windowContainment",
@@ -283,7 +293,7 @@ function create_text_controller(applyFromWindow = false) {
 
         }
     });
-    $("#text_controller_inside").resizable({
+    textControllerInside.resizable({
         addClasses: false,
         handles: "all",
         containment: "#windowContainment",
@@ -317,10 +327,7 @@ function create_text_controller(applyFromWindow = false) {
         minWidth: 80,
         minHeight: 55
     });
-
-    $("#text_controller_inside").mousedown(function () {
-        frame_z_index_when_click($(this));
-    });
+    frame_z_index_when_click(textControllerInside, true);
     // on first render check if settings in storage
     if (localStorage.getItem("textSettings") === null) {
         store_text_settings()
@@ -422,10 +429,7 @@ function create_moveable_text_box(x,y,width, height, text = undefined) {
             document.getElementById("text_controller_inside")?.remove();
         }, { once: true});
       });
-
-    $(textInputInside).mousedown(function () {
-        frame_z_index_when_click($(this));
-    });
+    frame_z_index_when_click($(textInputInside), true);
     const input = $(
         `<textarea class="drawing-text-box" 
         title="Input your text, this is an approximation of your final text"
@@ -441,7 +445,7 @@ function create_moveable_text_box(x,y,width, height, text = undefined) {
     
     apply_settings_to_boxes()
     $(input).on("keyup", handle_key_press);
-    $(input).on("input onchange", handle_auto_resize);
+    $(input).on("input change", handle_auto_resize);
     $(input).focus();
 }
 
@@ -478,7 +482,7 @@ function handle_auto_resize(e){
  * @returns 
  */
 function handle_draw_text_submit(event) {
-    textBox = $(this).parent().parent().find("textarea");
+    let textBox = $(this).parent().parent().find("textarea");
     // no text in box, return early
     if (!textBox.val()) return;
 
@@ -519,7 +523,7 @@ function handle_draw_text_submit(event) {
     // data should match params in draw_text
     // push the starting position of y south based on the font size
     let textid = uuid();
-    data = ["text",
+    let data = ["text",
         rectX,
         rectY + Math.ceil(parseFloat($(textBox).css("font-size")) / window.ZOOM),
         width,
@@ -631,7 +635,7 @@ function draw_text(
     if(!window.DM && hidden)
         return;
 
-    divideScale = (window.CURRENT_SCENE_DATA.scale_factor == "") ? 1 : window.CURRENT_SCENE_DATA.scale_factor;
+    let divideScale = (window.CURRENT_SCENE_DATA.scale_factor == "") ? 1 : window.CURRENT_SCENE_DATA.scale_factor;
 
     let adjustScale = (scale/divideScale);   
 
@@ -692,7 +696,7 @@ function draw_text(
             testElem.innerHTML = testLine;
             /* Messure textElement */
             let metrics = testElem.getBoundingClientRect();
-            testWidth = metrics.width;
+            let testWidth = metrics.width;
            
             if(words[n].includes('\n')  && n > 0){
                 let splitNewLines = words[n].split(/(\n)/g);
@@ -798,11 +802,11 @@ function draw_text(
  * @param {$} buttons the buttons in which this text button is appended to
  */
 function init_text_button(buttons) {
-    textButton = $(
+    let textButton = $(
         "<button style='display:inline;width:75px' id='text_button' data-name='Text (T)' class='drawbutton hasTooltip menu-button hideable ddbc-tab-options__header-heading'><span class='button-text'><u>T</u>ext</span></button>"
     );
 
-    textMenu = $(
+    let textMenu = $(
         "<div id='text_menu' class='top_menu' style='position:fixed; top:25px; width:75px'></div>"
     );
      textMenu.append(
@@ -845,7 +849,7 @@ function init_text_button(buttons) {
     );
 
     textMenu.find("#text_clear").click(function () {
-        r = confirm("DELETE ALL TEXT? (cannot be undone!)");
+        let r = confirm("DELETE ALL TEXT? (cannot be undone!)");
         if (r === true) {
             // keep anything that isn't text
             window.DRAWINGS = window.DRAWINGS.filter(

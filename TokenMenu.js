@@ -38,6 +38,7 @@ function context_menu_flyout(id, hoverEvent, buildFunction) {
 	if (hoverEvent.type === "mouseenter") {
 		window.contextFlyoutTimeout = setTimeout(() => {
 			let flyout = $(`<div id='${id}' class='context-menu-flyout'></div>`);
+			$(`.context-menu-flyout :focus`).blur();
 			$(`.context-menu-flyout`).remove(); // never duplicate
 
 			buildFunction(flyout);
@@ -85,12 +86,12 @@ function close_token_context_menu() {
 }
 
 
-function select_tokens_in_aoe(aoeTokens, selectPlayerTokens = true){
+function select_tokens_in_aoe(aoeTokens, selectPlayerTokens = true, callback = () => {}) {
 	deselect_all_tokens();
 	let rayCast = document.getElementById("raycastingCanvas");
 	let canvas = new OffscreenCanvas(rayCast.width, rayCast.height);
 	let ctx = canvas.getContext('2d', { willReadFrequently: true }); //rare case where we can allow cpu do so all the lifting since it is not rendered
-	
+	const tokensSelected = [];
 
 
 	ctx.globalCompositeOperation='source-over';
@@ -115,25 +116,28 @@ function select_tokens_in_aoe(aoeTokens, selectPlayerTokens = true){
 			const isInAoe = (is_token_in_aoe_context(id, ctx)); 
 			
 			if (isInAoe && !window.TOKEN_OBJECTS[id].options.hidden && !window.TOKEN_OBJECTS[id].options.locked) {
-				let tokenDiv = $(`#tokens>div[data-id='${id}']`)
-				if(tokenDiv.css("pointer-events")!="none" && tokenDiv.css("display")!="none" && !tokenDiv.hasClass("ui-draggable-disabled")) {
+				let tokenDiv = document.querySelector(`#tokens>div[data-id='${id}']`);
+				if(tokenDiv.style.pointerEvents!="none" && tokenDiv.style.display!="none" && !tokenDiv.classList.contains("ui-draggable-disabled")) {
 					window.TOKEN_OBJECTS[id].selected = true;
+					tokensSelected.push(id);
 				}
 			}		
 			resolve();
 		}));
 	}
+
+	close_token_context_menu();
 	Promise.all(promises).then(()=>{
 		draw_selected_token_bounding_box();
+		callback(tokensSelected);
 	})
-	close_token_context_menu();
 }
 
 /**
  * Opens a sidebar modal with token configuration options
  * @param tokenIds {Array<String>} an array of ids for the tokens being configured
  */
-function token_context_menu_expanded(tokenIds, e) {
+function token_context_menu_expanded(tokenIds, e, crossScenePortalData) {
 	if (tokenIds === undefined || tokenIds.length === 0) {
 		console.warn(`token_context_menu_expanded was called without any token ids`);
 		return;
@@ -146,11 +150,11 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	
 
-	if (tokens.length === 0 && door.length == 0) {
+	if (!crossScenePortalData && tokens.length === 0 && door.length == 0) {
 		console.warn(`token_context_menu_expanded was called with ids: ${JSON.stringify(tokenIds)}, but no matching tokens could be found`);
 		return;
 	}
-	if(door?.length > 0 && !window.DM){
+	if(!crossScenePortalData && door?.length > 0 && !window.DM){
 		return;
 	}
 
@@ -167,7 +171,7 @@ function token_context_menu_expanded(tokenIds, e) {
 	});
 
 
-	let moveableTokenOptions = $("<div id='tokenOptionsPopup'></div>");
+	let moveableTokenOptions = $("<div id='tokenOptionsPopup' class='moveableWindow'></div>");
 
 	
 	let body = $("<div id='tokenOptionsContainer'></div>");
@@ -175,8 +179,8 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	$('body').append(moveableTokenOptions);
 
-	$("#tokenOptionsPopup").addClass("moveableWindow");
-	$("#tokenOptionsPopup").draggable({
+	frame_z_index_when_click(moveableTokenOptions, true);
+	moveableTokenOptions.draggable({
 		addClasses: false,
 		scroll: false,
 		handle: "div:not(:has(select)), button, label, input",
@@ -188,84 +192,130 @@ function token_context_menu_expanded(tokenIds, e) {
 
 		}
 	});
+	
+	if(crossScenePortalData || door?.length == 1){
+		let x1,
+		x2,
+		y1,
+		y2,
+		locked,
+		secret,
+		isDoor,
+		isWindow,
+		isCurtain,
+		doors,
+		color,
+		isOpen
+		if(door?.length == 1){
+			x1 = parseInt(door.attr('data-x1'));
+			x2 = parseInt(door.attr('data-x2'));
+			y1 = parseInt(door.attr('data-y1'));
+			y2 = parseInt(door.attr('data-y2'));
+			locked = door.hasClass('locked');
+			secret = door.hasClass('secret');
 
-	if(door?.length == 1){
+			isDoor = door.children('.door').length>0;
+			isWindow = door.children('.window').length>0;
+			isCurtain = door.children('.curtain').length>0;
 
+			doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
+			color = doors[0][2];
+			isOpen = (/rgba.*0\.5\)/g).test(color) ? 'open' : 'closed';
+		}
+
+
+		
 		if(window.DM) {
 			const isTeleporter = door.find('.teleporter').length>0;
-			
-			if(window.TOKEN_OBJECTS[tokenIds] == undefined){
-				let options = {
-					...default_options(),
-					left: `${parseFloat(door.css('--mid-x')) - 25}px`,
-					top: `${parseFloat(door.css('--mid-y')) - 25}px`,
-					id: tokenIds[0].replaceAll('.', ''),
-					vision:{
-						feet: 0,
-						color: `rgba(0, 0, 0, 0)`
-					},
-					imgsrc: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=`,
-					type: 'door',
-					size: 50,
-					scaleCreated: window.CURRENT_SCENE_DATA.scale_factor,
-					auraislight: false
-				};
-				window.ScenesHandler.create_update_token(options)
-			}
-			if(!isTeleporter){
-				let openButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Open/Close</button>`)
-				openButton.off().on("click", function(clickEvent){
-					let clickedItem = $(this);
-					let locked = door.hasClass('locked');
-					let secret = door.hasClass('secret');
+			if(!crossScenePortalData){
+				if(window.TOKEN_OBJECTS[tokenIds] == undefined){
+					let options = {
+						...default_options(),
+						left: `${parseFloat(door.css('--mid-x')) - 25}px`,
+						top: `${parseFloat(door.css('--mid-y')) - 25}px`,
+						id: tokenIds[0].replaceAll('.', ''),
+						vision:{
+							feet: 0,
+							color: `rgba(0, 0, 0, 0)`
+						},
+						devilsight:{
+							feet: 0,
+							color: `rgba(0, 0, 0, 0)`
+						},
+						truesight:{
+							feet: 0,
+							color: `rgba(0, 0, 0, 0)`
+						},
+						imgsrc: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=`,
+						type: 'door',
+						size: 50,
+						scaleCreated: window.CURRENT_SCENE_DATA.scale_factor,
+						auraislight: false,
+						alwaysshowname: window.TOKEN_SETTINGS.alwaysshowname != undefined ? window.TOKEN_SETTINGS.alwaysshowname : false
+					};
 
-					const type = isDoor ? (secret ? (locked ? 5 : 4) : (locked ? 2 : 0)) : (secret ? (locked ? 7 : 6) : (locked ? 3 : 1))
-			
-					let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-	            
-	            	let opened = (/rgba.*0\.5\)/g).test(doors[0][2]) ? true : false;
-					isOpen = opened ? 'closed' : 'open';
+					window.ScenesHandler.create_update_token(options)
+					tokens = [window.TOKEN_OBJECTS[options.id]]
+				}
+				if(!isTeleporter){
+					let openButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Open/Close</button>`)
+					openButton.off().on("click", function(clickEvent){
+						let clickedItem = $(this);
+						let locked = door.hasClass('locked');
+						let secret = door.hasClass('secret');
 
-					door.toggleClass('open', !opened);
-
-	        		window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
-	                let data = ['line',
-								 'wall',
-								 doorColors[type][isOpen],
-								 x1,
-								 y1,
-								 x2,
-								 y2,
-								 12,
-								 doors[0][8],
-								 doors[0][9],
-					 			 (doors[0][10] != undefined ? doors[0][10] : ""),
-					 			 (doors[0][11] != undefined ? doors[0][11] : "")
-					];	
-					window.DRAWINGS.push(data);
-					window.wallUndo.push({
-						undo: [data],
-						redo: [doors[0]]
-					})
-
-
-					redraw_light_walls();
-					redraw_drawn_light();
-					redraw_light();
-
-
-					sync_drawings();
-					if(window.TOKEN_OBJECTS[`${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')]  != undefined){
-						window.TOKEN_OBJECTS[`${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')].place_sync_persist();
-					}
-				});
+						const type = isDoor ? (secret ? (locked ? 5 : 4) : (locked ? 2 : 0)) : (secret ? (locked ? 7 : 6) : (locked ? 3 : 1))
 				
-				body.append(openButton);
-			}
-			
-			if(isTeleporter){
+						let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
+					
+						let opened = (/rgba.*0\.5\)/g).test(doors[0][2]) ? true : false;
+						isOpen = opened ? 'closed' : 'open';
 
-				if(window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords != undefined){
+						door.toggleClass('open', !opened);
+
+						window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
+						let data = ['line',
+									'wall',
+									doorColors[type][isOpen],
+									x1,
+									y1,
+									x2,
+									y2,
+									12,
+									doors[0][8],
+									doors[0][9],
+									(doors[0][10] != undefined ? doors[0][10] : ""),
+									(doors[0][11] != undefined ? doors[0][11] : "")
+						];	
+						window.DRAWINGS.push(data);
+						pushWallUndo({
+							undo: [data],
+							redo: [doors[0]]
+						})
+
+
+						redraw_light_walls({wallsChanged: true});
+						redraw_drawn_light(); // could limit this to point line of sight tool drawings
+						redraw_drawings(); // could limit this to point line of sight tool drawings
+						redraw_fog(); // could limit this to point line of sight tool drawings
+						redraw_elev(); // could limit this to point line of sight tool drawings
+						redraw_light();
+
+
+						sync_drawings({wallsChanged: true});
+						if(window.TOKEN_OBJECTS[`${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')]  != undefined){
+							window.TOKEN_OBJECTS[`${x1}${y1}${x2}${y2}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','')].place_sync_persist();
+						}
+					});
+					
+					body.append(openButton);
+				}
+			}
+
+			
+			if(crossScenePortalData || isTeleporter){
+				const targetToken = crossScenePortalData?.token || window.TOKEN_OBJECTS[tokenIds];
+				if(window.TOKEN_OBJECTS[tokenIds]?.options?.teleporterCoords != undefined){
 					let scale = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated : 1/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated ;
 					let teleScale = window.CURRENT_SCENE_DATA.scale_factor != undefined && window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords.scale : window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords != undefined  ? 1/window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords.scale : 1;
 				
@@ -294,173 +344,183 @@ function token_context_menu_expanded(tokenIds, e) {
 					drawBrushArrow(context, brushpoints,'#fff',6, undefined, 'dash');
 					context.setLineDash([])
 				}
-				let teleportLocButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Set One-way Teleporter Location</button>`)
-				teleportLocButton.off().on("click", function(clickEvent){
-					let scale = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated : 1/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated ;
+				if(!crossScenePortalData){
+					let teleportLocButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Set One-way Teleporter Location</button>`)
+					teleportLocButton.off().on("click", function(clickEvent){
+						let scale = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated : 1/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated ;
+						
+						$('#tokenOptionsClickCloseDiv').click();
+						let target = $("#temp_overlay, #fog_overlay, #VTT, #black_layer");	
+						$("#temp_overlay").css('z-index', '50');
+						let canvas = document.getElementById("temp_overlay");
+						let context = canvas.getContext("2d");
+						target.css('cursor', 'crosshair');
+						target.off('mousemove.drawTele').on('mousemove.drawTele', function(e){
+							clear_temp_canvas();
+							let brushpoints = [];
+							let [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
+							let [endX, endY] = get_event_cursor_position(e);
+
+							let [rectX, rectY] = [endX - window.CURRENT_SCENE_DATA.hpps/2, endY-window.CURRENT_SCENE_DATA.vpps/2]
+							context.setLineDash([5, 5])
+							drawRect(context, rectX, rectY, window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, '#fff', false)
+
+
+
+							endX = endX - (endX-originX)*0.03;
+							endY = endY - (endY-originY)*0.03;
+							brushpoints.push({x:originX, y:originY}); // 4 points so arrow head works
+							brushpoints.push({x:originX, y:originY});
+							brushpoints.push({x:originX, y:originY});
+							brushpoints.push({x:originX, y:originY});
+							// draw a dot
+							brushpoints.push({x:endX, y:endY});
+							
+
+							drawBrushArrow(context, brushpoints,'#fff',6, undefined, 'dash');
+							context.setLineDash([])
+							
+						});
+						target.off('mouseup.setTele touchend.setTele').on('mouseup.setTele touchend.setTele', function(e){
+							if ( e.button == 2) {
+								return;
+							}
+							const [mouseX, mouseY] = get_event_cursor_position(e);
+							window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
+							if(window.all_token_objects[tokenIds] != undefined){
+								window.all_token_objects[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
+							}
+							window.TOKEN_OBJECTS[tokenIds].place(0);
+							window.TOKEN_OBJECTS[tokenIds].sync();
+
+							clear_temp_canvas();
+							target.off('mouseup.setTele touchend.setTele');
+							target.off('mousemove.drawTele')
+							$("#temp_overlay").css('z-index', '25');
+							if($(`#portal_config_window`).length>0){
+								open_portal_config();
+							}
+						});
+					});
 					
-					$('#tokenOptionsClickCloseDiv').click();
-					let target = $("#temp_overlay, #fog_overlay, #VTT, #black_layer");	
-					$("#temp_overlay").css('z-index', '50');
-					let canvas = document.getElementById("temp_overlay");
-					let context = canvas.getContext("2d");
-					target.css('cursor', 'crosshair');
-					target.off('mousemove.drawTele').on('mousemove.drawTele', function(e){
-						clear_temp_canvas();
-						let brushpoints = [];
-						let [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
-						let [endX, endY] = get_event_cursor_position(e);
+					body.append(teleportLocButton);
 
-						let [rectX, rectY] = [endX - window.CURRENT_SCENE_DATA.hpps/2, endY-window.CURRENT_SCENE_DATA.vpps/2]
-						context.setLineDash([5, 5])
-						drawRect(context, rectX, rectY, window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, '#fff', false)
+					let teleportTwoWayButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Set Return Teleporter Location</button>`)
+					teleportTwoWayButton.off().on("click", function(clickEvent){
+						let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
 
-
-
-						endX = endX - (endX-originX)*0.03;
-						endY = endY - (endY-originY)*0.03;
-						brushpoints.push({x:originX, y:originY}); // 4 points so arrow head works
-						brushpoints.push({x:originX, y:originY});
-						brushpoints.push({x:originX, y:originY});
-						brushpoints.push({x:originX, y:originY});
-						// draw a dot
-						brushpoints.push({x:endX, y:endY});
+						let scale = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated : 1/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated ;
 						
+						$('#tokenOptionsClickCloseDiv').click();
+						let target = $("#temp_overlay, #fog_overlay, #VTT, #black_layer");	
+						$("#temp_overlay").css('z-index', '50');
+						let canvas = document.getElementById("temp_overlay");
+						let context = canvas.getContext("2d");
+						target.css('cursor', 'crosshair');
+						target.off('mousemove.drawTele').on('mousemove.drawTele', function(e){
+							clear_temp_canvas();
+							let brushpoints = [];
+							let [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
+							let [endX, endY] = get_event_cursor_position(e);
 
-						drawBrushArrow(context, brushpoints,'#fff',6, undefined, 'dash');
-						context.setLineDash([])
-						
-					});
-					target.off('mouseup.setTele touchend.setTele').on('mouseup.setTele touchend.setTele', function(e){
-						if ( e.button == 2) {
-							return;
-						}
-						const [mouseX, mouseY] = get_event_cursor_position(e);
-						window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
-						if(window.all_token_objects[tokenIds] != undefined){
-							window.all_token_objects[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
-						}
-						window.TOKEN_OBJECTS[tokenIds].place(0);
-						window.TOKEN_OBJECTS[tokenIds].sync($.extend(true, {}, window.TOKEN_OBJECTS[tokenIds].options));
+							let [rectX, rectY] = [endX - window.CURRENT_SCENE_DATA.hpps/2, endY-window.CURRENT_SCENE_DATA.vpps/2]
+							context.setLineDash([5, 5])
+							drawRect(context, rectX, rectY, window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, '#fff', false)
 
-						clear_temp_canvas();
-						target.off('mouseup.setTele touchend.setTele');
-						target.off('mousemove.drawTele')
-						$("#temp_overlay").css('z-index', '25');
-					});
-				});
+
+
+							endX = endX - (endX-originX)*0.03;
+							endY = endY - (endY-originY)*0.03;
+							brushpoints.push({x:originX, y:originY}); // 4 points so arrow head works
+							brushpoints.push({x:originX, y:originY});
+							brushpoints.push({x:originX, y:originY});
+							brushpoints.push({x:originX, y:originY});
+							// draw a dot
+							brushpoints.push({x:endX, y:endY});
+							
+
+							drawBrushArrow(context, brushpoints,'#fff',6, undefined, 'dash');
+							context.setLineDash([])
+							
+						});
+						target.off('mouseup.setTele touchend.setTele').on('mouseup.setTele touchend.setTele', function(e){
+							if ( e.button == 2) {
+								return;
+							}
+
+							const [mouseX, mouseY] = get_event_cursor_position(e);
+							const [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
+							
+							let data = ['line',
+									'wall',
+									doors[0][2],
+									mouseX-5,
+									mouseY,
+									mouseX+5,
+									mouseY,
+									12,
+									window.CURRENT_SCENE_DATA.scale_factor*window.CURRENT_SCENE_DATA.conversion,
+									doors[0][9],
+									(doors[0][10] != undefined ? doors[0][10] : ""),
+									(doors[0][11] != undefined ? doors[0][11] : "")
+							]
+							window.DRAWINGS.push(data);
+							pushWallUndo({
+								undo: [[...data]],
+							})
+							let clonePortalId = `${mouseX-5}${mouseY}${mouseX+5}${mouseY}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','') 
 				
-				body.append(teleportLocButton);
+							if(window.TOKEN_OBJECTS[clonePortalId] == undefined){
+								let options = {
+									...default_options(),
+									left: `${mouseX-25}px`,
+									top: `${mouseY-25}px`,
+									id: clonePortalId,
+									vision:{
+										feet: 0,
+										color: `rgba(0, 0, 0, 0)`
+									},
+									imgsrc: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=`,
+									type: 'door',
+									size: 50,
+									scaleCreated: window.CURRENT_SCENE_DATA.scale_factor,
+									teleporterCoords: {
+										'left': originX,
+										'top': originY,
+										'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1
+									}
+								};
+								window.ScenesHandler.create_update_token(options)
+							}
+							redraw_light_walls();
+							sync_drawings();
+							window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
+							if(window.all_token_objects[tokenIds] != undefined){
+								window.all_token_objects[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
+							}
+							window.TOKEN_OBJECTS[tokenIds].place(0);
+							window.TOKEN_OBJECTS[tokenIds].sync();
 
-				let teleportTwoWayButton = $(`<button class=" context-menu-icon-hidden door-open material-icons">Set Return Teleporter Location</button>`)
-				teleportTwoWayButton.off().on("click", function(clickEvent){
-					let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-
-					let scale = window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated : 1/window.TOKEN_OBJECTS[tokenIds].options.scaleCreated ;
-					
-					$('#tokenOptionsClickCloseDiv').click();
-					let target = $("#temp_overlay, #fog_overlay, #VTT, #black_layer");	
-					$("#temp_overlay").css('z-index', '50');
-					let canvas = document.getElementById("temp_overlay");
-					let context = canvas.getContext("2d");
-					target.css('cursor', 'crosshair');
-					target.off('mousemove.drawTele').on('mousemove.drawTele', function(e){
-						clear_temp_canvas();
-						let brushpoints = [];
-						let [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
-						let [endX, endY] = get_event_cursor_position(e);
-
-						let [rectX, rectY] = [endX - window.CURRENT_SCENE_DATA.hpps/2, endY-window.CURRENT_SCENE_DATA.vpps/2]
-						context.setLineDash([5, 5])
-						drawRect(context, rectX, rectY, window.CURRENT_SCENE_DATA.hpps, window.CURRENT_SCENE_DATA.vpps, '#fff', false)
-
-
-
-						endX = endX - (endX-originX)*0.03;
-						endY = endY - (endY-originY)*0.03;
-						brushpoints.push({x:originX, y:originY}); // 4 points so arrow head works
-						brushpoints.push({x:originX, y:originY});
-						brushpoints.push({x:originX, y:originY});
-						brushpoints.push({x:originX, y:originY});
-						// draw a dot
-						brushpoints.push({x:endX, y:endY});
-						
-
-						drawBrushArrow(context, brushpoints,'#fff',6, undefined, 'dash');
-						context.setLineDash([])
-						
+							clear_temp_canvas();
+							target.off('mouseup.setTele touchend.setTele');
+							target.off('mousemove.drawTele')
+							$("#temp_overlay").css('z-index', '25');
+							if($(`#portal_config_window`).length>0){
+								open_portal_config();
+							}
+						});
 					});
-					target.off('mouseup.setTele touchend.setTele').on('mouseup.setTele touchend.setTele', function(e){
-						if ( e.button == 2) {
-							return;
-						}
+					body.append(teleportTwoWayButton);
 
-						const [mouseX, mouseY] = get_event_cursor_position(e);
-						const [originX, originY] = [(parseInt(window.TOKEN_OBJECTS[tokenIds].options.left)+25)*scale, (parseInt(window.TOKEN_OBJECTS[tokenIds].options.top)+25)*scale]
-						
-						let data = ['line',
-								 'wall',
-								 doors[0][2],
-								 mouseX-5,
-								 mouseY,
-								 mouseX+5,
-								 mouseY,
-								 12,
-								 doors[0][8],
-								 doors[0][9],
-					 			 (doors[0][10] != undefined ? doors[0][10] : ""),
-					 			 (doors[0][11] != undefined ? doors[0][11] : "")
-					 	]
-					 	window.DRAWINGS.push(data);
-					 	window.wallUndo.push({
-							undo: [[...data]],
-						})
-						let clonePortalId = `${mouseX-5}${mouseY}${mouseX+5}${mouseY}${window.CURRENT_SCENE_DATA.id}`.replaceAll('.','') 
-			
-			 			if(window.TOKEN_OBJECTS[clonePortalId] == undefined){
-							let options = {
-								...default_options(),
-								left: `${mouseX-25}px`,
-								top: `${mouseY-25}px`,
-								id: clonePortalId,
-								vision:{
-									feet: 0,
-									color: `rgba(0, 0, 0, 0)`
-								},
-								imgsrc: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=`,
-								type: 'door',
-								size: 50,
-								scaleCreated: window.CURRENT_SCENE_DATA.scale_factor,
-								teleporterCoords: {
-									'left': originX,
-									'top': originY,
-									'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1
-								}
-							};
-							window.ScenesHandler.create_update_token(options)
-						}
-						redraw_light_walls();
-						sync_drawings();
-						window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
-						if(window.all_token_objects[tokenIds] != undefined){
-							window.all_token_objects[tokenIds].options.teleporterCoords = {'left': mouseX, 'top': mouseY, 'scale': window.CURRENT_SCENE_DATA.scale_factor != undefined ? window.CURRENT_SCENE_DATA.scale_factor : 1}
-						}
-						window.TOKEN_OBJECTS[tokenIds].place(0);
-						window.TOKEN_OBJECTS[tokenIds].sync($.extend(true, {}, window.TOKEN_OBJECTS[tokenIds].options));
-
-						clear_temp_canvas();
-						target.off('mouseup.setTele touchend.setTele');
-						target.off('mousemove.drawTele')
-						$("#temp_overlay").css('z-index', '25');
+					let copyPortalId = $(`<button class=" context-menu-icon-hidden link material-icons">Copy Portal ID</button>`)
+					copyPortalId.off().on("click", function(clickEvent){
+						const copyLink = `${tokenIds};${window.CURRENT_SCENE_DATA.id}`
+						navigator.clipboard.writeText(copyLink);
+						showTempMessage('Portal ID copied to clipboard');
 					});
-				});
-				body.append(teleportTwoWayButton);
-
-				let copyPortalId = $(`<button class=" context-menu-icon-hidden link material-icons">Copy Portal ID</button>`)
-				copyPortalId.off().on("click", function(clickEvent){
-					const copyLink = `${tokenIds};${window.CURRENT_SCENE_DATA.id}`
-			        navigator.clipboard.writeText(copyLink);
-				});
-				body.append(copyPortalId);
+					body.append(copyPortalId);
+				}
+				
 
 				let crossSceneIdInputContainer = $(`
 				<div class="token-image-modal-footer-select-wrapper" style="display:flex">
@@ -468,8 +528,8 @@ function token_context_menu_expanded(tokenIds, e) {
 	 				<input style='width:80px;' title="Cross Scene Linked Portal" onclick="this.select();" placeholder="Cross Scene Linked Portal ID" type="text" />
 	 			</div>`);
 	 			const crossSceneInput = crossSceneIdInputContainer.find('input');
-	 			if(window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords?.linkedPortalId != undefined){
-	 				crossSceneInput.val(`${window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords.linkedPortalId};${window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords.sceneId}`)
+	 			if(targetToken.options.teleporterCoords?.linkedPortalId != undefined){
+	 				crossSceneInput.val(`${targetToken.options.teleporterCoords.linkedPortalId};${targetToken.options.teleporterCoords.sceneId}`)
 	 			}
 
 				crossSceneInput.off().on("change.edit focusout.edit", function(event){
@@ -477,19 +537,25 @@ function token_context_menu_expanded(tokenIds, e) {
 					const portalTokenId = values[0];
 					const sceneId = values[1];
 					if(sceneId == undefined || portalTokenId == undefined){
-						delete window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords;
+						delete targetToken.options.teleporterCoords;
 						if(window.all_token_objects[tokenIds] != undefined){
 							delete window.all_token_objects[tokenIds].options.teleporterCoords;
 						}
 					} else{
-						window.TOKEN_OBJECTS[tokenIds].options.teleporterCoords = {'linkedPortalId': portalTokenId, 'sceneId': sceneId}
+						targetToken.options.teleporterCoords = {'linkedPortalId': portalTokenId, 'sceneId': sceneId}
 						if(window.all_token_objects[tokenIds] != undefined){
 							window.all_token_objects[tokenIds].options.teleporterCoords = {'linkedPortalId': portalTokenId, 'sceneId': sceneId}
 						}
 					}
+					if(crossScenePortalData){
+						crossScenePortalData.token.debounceSyncMessage($.extend(true, {}, crossScenePortalData.token.options), crossScenePortalData.sceneId);
 					
-					window.TOKEN_OBJECTS[tokenIds].place(0);
-					window.TOKEN_OBJECTS[tokenIds].sync($.extend(true, {}, window.TOKEN_OBJECTS[tokenIds].options));
+					} else{
+						targetToken.place(0);
+						targetToken.sync();
+					}
+					open_portal_config()
+					
 					redraw_light_walls();
 				})
 
@@ -497,77 +563,167 @@ function token_context_menu_expanded(tokenIds, e) {
 
 			}
 
+			if(!crossScenePortalData){
+				let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Note</div></div>`);
+				notesRow.hover(function (hoverEvent) {
+					context_menu_flyout("notes-flyout", hoverEvent, function(flyout) {
+						flyout.append(build_notes_flyout_menu(tokenIds, flyout));
+					})
+				});
+				body.append(notesRow);
+
+				let lightRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Vision/Light</div></div>`);
+
+				lightRow.hover(function (hoverEvent) {
+					context_menu_flyout("light-flyout", hoverEvent, function(flyout) {
+						flyout.append(build_token_light_inputs(tokenIds, true));
+					})
+				});
+				if(window.CURRENT_SCENE_DATA.disableSceneVision != true && window.DM){		
+					body.append(lightRow);		
+				}
+		
 
 
-			let notesRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Note</div></div>`);
-			notesRow.hover(function (hoverEvent) {
-				context_menu_flyout("notes-flyout", hoverEvent, function(flyout) {
-					flyout.append(build_notes_flyout_menu(tokenIds, flyout));
-				})
-			});
-			body.append(notesRow);
-
-			let lightRow = $(`<div class="token-image-modal-footer-select-wrapper flyout-from-menu-item"><div class="token-image-modal-footer-title">Token Vision/Light</div></div>`);
-
-			lightRow.hover(function (hoverEvent) {
-				context_menu_flyout("light-flyout", hoverEvent, function(flyout) {
-					flyout.append(build_token_light_inputs(tokenIds, true));
-				})
-			});
-			if(window.CURRENT_SCENE_DATA.disableSceneVision != true && window.DM){		
-				body.append(lightRow);		
-			}
-	 
-
-            let x1 = parseInt(door.attr('data-x1'));
-            let x2 = parseInt(door.attr('data-x2'));
-            let y1 = parseInt(door.attr('data-y1'));
-            let y2 = parseInt(door.attr('data-y2'));
-
-            let locked = door.hasClass('locked');
-            let secret = door.hasClass('secret');
-
-            let isDoor = door.children('.door').length>0;
-            let isWindow = door.children('.window').length>0;
-            let isCurtain = door.children('.curtain').length>0;
-
-            let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-            let color = doors[0][2];
-            let isOpen = (/rgba.*0\.5\)/g).test(color) ? 'open' : 'closed';
-
-            
-
-            body.append($('<div class="token-image-modal-footer-title" style="margin-top:10px">Door Type</div>'));
 
 
-            if(!isTeleporter){
-            	let lockedButton = $(`<button class="${door.hasClass('locked') ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-lock material-icons">Locked</button>`)
-				lockedButton.off().on("click", function(clickEvent){
+				
+				let tokenName = window.TOKEN_OBJECTS[tokenIds].options.name;
+				let nameInput = $(`<input title="Token Name" placeholder="Name" name="name" type="text" />`);
+
+				nameInput.val(tokenName);
+
+				nameInput.on('keyup', function(event) {
+					let newName = event.target.value !== undefined && event.target.value.length > 0 ? event.target.value : '';
+					if (event.key == "Enter") {
+						if(window.JOURNAL.notes[tokenIds]){
+							window.JOURNAL.notes[tokenIds].title = newName;
+							window.JOURNAL.persist();
+						}
+						window.TOKEN_OBJECTS[tokenIds].options.name = newName;
+						window.TOKEN_OBJECTS[tokenIds].place_sync_persist();
+					}
+				});
+				nameInput.on('focusout', function(event) {
+					let newName = event.target.value !== undefined && event.target.value.length > 0 ? event.target.value : '';
+					if(window.JOURNAL.notes[tokenIds]){
+						window.JOURNAL.notes[tokenIds].title = newName;
+						window.JOURNAL.persist();
+					}
+					window.TOKEN_OBJECTS[tokenIds].options.name = newName;
+					window.TOKEN_OBJECTS[tokenIds].place_sync_persist();		
+
+					if($(`#portal_config_window`).length>0){
+						window.portalsInConfig[tokenIds].token.options.name = newName;
+						open_portal_config();
+					}
+				});
+				let nameWrapper = $(`
+					<div class="token-image-modal-url-label-wrapper">
+						<div class="token-image-modal-footer-title">Name</div>
+					</div>
+				`);
+				nameWrapper.append(nameInput); // input below label
+				
+				body.append(nameWrapper);
+				const setting = token_setting_options().filter((d) => d.name == 'alwaysshowname')[0];
+			
+				let currentValue = window.TOKEN_OBJECTS[tokenIds].options[setting.name];			
+				
+			
+				let inputWrapper = build_toggle_input(setting, currentValue, function (name, newValue) {
+					const portalConfigOpen = $(`#portal_config_window`).length>0			
+					tokens.forEach(token => {
+						token.options[name] = newValue;
+						token.place_sync_persist();
+						if(portalConfigOpen)
+							window.portalsInConfig[tokenIds].token.options.name = newValue;
+					});
+					if(portalConfigOpen)
+						open_portal_config();
+				});
+				
+				body.append(inputWrapper);
+					
+
+				body.append($('<div class="token-image-modal-footer-title" style="margin-top:10px">Door Type</div>'));
+
+
+				if(!isTeleporter){
+					let lockedButton = $(`<button class="${door.hasClass('locked') ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-lock material-icons">Locked</button>`)
+					lockedButton.off().on("click", function(clickEvent){
+						let clickedItem = $(this);
+						let locked = door.hasClass('locked');
+						let secret = door.hasClass('secret');
+
+						const type = isDoor ? (secret ? (!locked ? 5 : 4) : (!locked ? 2 : 0)) : isWindow ? (secret ? (!locked ? 7 : 6) : (!locked ? 3 : 1)) : isCurtain ? (secret ? (!locked ? 11 : 10) : (!locked ? 9 : 8)) : 12
+							
+						door.toggleClass('locked', !locked);
+						let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
+					
+						window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
+						let data = ['line',
+									'wall',
+									doorColors[type][isOpen],
+									x1,
+									y1,
+									x2,
+									y2,
+									12,
+									doors[0][8],
+									doors[0][9],
+									(doors[0][10] != undefined ? doors[0][10] : ""),
+									(doors[0][11] != undefined ? doors[0][11] : "")
+						];	
+						window.DRAWINGS.push(data);
+						pushWallUndo({
+							undo: [data],
+							redo: [doors[0]]
+						})
+						redraw_light_walls();
+						redraw_light();
+
+
+						sync_drawings();
+
+						clickedItem.removeClass("single-active all-active some-active active-condition");
+
+						clickedItem.addClass(`${!locked ? 'single-active active-condition' : ''}`);
+					});
+					body.append(lockedButton);
+				}
+				
+			
+				
+				let secretButton = $(`<button class="${door.hasClass('secret') ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-secret material-icons">Secret</button>`)
+				secretButton.off().on("click", function(clickEvent){
 					let clickedItem = $(this);
 					let locked = door.hasClass('locked');
 					let secret = door.hasClass('secret');
 
-					const type = isDoor ? (secret ? (!locked ? 5 : 4) : (!locked ? 2 : 0)) : isWindow ? (secret ? (!locked ? 7 : 6) : (!locked ? 3 : 1)) : isCurtain ? (secret ? (!locked ? 11 : 10) : (!locked ? 9 : 8)) : 12
-						
-					door.toggleClass('locked', !locked);
+					const type = isDoor ? (!secret ? (locked ? 5 : 4) : (locked ? 2 : 0)) : isWindow ? (!secret ? (locked ? 7 : 6) : (locked ? 3 : 1)) : isCurtain ? (!secret ? (locked ? 11 : 10) : (locked ? 9 : 8)) : !secret ? 13 : 12
+					
+					isOpen = locked ? 'closed' : isOpen;
+
+					door.toggleClass('secret', !secret);
 					let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-	            
-	        		window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
-	                let data = ['line',
-								 'wall',
-								 doorColors[type][isOpen],
-								 x1,
-								 y1,
-								 x2,
-								 y2,
-								 12,
-								 doors[0][8],
-								 doors[0][9],
-					 			 (doors[0][10] != undefined ? doors[0][10] : ""),
-					 			 (doors[0][11] != undefined ? doors[0][11] : "")
+				
+					window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
+					let data = ['line',
+								'wall',
+								doorColors[type][isOpen],
+								x1,
+								y1,
+								x2,
+								y2,
+								12,
+								doors[0][8],
+								doors[0][9],
+								(doors[0][10] != undefined ? doors[0][10] : ""),
+								(doors[0][11] != undefined ? doors[0][11] : "")
 					];	
 					window.DRAWINGS.push(data);
-					window.wallUndo.push({
+					pushWallUndo({
 						undo: [data],
 						redo: [doors[0]]
 					})
@@ -579,98 +735,73 @@ function token_context_menu_expanded(tokenIds, e) {
 
 					clickedItem.removeClass("single-active all-active some-active active-condition");
 
-					clickedItem.addClass(`${!locked ? 'single-active active-condition' : ''}`);
+					clickedItem.addClass(`${!secret ? 'single-active active-condition' : ''}`);
+					if($(`#portal_config_window`).length>0){
+						open_portal_config();
+					}
 				});
-				body.append(lockedButton);
-            }
-			
-		
-			
-			let secretButton = $(`<button class="${door.hasClass('secret') ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-secret material-icons">Secret</button>`)
-			secretButton.off().on("click", function(clickEvent){
-				let clickedItem = $(this);
-				let locked = door.hasClass('locked');
-				let secret = door.hasClass('secret');
+				body.append(secretButton);
 
-				const type = isDoor ? (!secret ? (locked ? 5 : 4) : (locked ? 2 : 0)) : isWindow ? (!secret ? (locked ? 7 : 6) : (locked ? 3 : 1)) : isCurtain ? (!secret ? (locked ? 11 : 10) : (locked ? 9 : 8)) : !secret ? 13 : 12
+				let hideButton = $(`<button class="${door.attr('data-hidden') == 'true' ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-hidden material-icons">Hide Icon-Show Walls to View</button>`)
+				hideButton.off().on("click", function(clickEvent){
+					let clickedItem = $(this);
+					let hidden = door.attr('data-hidden') == 'true';
+					let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
 				
-				isOpen = locked ? 'closed' : isOpen;
-
-				door.toggleClass('secret', !secret);
-				let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-            
-        		window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
-                let data = ['line',
-							 'wall',
-							 doorColors[type][isOpen],
-							 x1,
-							 y1,
-							 x2,
-							 y2,
-							 12,
-							 doors[0][8],
-							 doors[0][9],
-				 			 (doors[0][10] != undefined ? doors[0][10] : ""),
-				 			 (doors[0][11] != undefined ? doors[0][11] : "")
-				];	
-				window.DRAWINGS.push(data);
-				window.wallUndo.push({
-					undo: [data],
-					redo: [doors[0]]
-				})
-				redraw_light_walls();
-				redraw_light();
+					
+				
+					door.attr('data-hidden', !hidden);
+					window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
+					let data = ['line',
+								'wall',
+								doors[0][2],
+								x1,
+								y1,
+								x2,
+								y2,
+								12,
+								doors[0][8],
+								!hidden,
+								(doors[0][10] != undefined ? doors[0][10] : ""),
+								(doors[0][11] != undefined ? doors[0][11] : "")
+					];	
+					window.DRAWINGS.push(data);
+					pushWallUndo({
+						undo: [data],
+						redo: [doors[0]]
+					})
+					redraw_light_walls();
+					redraw_light();
 
 
-				sync_drawings();
+					sync_drawings();
 
-				clickedItem.removeClass("single-active all-active some-active active-condition");
+					clickedItem.removeClass("single-active all-active some-active active-condition");
 
-				clickedItem.addClass(`${!secret ? 'single-active active-condition' : ''}`);
-			});
-			body.append(secretButton);
+					clickedItem.addClass(`${!hidden ? 'single-active active-condition' : ''}`);
+					if($(`#portal_config_window`).length>0){
+						open_portal_config();
+					}
+				});
+				body.append(hideButton);
 
-			let hideButton = $(`<button class="${door.attr('data-hidden') == 'true' ? 'single-active active-condition' : 'none-active'} context-menu-icon-hidden door-hidden material-icons">Hide Icon-Show Walls to View</button>`)
-			hideButton.off().on("click", function(clickEvent){
-				let clickedItem = $(this);
-				let hidden = door.attr('data-hidden') == 'true';
-				let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  
-            
-        		
-               
-				door.attr('data-hidden', !hidden);
-        		window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
-                let data = ['line',
-							 'wall',
-							 doors[0][2],
-							 x1,
-							 y1,
-							 x2,
-							 y2,
-							 12,
-							 doors[0][8],
-							 !hidden,
-				 			 (doors[0][10] != undefined ? doors[0][10] : ""),
-				 			 (doors[0][11] != undefined ? doors[0][11] : "")
-				];	
-				window.DRAWINGS.push(data);
-				window.wallUndo.push({
-					undo: [data],
-					redo: [doors[0]]
-				})
-				redraw_light_walls();
-				redraw_light();
+				
+				body.append(`<hr style="opacity: 0.3" />`);
+				let deleteTokenMenuButton = $("<button class='deleteMenuButton icon-close-red material-icons'>Delete</button>")
+				body.append(deleteTokenMenuButton);
+				deleteTokenMenuButton.off().on("click", function(){
+					window.TOKEN_OBJECTS[tokenIds].delete(true);
+					let doors = window.DRAWINGS.filter(d => (d[1] == "wall" && doorColorsArray.includes(d[2]) && parseInt(d[3]) == x1 && parseInt(d[4]) == y1 && parseInt(d[5]) == x2 && parseInt(d[6]) == y2))  	
+					window.DRAWINGS = window.DRAWINGS.filter(d => d != doors[0]);
 
-
-				sync_drawings();
-
-				clickedItem.removeClass("single-active all-active some-active active-condition");
-
-				clickedItem.addClass(`${!hidden ? 'single-active active-condition' : ''}`);
-			});
-			body.append(hideButton);
-			
-
+					pushWallUndo({
+						undo: [[]],
+						redo: [doors[0]]
+					})
+					redraw_light_walls();
+					sync_drawings();
+				});
+			}
 		}
 
 		
@@ -939,6 +1070,7 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	if (tokens.length === 1) {
 		let token = tokens[0];
+
 		if (token.isPlayer() && !token.options.id.includes(window.PLAYER_ID)) {
 			let button = $(`<button>Open Character Sheet<span class="material-icons icon-view"></span></button>`);
 			button.on("click", function() {
@@ -949,17 +1081,13 @@ function token_context_menu_expanded(tokenIds, e) {
 		} 
 		else if(token.options.statBlock){
 			let button =$('<button>Open Monster Stat Block<span class="material-icons icon-view"></span></button>');
-			
+			const {customStatBlock, pcURL} = token.getCustomPcUrl();
 			button.click(function(){
-				let customStatBlock = window.JOURNAL.notes[token.options.statBlock].text;
-				let pcURL = $(customStatBlock).find('.custom-pc-sheet.custom-stat').text();
 				if(pcURL){
 					open_player_sheet(pcURL, undefined, token.options.name);
 				}else{
-					load_monster_stat(undefined, token.options.id, customStatBlock)
-				}
-
-				
+					load_monster_stat(token.options.statBlock, token.options.id, customStatBlock)
+				}	
 				close_token_context_menu();
 			});
 			if(token.options.player_owned || window.DM){
@@ -1143,9 +1271,7 @@ function token_context_menu_expanded(tokenIds, e) {
 						if(window.all_token_objects[group] == undefined){
 							window.all_token_objects[group] = t;
 						}
-						t.sync = mydebounce(function(options) { // VA IN FUNZIONE SOLO SE IL TOKEN NON ESISTE GIA					
-							window.MB.sendMessage('custom/myVTT/token', options);
-						}, 300);
+
 						t.place_sync_persist();
 						ct_add_token(window.TOKEN_OBJECTS[group], false, undefined, clickEvent.shiftKey, clickEvent.ctrlKey)	
 					
@@ -1252,9 +1378,7 @@ function token_context_menu_expanded(tokenIds, e) {
 				if(window.all_token_objects[group] == undefined){
 					window.all_token_objects[group] = t;
 				}
-				t.sync = mydebounce(function(options) { // VA IN FUNZIONE SOLO SE IL TOKEN NON ESISTE GIA					
-					window.MB.sendMessage('custom/myVTT/token', options);
-				}, 300);
+
 				t.place_sync_persist();
 				ct_add_token(window.TOKEN_OBJECTS[group], false, undefined, clickEvent.shiftKey, clickEvent.ctrlKey)
 			}
@@ -1364,7 +1488,7 @@ function token_context_menu_expanded(tokenIds, e) {
 
 	// Start Quick Group Roll
 	if (window.DM) {
-		let quickRollMenu = $("<button class='material-icons open-menu'>Add/Remove from Quick Rolls</button>")
+		let quickRollMenu = $(`<button class='material-icons open-menu'>${allTokensAreAoe ? 'Add Tokens in AoE to Quick Roll' : 'Add/Remove from Quick Rolls'}</button>`)
 		body.append(quickRollMenu);
 		quickRollMenu.on("click", function(clickEvent){
 			if(!childWindows['Quick Roll Menu'])
@@ -1379,8 +1503,8 @@ function token_context_menu_expanded(tokenIds, e) {
 						remove_from_quick_roll_menu(token)
 					}
 					else {
-						add_to_quick_roll_menu(token)
 					}
+					add_to_quick_roll_menu(token)
 				})
 			})
 			if(childWindows['Quick Roll Menu']){
@@ -1426,7 +1550,7 @@ function token_context_menu_expanded(tokenIds, e) {
 			const imageSrc = token.options.imgsrc.startsWith('above-bucket-not-a-url') ? await getAvttStorageUrl(token.options.imgsrc) : token.options.imgsrc;
 			let tokenImage = $(`<div class="image" style="display: block; max-width:100%;"><${(token.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => imageSrc.includes(d))) ? 'video disableremoteplayback muted' : 'img'} class='magnify' style='max-width:100%;' href='${imageSrc}' src='${imageSrc}'/>  </div>`);
 			
-			if(typeof token.options.monster == 'number' && token.options.itemType == 'monster' && token.options.alternativeImages == undefined){
+			if(typeof token.options.monster == 'number' && token.options.itemType == 'monster' && (token.options.alternativeImages == undefined || token.options.imgsrc == cached_monster_items[token.options.monster]?.monsterData?.avatarUrl)){
 
 				if(cached_monster_items[token.options.monster] != undefined){
 					setImageAttr(tokenImage, token);
@@ -1644,7 +1768,9 @@ function token_context_menu_expanded(tokenIds, e) {
 	if (window.DM || allPlayerOwned == true || allTokensAreAoe){
 		body.append(adjustmentsRow);
 	}
-	if(window.DM) {
+	const deleteableByPlayers = tokens.map(t => t.options.deleteableByPlayers);
+	const uniqueDeleteableByPlayers = [...new Set(deleteableByPlayers)];
+	if(window.DM || (uniqueDeleteableByPlayers.length === 1 && uniqueDeleteableByPlayers[0] == true)){
 		body.append(`<hr style="opacity: 0.3" />`);
 		let deleteTokenMenuButton = $("<button class='deleteMenuButton icon-close-red material-icons'>Delete</button>")
 	 	body.append(deleteTokenMenuButton);
@@ -1852,7 +1978,7 @@ function build_token_auras_inputs(tokenIds) {
 		window.AURA_PRESETS = JSON.parse(localStorage.getItem('AURA_PRESETS'));
 	}
 	wrapper.find('#editPresets').off('click.editPresets').on('click.editPresets', function(){
-		create_aura_presets_edit();		
+		create_aura_presets_edit(animationPresets);		
 	})
 	wrapper.find(".token-config-aura-preset").on("change", function(e) {
 
@@ -1883,14 +2009,42 @@ function build_token_auras_inputs(tokenIds) {
 			wrapper.find("input[name='aura2Color']").spectrum("set", selectedPreset.aura2.color);
 		}
 
+		const changeAnimation = selectedPreset.animation != undefined && selectedPreset.animation != '';
+		if(changeAnimation){
+			wrapper.find(".token-config-animation-preset").val(selectedPreset.animation);
+		}
 		
-		
+		const presetAnimVal = selectedPreset.animation;
+		let customPreset = false;
+		if(window.ANIMATION_PRESETS && window.ANIMATION_PRESETS.some(d=> d.name == presetAnimVal)){
+			customPreset = window.ANIMATION_PRESETS.filter(d=> d.name == presetAnimVal)[0]
+		}
 
 		tokens.forEach(token => {
 			token.options.aura1.feet = (selectedPreset.aura1.feet) ? selectedPreset.aura1.feet : token.options.aura1.feet;
 			token.options.aura2.feet = (selectedPreset.aura2.feet) ? selectedPreset.aura2.feet : token.options.aura2.feet;
 			token.options.aura1.color = (selectedPreset.aura1.color) ? selectedPreset.aura1.color : token.options.aura1.color;
 			token.options.aura2.color = (selectedPreset.aura2.color) ? selectedPreset.aura2.color : token.options.aura2.color;
+			if(changeAnimation){
+				if(customPreset == false){
+					token.options.animation= {
+						...token.options.animation,
+						aura: presetAnimVal,
+						customAuraMask: undefined,
+						customAuraRotate: undefined,
+						customAuraRpm: undefined
+					}
+				}
+				else{
+					token.options.animation= {
+						...token.options.animation,
+						aura: presetAnimVal,
+						customAuraMask: customPreset.mask,
+						customAuraRotate: customPreset.rotate,
+						customAuraRpm: customPreset.rpm
+					}
+				}
+			}
 			token.place_sync_persist();
 		});
 	});
@@ -1930,7 +2084,7 @@ function build_token_auras_inputs(tokenIds) {
 		defaultValue: false
 	};
 	let enabledAurasInput = build_toggle_input(auraOption, auraIsEnabled, function(name, newValue) {
-		console.log(`${name} setting is now ${newValue}`);
+		noisy_log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
 			token.options[name] = newValue;
 			token.place_sync_persist();
@@ -1949,6 +2103,33 @@ function build_token_auras_inputs(tokenIds) {
 	} else {
 		wrapper.find(".token-config-aura-wrapper").hide();
 	}
+	
+	let tokensSquareAura = tokens.map(t => t.options.squareAura);
+	let uniqueSquareAura = [...new Set(tokensSquareAura)];
+	let squareAuraIsEnabled = null;
+	if (uniqueSquareAura.length === 1) {
+		squareAuraIsEnabled = uniqueSquareAura[0];
+	}
+	const squareAura = {
+		name: "squareAura",
+		label: "Square Aura",
+		type: "toggle",
+		options: [
+			{ value: true, label: "Square", description: "The token's aura is a square when enabled and a circle otherwise." },
+			{ value: false, label: "Circle", description: "The token's aura is a square when enabled and a circle otherwise." }
+		],
+		defaultValue: false
+	};
+	const squareAuraInput = build_toggle_input(squareAura, squareAuraIsEnabled, function(name, newValue) {
+		noisy_log(`${name} setting is now ${newValue}`);
+		tokens.forEach(token => {
+			token.options[name] = newValue;
+			token.place_sync_persist();
+		});
+	});
+	wrapper.find(".token-config-aura-wrapper").prepend(squareAuraInput);
+	
+
 	const hideAuraLabel = (allTokensArePlayer) ? 'Hide Aura from other Players' : 'Hide Aura from Players';
 	const hideAura = {
 		name: "hideaura",
@@ -1961,7 +2142,7 @@ function build_token_auras_inputs(tokenIds) {
 		defaultValue: false
 	};
 	const hideAuraInput = build_toggle_input(hideAura, hideAuraIsEnabled, function(name, newValue) {
-		console.log(`${name} setting is now ${newValue}`);
+		noisy_log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
 			token.options[name] = newValue;
 			token.place_sync_persist();
@@ -1970,9 +2151,13 @@ function build_token_auras_inputs(tokenIds) {
 	if(window.DM || (tokens.length == 1 && (window.TOKEN_OBJECTS[tokens[0].options.id].options.player_owned || allTokensArePlayer))){
 		wrapper.find(".token-config-aura-wrapper").prepend(hideAuraInput);
 	}
+
+
 	let radiusInputs = wrapper.find('input.aura-radius');
 	radiusInputs.on('keyup', function(event) {
 		let newRadius = event.target.value;
+		if(newRadius.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			newRadius = newRadius.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		if (event.key == "Enter" && newRadius !== undefined && newRadius.length > 0) {
 			tokens.forEach(token => {
 				token.options[event.target.name]['feet'] = newRadius;
@@ -1982,6 +2167,8 @@ function build_token_auras_inputs(tokenIds) {
 	});
 	radiusInputs.on('focusout', function(event) {
 		let newRadius = event.target.value;
+		if(newRadius.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			newRadius = newRadius.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		if (newRadius !== undefined && newRadius.length > 0) {
 			tokens.forEach(token => {
 				token.options[event.target.name]['feet'] = newRadius;
@@ -2004,7 +2191,7 @@ function build_token_auras_inputs(tokenIds) {
 	const colorPickerChange = function(e, tinycolor) {
 		let auraName = e.target.name.replace("Color", "");
 		let color = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-		console.log(auraName, e, tinycolor);
+		noisy_log(auraName, e, tinycolor);
 		if (e.type === 'change') {
 			tokens.forEach(token => {
 				token.options[auraName]['color'] = color;
@@ -2057,7 +2244,7 @@ function build_token_auras_inputs(tokenIds) {
 
 
 	$("#VTTWRAPPER .sidebar-modal").on("remove", function () {
-		console.log("removing sidebar modal!!!");
+		noisy_log("removing sidebar modal!!!");
 		colorPickers.spectrum("destroy");
 	});
 	body.append(wrapper);
@@ -2106,31 +2293,43 @@ function build_token_light_inputs(tokenIds, door=false) {
 		auraRevealVisionEnabled = uniqueAuraRevealVisionValues[0];
 	}
 
-	let aura1Feet = tokens.map(t => t.options.light1.feet);
-	let uniqueAura1Feet = aura1Feet.length === 1 ? aura1Feet[0] : "";
-	let aura2Feet = tokens.map(t => t.options.light2.feet);
-	let uniqueAura2Feet = aura2Feet.length === 1 ? aura2Feet[0] : "";
-	let aura1Color = tokens.map(t => t.options.light1.color);
-	let uniqueAura1Color = aura1Color.length === 1 ? aura1Color[0] : window.TOKEN_SETTINGS?.light1?.color ? window.TOKEN_SETTINGS.light1.color : "";
-	let aura2Color = tokens.map(t => t.options.light2.color);
-	let uniqueAura2Color = aura2Color.length === 1 ? aura2Color[0] : window.TOKEN_SETTINGS?.light2?.color ? window.TOKEN_SETTINGS.light2.color : "";
-	let visionFeet = tokens.map(t => t.options.vision.feet);
-	let uniqueVisionFeet = visionFeet.length === 1 ? visionFeet[0] : "";
-	let visionColor = tokens.map(t => t.options.vision.color);
-	let uniqueVisionColor = visionColor.length === 1 ? visionColor[0] : window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS.vision.color : "";
+	const aura1Feet = tokens.map(t => t.options.light1.feet);
+	const uniqueAura1Feet = aura1Feet.length === 1 ? aura1Feet[0] : "";
+	const aura2Feet = tokens.map(t => t.options.light2.feet);
+	const uniqueAura2Feet = aura2Feet.length === 1 ? aura2Feet[0] : "";
+	const aura1Color = tokens.map(t => t.options.light1.color);
+	const uniqueAura1Color = aura1Color.length === 1 ? aura1Color[0] : window.TOKEN_SETTINGS?.light1?.color ? window.TOKEN_SETTINGS.light1.color : "";
+	const aura2Color = tokens.map(t => t.options.light2.color);
+	const uniqueAura2Color = aura2Color.length === 1 ? aura2Color[0] : window.TOKEN_SETTINGS?.light2?.color ? window.TOKEN_SETTINGS.light2.color : "";
+	const visionFeet = tokens.map(t => t.options.vision.feet);
+	const uniqueVisionFeet = visionFeet.length === 1 ? visionFeet[0] : "0";
+	const visionColor = tokens.map(t => t.options.vision.color);
+	const uniqueVisionColor = visionColor.length === 1 ? visionColor[0] : window.TOKEN_SETTINGS?.vision?.color ? window.TOKEN_SETTINGS.vision.color : "";
+	
+	
+	const devilsightFeet = tokens.map(t => t.options.devilsight.feet);
+	const uniqueDevilsightFeet = devilsightFeet.length === 1 ? devilsightFeet[0] : "";
+	const devilsightColor = tokens.map(t => t.options.devilsight.color);
+	const uniqueDevilsightColor = devilsightColor.length === 1  ? devilsightColor[0] : window.TOKEN_SETTINGS?.devilsight?.color ? window.TOKEN_SETTINGS.devilsight.color : "";
 
-	let light1DaylightColor = tokens.map(t => t.options.light1.daylight);
-	let uniquelight1DaylightColor = light1DaylightColor.length === 1 ? light1DaylightColor[0] == true ? 'active-daylight' : '' : '';
+	const truesightFeet = tokens.map(t => t.options.truesight.feet);
+	const uniqueTruesightFeet = truesightFeet.length === 1 ? truesightFeet[0] : "";
+	const truesightColor = tokens.map(t => t.options.truesight.color);
+	const uniqueTruesightColor = truesightColor.length === 1 ? truesightColor[0] : window.TOKEN_SETTINGS?.truesight?.color ? window.TOKEN_SETTINGS.truesight.color : "";
 
-	let light2DaylightColor = tokens.map(t => t.options.light2.daylight);
-	let uniquelight2DaylightColor = light2DaylightColor.length === 1 ? light2DaylightColor[0] == true ? 'active-daylight' : '' : '';
+
+	const light1DaylightColor = tokens.map(t => t.options.light1.daylight);
+	const uniquelight1DaylightColor = light1DaylightColor.length === 1 ? light1DaylightColor[0] == true ? 'active-daylight' : '' : '';
+
+	const light2DaylightColor = tokens.map(t => t.options.light2.daylight);
+	const uniquelight2DaylightColor = light2DaylightColor.length === 1 ? light2DaylightColor[0] == true ? 'active-daylight' : '' : '';
 
 
 	let upsq = 'ft';
 	if (window.CURRENT_SCENE_DATA.upsq !== undefined && window.CURRENT_SCENE_DATA.upsq.length > 0) {
 		upsq = window.CURRENT_SCENE_DATA.upsq;
 	}
-	let wrapper = $(`
+	const wrapper = $(`
 		<div class="token-config-aura-input">
 
 			<div class="token-config-aura-wrapper">			
@@ -2141,12 +2340,6 @@ function build_token_light_inputs(tokenIds, door=false) {
 						<option value=""></option>
 					</select>
 				</div>
-				<div class="token-image-modal-footer-select-wrapper">
-					<div class="token-image-modal-footer-title">Darkvision Type</div>
-					<select class="token-config-visiontype-preset">
-						<option value=""></option>
-					</select>
-				</div>
 				<div class="token-image-modal-footer-select-wrapper">		
 					<div class="token-image-modal-footer-title">Preset</div>
 					<div class="token-image-modal-footer-title"><button id='editPresets'>Edit</button></div>
@@ -2154,6 +2347,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 						<option value=""></option>
 					</select>
 				</div>
+				<h3 style="margin: 10px 5px 4px 0px;border-bottom: 1px solid #ddd;font-size: 12px;">Vision</h3>
 				<div class="menu-vision-aura">
 					<h3 style="margin-bottom:0px;">Darkvision</h3>
 					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
@@ -2165,6 +2359,29 @@ function build_token_light_inputs(tokenIds, door=false) {
 						<input class="spectrum" name="visionColor" value="${uniqueVisionColor}" >
 					</div>
 				</div>
+				<div class="menu-vision-aura">
+					<h3 style="margin-bottom:0px;">Devilsight</h3>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Radius (${upsq})</div>
+						<input class="vision-radius" name="devilsight" type="text" value="${uniqueDevilsightFeet}" style="width: 3rem" />
+					</div>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Color</div>
+						<input class="spectrum" name="devilsightColor" value="${uniqueDevilsightColor}" >
+					</div>
+				</div>
+				<div class="menu-vision-aura">
+					<h3 style="margin-bottom:0px;">Truesight</h3>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Radius (${upsq})</div>
+						<input class="vision-radius" name="truesight" type="text" value="${uniqueTruesightFeet}" style="width: 3rem" />
+					</div>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Color</div>
+						<input class="spectrum" name="truesightColor" value="${uniqueTruesightColor}" >
+					</div>
+				</div>
+				<h3 style="margin: 10px 5px 4px 0px;border-bottom: 1px solid #ddd;font-size: 12px;">Light</h3>
 				<div class="menu-inner-aura">
 					<h3 style="margin-bottom:0px;">Inner Light</h3>
 					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
@@ -2321,7 +2538,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 	}
 	
 	wrapper.find('#editPresets').off('click.editPresets').on('click.editPresets', function(){
-		create_light_presets_edit();		
+		create_light_presets_edit(animationPresets);		
 	})
 	wrapper.find('#editAnimations').off('click.editPresets').on('click.editPresets', function(){
 		create_animation_presets_edit(true);		
@@ -2330,7 +2547,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 		$(this).toggleClass('active-daylight');
 		let newValue = $(this).hasClass('active-daylight');	
 		let name = $(this).attr('name');
-		console.log(`${name} setting is now ${newValue}`);
+		noisy_log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
 			token.options[name].daylight = newValue;
 			token.place_sync_persist();
@@ -2370,7 +2587,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 
 	}
 	let revealVisionInput = build_dropdown_input(revealvisionOption, auraRevealVisionEnabled, function(name, newValue) {
-		console.log(`${name} setting is now ${newValue}`);
+		noisy_log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
 			if(newValue == 'true')
                 newValue = true;
@@ -2382,7 +2599,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 	});
 
 	let enabledLightInput = build_toggle_input( lightOption, auraIsLightEnabled, function(name, newValue) {
-		console.log(`${name} setting is now ${newValue}`);
+		noisy_log(`${name} setting is now ${newValue}`);
 		tokens.forEach(token => {
 			token.options[name] = newValue;
 			token.place_sync_persist();
@@ -2397,8 +2614,32 @@ function build_token_light_inputs(tokenIds, door=false) {
 	if(!window.DM){
 		enabledLightInput.hide();
 	}
+	let tokensSquareLight = tokens.map(t => t.options.squareLight);
+	let uniqueSquareLight = [...new Set(tokensSquareLight)];
+	let squareLightIsEnabled = null;
+	if (uniqueSquareLight.length === 1) {
+		squareLightIsEnabled = uniqueSquareLight[0];
+	}
+	const squareLight = {
+		name: "squareLight",
+		label: "Square Vision/Light",
+		type: "toggle",
+		options: [
+			{ value: true, label: "Square", description: "The token's vision/light is a square when enabled and a circle otherwise." },
+			{ value: false, label: "Circle", description: "The token's vision/light is a square when enabled and a circle otherwise." }
+		],
+		defaultValue: false
+	};
+	const squareLightInput = build_toggle_input(squareLight, squareLightIsEnabled, function(name, newValue) {
+		noisy_log(`${name} setting is now ${newValue}`);
+		tokens.forEach(token => {
+			token.options[name] = newValue;
+			token.place_sync_persist();
+		});
+	});
 
-	wrapper.find(".token-config-aura-wrapper").prepend(revealVisionInput);
+	
+	wrapper.find(".token-config-aura-wrapper").prepend(squareLightInput, revealVisionInput);
 	
 
 	wrapper.find("h3.token-image-modal-footer-title").after(enabledLightInput);
@@ -2408,9 +2649,13 @@ function build_token_light_inputs(tokenIds, door=false) {
 		wrapper.find(".token-config-aura-wrapper").hide();
 	}
 
+	
+
 	let radiusInputs = wrapper.find('input.light-radius, input.vision-radius');
 	radiusInputs.on('keyup', function(event) {
-		let newRadius = event.target.value;
+		let newRadius = event.target.value
+		if(newRadius.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			newRadius = newRadius.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		if (event.key == "Enter" && newRadius !== undefined && newRadius.length > 0) {
 			tokens.forEach(token => {
 				token.options[event.target.name]['feet'] = newRadius;
@@ -2422,6 +2667,8 @@ function build_token_light_inputs(tokenIds, door=false) {
 	radiusInputs.on('focusout', function(event) {
 		let newRadius = event.target.value;
 		if (newRadius !== undefined && newRadius.length > 0) {
+			if(newRadius.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+				newRadius = newRadius.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 			tokens.forEach(token => {
 				token.options[event.target.name]['feet'] = newRadius;
 				token.place_sync_persist();
@@ -2444,7 +2691,7 @@ function build_token_light_inputs(tokenIds, door=false) {
 	const colorPickerChange = function(e, tinycolor) {
 		let auraName = e.target.name.replace("Color", "");
 		let color = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-		console.log(auraName, e, tinycolor);
+		noisy_log(auraName, e, tinycolor);
 		if (e.type === 'change') {
 			tokens.forEach(token => {
 				token.options[auraName]['color'] = color;
@@ -2479,6 +2726,13 @@ function build_token_light_inputs(tokenIds, door=false) {
 		if(selectedPreset.vision.feet){
 			wrapper.find("input[name='vision']").val(selectedPreset.vision.feet);
 		}
+		if(selectedPreset.devilsight?.feet){
+			wrapper.find("input[name='devilsight']").val(selectedPreset.devilsight.feet);
+		}
+		if(selectedPreset.truesight?.feet){
+			wrapper.find("input[name='truesight']").val(selectedPreset.truesight.feet);
+		}
+
 
 		if(selectedPreset.light1.feet){
 			wrapper.find("input[name='light1']").val(selectedPreset.light1.feet);
@@ -2490,7 +2744,16 @@ function build_token_light_inputs(tokenIds, door=false) {
 		if(selectedPreset.vision.color){
 			wrapper.find("input[name='visionColor']").spectrum("set", selectedPreset.vision.color);
 		}
-
+		if(selectedPreset.devilsight?.feet){
+			wrapper.find("input[name='devilsight']").val(selectedPreset.devilsight.feet);
+		}
+		if(selectedPreset.truesight?.feet){
+			wrapper.find("input[name='truesight']").val(selectedPreset.truesight.feet);
+		}
+		const changeAnimation = selectedPreset.animation != undefined && selectedPreset.animation != '';
+		if(changeAnimation){
+			wrapper.find(".token-config-animation-preset").val(selectedPreset.animation);
+		}
 		if(selectedPreset.light1.color){
 			wrapper.find("input[name='light1Color']").spectrum("set", selectedPreset.light1.color);
 		}
@@ -2499,16 +2762,56 @@ function build_token_light_inputs(tokenIds, door=false) {
 			wrapper.find("input[name='light2Color']").spectrum("set", selectedPreset.light2.color);
 		}
 
+		if(selectedPreset.light2.color){
+			wrapper.find("input[name='light2Color']").spectrum("set", selectedPreset.light2.color);
+		}
 		
-		
+		 	
+
+
+	
+			
+		const presetAnimVal = selectedPreset.animation;
+		let customPreset = false;
+		if(window.ANIMATION_PRESETS && window.ANIMATION_PRESETS.some(d=> d.name == presetAnimVal)){
+			customPreset = window.ANIMATION_PRESETS.filter(d=> d.name == presetAnimVal)[0]
+		}
 
 		tokens.forEach(token => {
 			token.options.vision.feet = (selectedPreset.vision.feet) ? selectedPreset.vision.feet : token.options.vision.feet;
 			token.options.vision.color = (selectedPreset.vision.color) ? selectedPreset.vision.color : token.options.vision.color;
+			token.options.devilsight.feet = (selectedPreset.devilsight?.feet) ? selectedPreset.devilsight?.feet : token.options.devilsight?.feet;
+			token.options.devilsight.color = (selectedPreset.devilsight?.color) ? selectedPreset.devilsight?.color : token.options.devilsight?.color;
+			token.options.truesight.feet = (selectedPreset.truesight?.feet) ? selectedPreset.truesight?.feet : token.options.truesight?.feet;
+			token.options.truesight.color = (selectedPreset.truesight?.color) ? selectedPreset.truesight?.color : token.options.truesight?.color;
 			token.options.light1.feet = (selectedPreset.light1.feet) ? selectedPreset.light1.feet : token.options.light1.feet;
 			token.options.light2.feet = (selectedPreset.light2.feet) ? selectedPreset.light2.feet : token.options.light2.feet;
 			token.options.light1.color = (selectedPreset.light1.color) ? selectedPreset.light1.color : token.options.light1.color;
 			token.options.light2.color = (selectedPreset.light2.color) ? selectedPreset.light2.color : token.options.light2.color;
+			if(changeAnimation){
+				if(customPreset == false){
+					token.options.animation= {
+						...token.options.animation,
+						light: presetAnimVal,
+						customLightMask: undefined,
+						customLightRotate: undefined,
+						customLightDarkvision: undefined,
+						customLightRpm: undefined
+					}
+				}
+				else{
+					token.options.animation= {
+						...token.options.animation,
+						light: presetAnimVal,
+						customLightMask: customPreset.mask,
+						customLightRotate: customPreset.rotate,
+						customLightDarkvision: customPreset.darkvision,
+						customLightRpm: customPreset.rpm
+					}
+				}
+			}
+		
+
 			token.place_sync_persist();
 		});
 	});
@@ -2560,14 +2863,14 @@ function build_token_light_inputs(tokenIds, door=false) {
 	});
 
 	$("#VTTWRAPPER .sidebar-modal").on("remove", function () {
-		console.log("removing sidebar modal!!!");
+		noisy_log("removing sidebar modal!!!");
 		colorPickers.spectrum("destroy");
 	});
 	body.append(wrapper);
 
 	return body;
 }
-function create_aura_presets_edit(){
+function create_aura_presets_edit(animationPresets){
 	let dialog = $('#edit_preset_aura_dialog')
 
 	dialog.remove();
@@ -2592,6 +2895,9 @@ function create_aura_presets_edit(){
 				</th>
 				<th>
 					Outer Aura	
+				</th>
+				<th>
+					Animation
 				</th>
 				<th>
 				</th>
@@ -2624,10 +2930,35 @@ function create_aura_presets_edit(){
 						<input class="spectrum" name="aura2Color" value="${(window.AURA_PRESETS[i].aura2?.color) ? window.AURA_PRESETS[i].aura2.color : `rgba(0, 0, 0, 0)`}" >
 					</div>
 				</td>
+				<td class="animation-aura">
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<select class="aura-animation-select" name="animation">
+							<option value=""></option>
+						</select>
+					</div>
+				</td>
 				<td><div class='removePreset'><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div></td>
 
 			</tr>
 		`)
+		const selectDropdown = row.find(".animation-aura select.aura-animation-select");
+		
+		if(animationPresets != undefined){
+			for(let animationPreset in animationPresets){
+				const animationName = animationPresets[animationPreset];
+				const option = `<option value="${animationName}" ${window.AURA_PRESETS[i].animation == animationName ? `selected=true` : ''}>${animationPreset}</option>`
+				selectDropdown.append(option)
+			}
+		}
+		for(let j = 0; j<window.ANIMATION_PRESETS.length; j++){
+			const animationName = window.ANIMATION_PRESETS[j].name;
+			const option = `<option value="${animationName}" ${window.AURA_PRESETS[i].animation == animationName ? `selected=true` : ''}>${animationName}</option>`
+			selectDropdown.append(option);
+		}
+		selectDropdown.off('change.animation').on('change.animation', function(){
+			window.AURA_PRESETS[i].animation = $(this).val() ?? "";
+			localStorage.setItem('AURA_PRESETS', JSON.stringify(window.AURA_PRESETS));
+		})
 		row.find('input.aura_preset_title').off('change.name').on('change.name', function(){
 			window.AURA_PRESETS[i].name = $(this).val().replaceAll(/['"<>]/g, '');
 			localStorage.setItem('AURA_PRESETS', JSON.stringify(window.AURA_PRESETS));
@@ -2640,7 +2971,7 @@ function create_aura_presets_edit(){
 		row.find('.removePreset').off('click.removePreset').on('click.removePreset', function(){
 			window.AURA_PRESETS.splice(i, 1);
 			localStorage.setItem('AURA_PRESETS', JSON.stringify(window.AURA_PRESETS));
-			create_aura_presets_edit();
+			create_aura_presets_edit(animationPresets);
 		})
 		let colorPickers = row.find('input.spectrum');
 		colorPickers.spectrum({
@@ -2655,7 +2986,7 @@ function create_aura_presets_edit(){
 		const colorPickerChange = function(e, tinycolor) {
 			let auraName = e.target.name.replace("Color", "");
 			window.AURA_PRESETS[i][auraName].color = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-			console.log(auraName, e, tinycolor);
+			noisy_log(auraName, e, tinycolor);
 			localStorage.setItem('AURA_PRESETS', JSON.stringify(window.AURA_PRESETS));
 		};
 		colorPickers.on('move.spectrum', colorPickerChange);   // update the token as the player messes around with colors
@@ -2677,13 +3008,13 @@ function create_aura_presets_edit(){
 			}
 		});
 		localStorage.setItem('AURA_PRESETS', JSON.stringify(window.AURA_PRESETS));
-		create_aura_presets_edit();
+		create_aura_presets_edit(animationPresets);
 	});
 	aura_presets.append(addButton);
 
 	adjust_create_import_edit_container(dialog, undefined, undefined, 975);
 }
-function create_light_presets_edit(){
+function create_light_presets_edit(animationPresets){
 	let dialog = $('#edit_preset_light_dialog')
 
 	dialog.remove();
@@ -2707,10 +3038,19 @@ function create_light_presets_edit(){
 					Darkvision		
 				</th>
 				<th>
+					Devilsight		
+				</th>
+				<th>
+					Truesight		
+				</th>
+				<th>
 					Inner Light			
 				</th>
 				<th>
 					Outer Light
+				</th>
+				<th>
+					Animation
 				</th>
 				<th>
 				</th>
@@ -2733,6 +3073,26 @@ function create_light_presets_edit(){
 						<input class="spectrum" name="visionColor" value="${(window.LIGHT_PRESETS[i].vision?.color) ? window.LIGHT_PRESETS[i].vision.color : `rgba(0, 0, 0, 0)`}" >
 					</div>
 				</td>
+				<td class="menu-devilsight-aura">
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Radius (${upsq})</div>
+						<input class="devilsight-radius" name="devilsight" type="text" value="${(window.LIGHT_PRESETS[i].devilsight?.feet) ? window.LIGHT_PRESETS[i].devilsight.feet : ``}" style="width: 3rem" />
+					</div>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Color</div>
+						<input class="spectrum" name="devilsightColor" value="${(window.LIGHT_PRESETS[i].devilsight?.color) ? window.LIGHT_PRESETS[i].devilsight.color : `rgba(0, 0, 0, 0)`}" >
+					</div>
+				</td>
+				<td class="menu-truesight-aura">
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Radius (${upsq})</div>
+						<input class="truesight-radius" name="truesight" type="text" value="${(window.LIGHT_PRESETS[i].truesight?.feet) ? window.LIGHT_PRESETS[i].truesight.feet : ``}" style="width: 3rem" />
+					</div>
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<div class="token-image-modal-footer-title">Color</div>
+						<input class="spectrum" name="truesightColor" value="${(window.LIGHT_PRESETS[i].truesight?.color) ? window.LIGHT_PRESETS[i].truesight.color : `rgba(0, 0, 0, 0)`}" >
+					</div>
+				</td>
 				<td class="menu-inner-aura">
 					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
 						<div class="token-image-modal-footer-title">Radius (${upsq})</div>
@@ -2753,10 +3113,34 @@ function create_light_presets_edit(){
 						<input class="spectrum" name="light2Color" value="${(window.LIGHT_PRESETS[i].light2?.color) ? window.LIGHT_PRESETS[i].light2.color : `rgba(0, 0, 0, 0)`}" >
 					</div>
 				</td>
+				<td class="animation-aura">
+					<div class="token-image-modal-footer-select-wrapper" style="padding-left: 2px">
+						<select class="light-animation-select" name="animation">
+							<option value=""></option>
+						</select>
+					</div>
+				</td>
 				<td><div class='removePreset'><svg class="" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g transform="rotate(-45 50 50)"><rect></rect></g><g transform="rotate(45 50 50)"><rect></rect></g></svg></div></td>
-
 			</tr>
 		`)
+		const selectDropdown = row.find(".animation-aura select.light-animation-select");
+		
+		if(animationPresets != undefined){
+			for(let animationPreset in animationPresets){
+				const animationName = animationPresets[animationPreset];
+				const option = `<option value="${animationName}" ${window.LIGHT_PRESETS[i].animation == animationName ? `selected=true` : ''}>${animationPreset}</option>`
+				selectDropdown.append(option)
+			}
+		}
+		for(let j = 0; j<window.ANIMATION_PRESETS.length; j++){
+			const animationName = window.ANIMATION_PRESETS[j].name;
+			const option = `<option value="${animationName}" ${window.LIGHT_PRESETS[i].animation == animationName ? `selected=true` : ''}>${animationName}</option>`
+			selectDropdown.append(option);
+		}
+		selectDropdown.off('change.animation').on('change.animation', function(){
+			window.LIGHT_PRESETS[i].animation = $(this).val() ?? "";
+			localStorage.setItem('LIGHT_PRESETS', JSON.stringify(window.LIGHT_PRESETS));
+		})
 		row.find('input.light_preset_title').off('change.name').on('change.name', function(){
 			window.LIGHT_PRESETS[i].name = $(this).val().replaceAll(/['"<>]/g, '');
 			localStorage.setItem('LIGHT_PRESETS', JSON.stringify(window.LIGHT_PRESETS));
@@ -2769,7 +3153,7 @@ function create_light_presets_edit(){
 		row.find('.removePreset').off('click.removePreset').on('click.removePreset', function(){
 			window.LIGHT_PRESETS.splice(i, 1);
 			localStorage.setItem('LIGHT_PRESETS', JSON.stringify(window.LIGHT_PRESETS));
-			create_light_presets_edit();
+			create_light_presets_edit(animationPresets);
 		})
 		let colorPickers = row.find('input.spectrum');
 		colorPickers.spectrum({
@@ -2784,7 +3168,7 @@ function create_light_presets_edit(){
 		const colorPickerChange = function(e, tinycolor) {
 			let auraName = e.target.name.replace("Color", "");
 			window.LIGHT_PRESETS[i][auraName].color = `rgba(${tinycolor._r}, ${tinycolor._g}, ${tinycolor._b}, ${tinycolor._a})`;
-			console.log(auraName, e, tinycolor);
+			noisy_log(auraName, e, tinycolor);
 			localStorage.setItem('LIGHT_PRESETS', JSON.stringify(window.LIGHT_PRESETS));
 		};
 		colorPickers.on('move.spectrum', colorPickerChange);   // update the token as the player messes around with colors
@@ -2802,13 +3186,17 @@ function create_light_presets_edit(){
 			name: 'New Preset',
 			vision: {
 			},
+			devilsight: {
+			},
+			truesight: {
+			},
 			light1: {
 			},
 			light2: {
 			}
 		});
 		localStorage.setItem('LIGHT_PRESETS', JSON.stringify(window.LIGHT_PRESETS));
-		create_light_presets_edit();
+		create_light_presets_edit(animationPresets);
 	});
 	light_presets.append(addButton);
 
@@ -2844,7 +3232,7 @@ function create_animation_presets_edit(isVision = false){
 					RPM
 				</th>
 				${isVision ? `<th>
-					Apply to Darkvision			
+					Apply to Vision			
 				</th>` : ``}
 			</tr>
 			`)
@@ -2945,9 +3333,38 @@ function build_menu_stat_inputs(tokenIds) {
 	body.append(hpMenuInput);
 	body.append(maxHpMenuInput);
 
+	const debounceTriggerKeyboard = mydebounce((input, keyboardEvent)=>{
+		input.trigger(keyboardEvent);
+	})
+	if(!isNaN(hp) && !isNaN(max_hp)){
+		hpMenuInput.find('input').on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(input.val());
+			if(isNaN(current)) return;
+			input.val(Math.max(0, current + delta));
+			const keyboardEvent = $.Event('keyup');
+			keyboardEvent.key = 'Enter'; 
+			debounceTriggerKeyboard(input, keyboardEvent);
+		});
+		maxHpMenuInput.find('input').on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))s
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(input.val());
+			if(isNaN(current)) return;
+			input.val(Math.max(1, current + delta));
+			const keyboardEvent = $.Event('keyup');
+			keyboardEvent.key = 'Enter'; 
+			debounceTriggerKeyboard(input, keyboardEvent);
+		});
+	}
 
-
-	
 	hpMenuInput.find('input').on('keyup', function(event) {
 		let newValue = event.target.value;
 		if($(event.target).prop('readonly') || newValue == '')
@@ -2959,7 +3376,11 @@ function build_menu_stat_inputs(tokenIds) {
 				let newHP = newValue;
 				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
 					newHP = token.hp + parseInt(newValue);
+				} else{
+					const sanitizedString = newHP.replaceAll(/[^\d+-/*().]/gi, '');
+					newHP = Math.max(0, parseInt(eval(sanitizedString)));
 				}
+
 				token.hp = newHP - token.tempHp;
 				token.place_sync_persist();
 				if(tokens.length == 1){
@@ -2981,6 +3402,9 @@ function build_menu_stat_inputs(tokenIds) {
 			let newHP = newValue;
 			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
 				newHP = token.hp + parseInt(newValue);
+			} else{
+				const sanitizedString = newHP.replaceAll(/[^\d+-/*().]/gi, '');
+				newHP = Math.max(0, parseInt(eval(sanitizedString)));
 			}
 			token.hp = newHP - token.tempHp;
 			token.place_sync_persist();
@@ -3005,9 +3429,12 @@ function build_menu_stat_inputs(tokenIds) {
 				let newMaxHP = newValue;
 				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
 					newMaxHP = token.maxHp + parseInt(newValue);
+				} else{
+					const sanitizedString = newMaxHP.replaceAll(/[^\d+-/*().]/gi, '');
+					newMaxHP = Math.max(0, parseInt(eval(sanitizedString)));
 				}
 				token.maxHp = newMaxHP;
-				token.place_sync_persist();
+				debouceChangeInput(token);
 				if(tokens.length == 1){
 					$(".maxHpMenuInput").val(newMaxHP);
 				}
@@ -3028,6 +3455,9 @@ function build_menu_stat_inputs(tokenIds) {
 			let newMaxHP = newValue;
 			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
 				newMaxHP = token.maxHp + parseInt(newValue);
+			} else{
+				const sanitizedString = newMaxHP.replaceAll(/[^\d+-/*().]/gi, '');
+				newMaxHP = Math.max(0, parseInt(eval(sanitizedString)));
 			}
 			token.maxHp = newMaxHP;
 			token.place_sync_persist();
@@ -3050,7 +3480,7 @@ function build_menu_stat_inputs(tokenIds) {
 					return;
 				let newAC = newValue;
 				if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
-					newAC = parseInt(token.options.ac) + parseInt(newValue);
+					newAC = parseInt(token.ac) + parseInt(newValue);
 				}
 				token.ac = newAC;
 				token.place_sync_persist();
@@ -3073,7 +3503,7 @@ function build_menu_stat_inputs(tokenIds) {
 				return;
 			let newAC = newValue;
 			if(newValue.indexOf("+") == 0 || newValue.indexOf("-") == 0){
-				newAC = parseInt(token.options.ac) + parseInt(newValue);
+				newAC = parseInt(token.ac) + parseInt(newValue);
 			}
 			token.ac = newAC;
 			token.place_sync_persist();
@@ -3123,7 +3553,7 @@ function build_notes_flyout_menu(tokenIds, flyout) {
 	});
 	let editNoteButton = $(`<button class="icon-note material-icons">Create Note</button>`)
 
-	if(tokenIds.length=1){
+	if(tokenIds.length==1){
 		let has_note=id in window.JOURNAL.notes;
 		if(has_note){
 			let viewNoteButton = $(`<button class="icon-view-note material-icons">View Note</button>`)		
@@ -3140,10 +3570,12 @@ function build_notes_flyout_menu(tokenIds, flyout) {
 			noteLinkButton.off().on("click", function(){
 				let copyLink = `[note]${id};${window.JOURNAL.notes[id].title}[/note]`
 		        navigator.clipboard.writeText(copyLink);
+				showTempMessage('Note link copied to clipboard');
 			});
 			noteEmbedLinkButton.off().on("click", function(){
 				let copyLink = `[note embed]${id};${window.JOURNAL.notes[id].title}[/note]`
 		        navigator.clipboard.writeText(copyLink);
+				showTempMessage('Note embed link copied to clipboard');
 			});
 
 			deleteNoteButton.off().on("click", function(){
@@ -3430,21 +3862,13 @@ function build_adjustments_flyout_menu(tokenIds) {
 	// name
 	
 	let tokenSizes = [];
-	tokens.forEach(t => {
-		if(t.isLineAoe()){
-			tokenSizes.push(t.numberOfGridSpacesTall());
-		}
-		else{
-			tokenSizes.push(t.numberOfGridSpacesWide());
-		}
-	});
-
-
+	tokens.forEach(t => tokenSizes.push(t.numberOfGridSpaces()[t.isLineAoe() ? "height" : "width"]));
+	
 	let uniqueSizes = [...new Set(tokenSizes)];
 
-	console.log("uniqueSizes", uniqueSizes);
+	noisy_log("uniqueSizes", uniqueSizes);
 	let lineaoe = tokens.length == 1 && tokens[0].isLineAoe();
-	let linewidthsize = tokens[0].numberOfGridSpacesWide();
+	let linewidthsize = tokens[0].numberOfGridSpaces().width;
 	let sizeInputs = build_token_size_input(uniqueSizes, function (newSize, linewidth=false) {
 		let tokenMultiplierAdjustment = (!window.CURRENT_SCENE_DATA.scaleAdjustment) ? 1 : (window.CURRENT_SCENE_DATA.scaleAdjustment.x > window.CURRENT_SCENE_DATA.scaleAdjustment.y) ? window.CURRENT_SCENE_DATA.scaleAdjustment.x : window.CURRENT_SCENE_DATA.scaleAdjustment.y;
 			
@@ -3452,7 +3876,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 		if (!isNaN(newSize)) {
 			newSize = hpps * newSize;
 		} else {
-			console.log(`not updating tokens with size ${newSize}`); // probably undefined because we inject the "multiple" options below
+			noisy_log(`not updating tokens with size ${newSize}`); // probably undefined because we inject the "multiple" options below
 			return;
 		}
 		tokens.forEach(token => {			
@@ -3500,7 +3924,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 			tokens.forEach(token => {
 				let underdarknessDivisor = token.options.underDarkness ? parseInt(window.CURRENT_SCENE_DATA.scale_factor) : 1;
 				if(token.options.offset == undefined)
-				token.options.offset = {x: 0, y:0};
+					token.options.offset = {x: 0, y:0};
 				token.options.offset.x = offsetX;
 				$(`.VTTToken[data-id='${token.options.id}']`).css({
 					"--offsetX": `${parseFloat(offsetX) / 90 * token.options.size}px`,
@@ -3510,7 +3934,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 				if(persist)
 					token.place_sync_persist();
 			});
-		});
+		}, "Adjust the X position of the image. Larger values moves the image right, smaller left.");
 		body.append(offsetXWrapper);
 
 		let tokenOffsetY = tokens.map(t => t.options.offset?.y);
@@ -3530,7 +3954,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 				if(persist)
 					token.place_sync_persist();
 			});
-		});
+		}, "Adjust the Y position of the image. Larger values moves the image up, smaller down.");
 		body.append(offsetYWrapper);
 
 
@@ -3548,7 +3972,7 @@ function build_adjustments_flyout_menu(tokenIds) {
 				if(persist)
 					token.place_sync_persist();
 			});
-		});
+		}, "This will adjust the zoom of the image. Different clipping will happen based on token style.");
 		body.append(imageZoomWrapper);
 
 
@@ -3562,8 +3986,21 @@ function build_adjustments_flyout_menu(tokenIds) {
 				if(persist)
 					token.place_sync_persist();
 			});
-		});
+		}, "This will adjust the image opacity. Accepted values between 0 and 1, 0 being fully transparent.");
 		body.append(opacityWrapper);
+
+		let tokenHeading = tokens.map(t => t.options.imageHeading);
+		let uniqueHeading = [...new Set(tokenHeading)];
+		let startingHeading = uniqueHeading.length === 1 && uniqueHeading[0] != undefined ? uniqueHeading[0] : 0;
+		let headingWrapper = build_token_num_input(startingHeading, tokens,  'Image Heading', 0, 360, 1, function (heading, persist=false) {
+			tokens.forEach(token => {
+				token.options.imageHeading = heading; //currently only takes effect on "rotating towards"
+				$(`.VTTToken[data-id='${token.options.id}']`).css("--token-heading", heading + "deg");
+				if(persist)
+					token.place_sync_persist();
+			});
+		}, "This will adjust the default image direction/rotation. This affects where the 'look here' rotation and arrow key rotation uses as the token facing direction. Default token facing is down.");
+		body.append(headingWrapper);
 
 		let tokFlip = tokens.map(t => t.options?.tokenFlip);
 		let uniqueTokenFlip = [...new Set(tokFlip)];
@@ -3627,11 +4064,12 @@ function build_adjustments_flyout_menu(tokenIds) {
 			return e.player == true;
 		});
 	}
+	const skipSettings = ['maxAge', 'defaultmaxhptype', 'placeType', 'lockRestrictDrop', 'hidden', 'squareAura', 'squareLight']
 	for(let i = 0; i < token_settings.length; i++) {
 		let setting = token_settings[i];
 		if (allTokensAreAoe && !availableToAoe.includes(setting.name)) {
 			continue;
-		} else if(setting.hiddenSetting || setting.name == 'maxAge' || setting.name == 'defaultmaxhptype' || setting.name == 'placeType' || setting.globalSettingOnly || setting.name == 'lockRestrictDrop' || setting.name == 'hidden' ) {
+		} else if(setting.hiddenSetting || setting.globalSettingOnly || skipSettings.includes(setting.name)) {
 			continue;
 		}
 
@@ -3969,13 +4407,15 @@ function build_token_scale_input(startingScale, tokens, name, min=0.1, max=10, s
 	return imageWrapper;
 }
 
-function build_token_num_input(startingScale=1, tokens, name, min=0.1, max=10, step=0.1, didUpdate) {
-	let imageInput = $(`<input class="image-input-number" type="number" max="${max}" min="${min}" step="${step}" title="Token Image Scale" placeholder="${startingScale}" name="Image Scale">`);
+function build_token_num_input(startingScale=1, tokens, name, min=0.1, max=10, step=0.1, didUpdate, title="Token Image Scale") {
+	let imageInput = $(`<input class="image-input-number" type="number" max="${max}" min="${min}" step="${step}" title="${title}" placeholder="${startingScale}" name="Image Scale">`);
 
 	imageInput.val(startingScale);
 
 	imageInput.on('keyup', function(event) {
 		let value = event.target.value;	
+		if(value.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			value = value.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		if (event.key === "Enter") {
 			imageInput.val(value);
 			didUpdate(value, true);
@@ -3985,11 +4425,15 @@ function build_token_num_input(startingScale=1, tokens, name, min=0.1, max=10, s
 	});
 	imageInput.on('focusout', function(event) {
 		let value = event.target.value;		
+		if(value.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			value = value.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		imageInput.val(value);	
 		didUpdate(value, true);
 	});
 	imageInput.on('input change', function(){
 		let value = event.target.value;	
+		if(value.match(/\.(.*,)|^[^\.]+,[^\.]+$/))
+			value = value.replace(/\.(.*,)/g, '$1').replace(/(.*),/, '$1.');
 		imageInput.val(value);
 		didUpdate(value);
 	});
@@ -4045,7 +4489,7 @@ function build_options_flyout_menu(tokenIds) {
 
 		let tokenSettings = tokens.map(t => t.options[setting.name]);
 		let uniqueSettings = [...new Set(tokenSettings)].filter(d => d != undefined);
-		if(uniqueSettings.length = 0)
+		if(uniqueSettings.length == 0)
 			uniqueSettings = [undefined]
 		let currentValue = null; // passing null will set the switch as unknown; undefined is the same as false
 		if (uniqueSettings.length === 1) {
@@ -4177,7 +4621,7 @@ function build_token_size_input(tokenSizes, changeHandler, forceCustom = false, 
 	}
 
 	const isSizeCustom = (forceCustom || ![0.5, 1, 2, 3, 4].includes(numGridSquares));
-	console.log("isSizeCustom: ", isSizeCustom, ", forceCustom: ", forceCustom, ", numGridSquares: ", numGridSquares, ", [0.5, 1, 2, 3, 4].includes(numGridSquares):", [0.5, 1, 2, 3, 4].includes(numGridSquares))
+	noisy_log("isSizeCustom: ", isSizeCustom, ", forceCustom: ", forceCustom, ", numGridSquares: ", numGridSquares, ", [0.5, 1, 2, 3, 4].includes(numGridSquares):", [0.5, 1, 2, 3, 4].includes(numGridSquares))
 
 	// Limit custom token scale to grid size 
 	const maxScale = Math.max(window.CURRENT_SCENE_DATA.width * window.CURRENT_SCENE_DATA.scale_factor / window.CURRENT_SCENE_DATA.hpps);
@@ -4218,7 +4662,7 @@ function build_token_size_input(tokenSizes, changeHandler, forceCustom = false, 
 
 	tokenSizeInput.off('change focusout').on('change focusout', function(event) {
 		let customInputWrapper = $(event.target).parent().next();
-		console.log("tokenSizeInput changed");
+		noisy_log("tokenSizeInput changed");
 		if ($(event.target).val() === "custom") {
 			customInputWrapper.show();
 		} else {
@@ -4229,7 +4673,7 @@ function build_token_size_input(tokenSizes, changeHandler, forceCustom = false, 
 	});
 
 	customSizeInput.off('change focusout').on('change focusout', function(event) {
-		console.log("customSizeInput changed");
+		noisy_log("customSizeInput changed");
 		// convert custom footage into squares
 		let newValue = 
 			parseFloat($(event.target).val() / window.CURRENT_SCENE_DATA.fpsq);
@@ -4246,7 +4690,7 @@ function build_token_size_input(tokenSizes, changeHandler, forceCustom = false, 
 	if(lineaoe == true){
 		let customLineWidthInput = output.find("input[name='data-token-line-width-custom']");
 		customLineWidthInput.change(function(event) {
-		console.log("customSizeInput changed");
+		noisy_log("customSizeInput changed");
 		// convert custom footage into squares
 		let newValue = 
 			parseFloat($(event.target).val() / window.CURRENT_SCENE_DATA.fpsq);
@@ -4316,16 +4760,17 @@ function updateScaleInputs(newScale, maxScale) {
 
 //Start Quick Roll Menu//
 
-function open_quick_roll_menu(e){
+function open_quick_roll_menu(e, options = {left: e.clientX + "px", top: e.clientY + "px"}) {
 	//opens a roll menu for group rolls 
-	console.log("Opening Roll menu")
+	noisy_log("Opening Roll menu")
 	$("#qrm_dialog").remove();
 
 	let qrm = $("<div id='qrm_dialog'></div>");
 	qrm.css('background', "#f9f9f9");
 	qrm.css('width', '410px');
-	qrm.css('top', e.clientY+'px');
-	qrm.css('left', e.clientX+'px');
+	qrm.css('top', options.top);
+	qrm.css('left', options.left);
+	qrm.css('transform', options.transform || '');
 	qrm.css('height', '250px');
 	qrm.css('z-index', 49001);
 	qrm.css('border', 'solid 2px gray');
@@ -4420,7 +4865,6 @@ function open_quick_roll_menu(e){
 	save_type_dropdown.append($(`<option value="5" data-name="cha" data-style='url(https://www.dndbeyond.com/content/1-0-1849-0/skins/waterdeep/images/icons/abilities/charisma.svg)'>CHARISMA</option>`))
 	//save_type_dropdown.tooltip({show: { duration: 1000 }})
 	save_type_dropdown.attr('style', 'width: 22% !important');
-
 	$( function() {
 		$.widget( "custom.iconselectmenu", $.ui.selectmenu, {
 		_renderItem: function( ul, item ) {
@@ -4450,7 +4894,7 @@ function open_quick_roll_menu(e){
 		if (_dmg.includes('d')) {
 			let expression = _dmg
 			let roll = new rpgDiceRoller.DiceRoll(expression);
-			console.log(expression + "->" + roll.total);
+			noisy_log(expression + "->" + roll.total);
 			//reassign to the input 
 			_dmg = roll.total
 			$('#hp_adjustment_failed_save').val(_dmg);
@@ -4458,10 +4902,10 @@ function open_quick_roll_menu(e){
 		else {
 			_dmg.replace(/[^\d.-]/g, '')
 		}
-		$("#half_damage_save").val(Math.floor(_dmg/2));
+		$("#half_damage_save").val(Math.max(1, Math.floor(_dmg/2)));
 		qrm_update_popout();
 	});
-
+	
 	//Roll Button 
 	let qrm_roll=$("<button id='qrm_roll_button' >ROLL</button>");
 	qrm_roll.css('width', '13%');
@@ -4485,7 +4929,7 @@ function open_quick_roll_menu(e){
 			}
 			let expression = dice + modifier;
 			let roll = new rpgDiceRoller.DiceRoll(expression);
-			console.log(expression + "->" + roll.total);
+			noisy_log(expression + "->" + roll.total);
 			//reassign to the input 
 			result = $(this).parent().children('#qrm_roll_result')
 		
@@ -4574,9 +5018,6 @@ function open_quick_roll_menu(e){
 
 	let damage_hp = $('<button title="Apply Roll as Damage" id="qrm_damage" value="ON" class="damage_heal_button active_roll_mod" >DAMAGE</button>')
 	damage_hp.click(function() {
-	
-		console.log($(this).val())
-		console.log($(this))
 		//toggle off the other button
 		$(heal_hp).val("OFF")
 		$(heal_hp).removeClass('active_roll_mod')
@@ -4593,9 +5034,6 @@ function open_quick_roll_menu(e){
 	let heal_hp = $('<button title="Apply Roll as Healing" id="qrm_healing" value="OFF" class="damage_heal_button">HEAL</button>')
 	heal_hp.click(function(){
 		
-		console.log('EHRE')
-		console.log($(this).val())
-		console.log($(this))
 		//toggle off the other button
 		$(damage_hp).val("OFF")
 		$(damage_hp).removeClass('active_roll_mod')
@@ -4671,6 +5109,7 @@ function open_quick_roll_menu(e){
 	    'row-gap': '5px',
 	});
 
+
 	
 	qrm_footer.append(damage_input)
 	qrm_footer.append(half_damage_input)
@@ -4695,6 +5134,23 @@ function open_quick_roll_menu(e){
 	//footer
 	qrm.append(qrm_footer);
 	
+	if(options.save){
+		const saveValues = {
+			"str": 0,
+			"dex": 1,
+			"con": 2,
+			"int": 3,
+			"wis": 4,
+			"cha": 5
+		}
+		const save = options.save.type.toLowerCase();
+		save_type_dropdown.val(saveValues[save]);
+		const damageTotal = options.save.damage || "";
+		damage_input.val(damageTotal);
+		half_damage_input.val(Math.max(1, Math.floor(damageTotal/2)));
+		qrm_dc_input.val(options.save.dc);
+	}
+
 	qrm.css('opacity', '0.0');
 	qrm.animate({
 		opacity: '1.0'
@@ -4724,12 +5180,10 @@ function open_quick_roll_menu(e){
 		minWidth: 215,
 		minHeight: 200
 	});
-	$("#qrm_dialog").mousedown(function() {
-		frame_z_index_when_click($(this));
-	});
+	frame_z_index_when_click(qrm, true);
 }
 
-function add_to_quick_roll_menu(token){
+function add_to_quick_roll_menu(token, autoRollAfterAoe = false) {
 	//Adds a specific target to the quick roll menu
 
 	window.TOKEN_OBJECTS[token.options.id].in_qrm = true
@@ -4737,7 +5191,20 @@ function add_to_quick_roll_menu(token){
 	if(token.options.name == "Not in the current map")
 		return;
 	if (token.isAoe()) {
-		return; // don't add aoe to combat tracker
+		const aoeTokens = select_tokens_in_aoe([token], true, (selectedTokens) => {
+			if (selectedTokens.length > 0) {
+				selectedTokens.forEach(tokenId => {
+					const token = window.TOKEN_OBJECTS[tokenId];
+					add_to_quick_roll_menu(token);
+				})
+				if(autoRollAfterAoe)
+					$('#qrm_roll_button').click();
+				if(childWindows['Quick Roll Menu']){
+					qrm_update_popout();
+				}
+			}
+		});
+		return; // don't add aoe to combat tracker - add tokens inside the aoe
 	}
 
 	qrm_entry=$("<tr/>");
@@ -4868,24 +5335,55 @@ function add_to_quick_roll_menu(token){
 	maxhp_input.val(token.maxHp);
 
 	if (!token.isPlayer()) {
+		const debounceChange = mydebounce((token) => {
+			token.sync();
+		}, 1500)
+		hp_input.on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(token.hp) || 0;
+			input.val(Math.max(0, current + delta));
+			input.trigger('change');
+		});
+		maxhp_input.on('wheel', function(e) {
+			const input = $(this);
+			if(!input.is(':focus'))
+				return;
+			e.preventDefault();
+			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
+			const current = parseInt(token.maxHp) || 0;
+			input.val(Math.max(1, current + delta));
+			input.trigger('change');
+		});
 		hp_input.change(function(e) {
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
-		
-			if (hp_input.val().trim().startsWith("+") || hp_input.val().trim().startsWith("-")) {
-				hp_input.val(Math.max(0, parseInt(token.hp) + parseInt(hp_input.val())));
+			let value = hp_input.val().trim();
+			if (value.startsWith("+") || value.trim().startsWith("-")) {
+				value = Math.max(0, parseInt(token.hp) + parseInt(value));
+				hp_input.val(value);
+			} else{
+				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
+				value = Math.max(0, parseInt(eval(sanitizedString)));
+				hp_input.val(value);
 			}
 
-			old.find(".hp").val(hp_input.val().trim());	
+			old.find(".hp").val(value);	
 
 			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].hp = hp_input.val();
+				window.all_token_objects[token.options.id].hp = value;
 			}			
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
-				window.TOKEN_OBJECTS[token.options.id].hp = hp_input.val();	
-				window.TOKEN_OBJECTS[token.options.id].update_and_sync();
+				window.TOKEN_OBJECTS[token.options.id].hp = value;	
+				window.TOKEN_OBJECTS[token.options.id].update_from_page()
+				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
 			}			
-			qrm_update_popout();
+
+			window.all_token_objects[token.options.id].update_combat_tracker()
+			window.all_token_objects[token.options.id].update_quick_roll();
 		});
 		hp_input.click(function(e) {
 			$(e.target).select();
@@ -4893,20 +5391,27 @@ function add_to_quick_roll_menu(token){
 		maxhp_input.change(function(e) {
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
-
-			if (maxhp_input.val().trim().startsWith("+") || maxhp_input.val().trim().startsWith("-")) {
-				maxhp_input.val(Math.max(0, parseInt(token.hp) + parseInt(maxhp_input.val())));
+			let value = maxhp_input.val().trim();
+			if (value.startsWith("+") || value.startsWith("-")) {
+				value = Math.max(0, parseInt(token.hp) + parseInt(value));
+				maxhp_input.val(value);
+			} else{
+				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
+				value = Math.max(0, parseInt(eval(sanitizedString)));
+				maxhp_input.val(value);
 			}
 
-			old.find(".max_hp").val(maxhp_input.val().trim());
+			old.find(".max_hp").val(value);
 			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].maxHp = maxhp_input.val();
+				window.all_token_objects[token.options.id].maxHp = value;
 			}
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
-				window.TOKEN_OBJECTS[token.options.id].maxHp = maxhp_input.val();	
-				window.TOKEN_OBJECTS[token.options.id].update_and_sync();
+				window.TOKEN_OBJECTS[token.options.id].maxHp = value;	
+				window.TOKEN_OBJECTS[token.options.id].update_from_page()
+				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
 			}			
-			qrm_update_popout();
+			window.all_token_objects[token.options.id].update_combat_tracker()
+			window.all_token_objects[token.options.id].update_quick_roll();
 		});
 		maxhp_input.click(function(e) {
 			$(e.target).select();
@@ -4948,7 +5453,7 @@ function add_to_quick_roll_menu(token){
 	//remove_from_list.tooltip({show: { duration: 1000 }})
 	remove_from_list.click(
 		function() {
-			console.log('Removing from list')
+			noisy_log('Removing from list')
 			let target=$(this).parent().parent().parent().parent().attr('data-target');
 			if(target in window.TOKEN_OBJECTS){
 				remove_from_quick_roll_menu(window.TOKEN_OBJECTS[target]);	     
@@ -5018,7 +5523,7 @@ function add_to_quick_roll_menu(token){
 }
 
 function save_type_change(dropdown){
-	console.log("Save type is: "+ dropdown.value );
+	noisy_log("Save type is: "+ dropdown.value );
 	$('#quick_roll_area').children('tr').each(function () {
 		let x = window.TOKEN_OBJECTS[$(this).attr('data-target')]
 		roll_bonus = qrm_fetch_stat(x)
@@ -5056,7 +5561,7 @@ function qrm_fetch_stat(token) {
 				roll_bonus = "+"+roll_bonus;
 			}
 		}
-		console.log(roll_bonus);
+		noisy_log(roll_bonus);
 	}
 	else if (token.isPlayer() == true) {
 		save_dropdown_value = parseInt($('#qrm_save_dropdown').val());
@@ -5148,7 +5653,7 @@ function qrm_update_popout(){
 			'width': '100%',
 			'height': '100%'
 		});
-		console.log('Update QRM popout');
+		noisy_log('Update QRM popout');
 		$(childWindows['Quick Roll Menu'].document).find('#qrm_dialog #quick_roll_area input#qrm_hp').change(function(e) {
 			let id = $(this).parent().parent().parent().attr("data-target");			
 			$(`tr[data-target='${id}'] #qrm_hp`).val($(this).val());
@@ -5163,7 +5668,7 @@ function qrm_update_popout(){
 		});	
 		$(childWindows['Quick Roll Menu'].document).find('#qrm_dialog #quick_roll_area input#roll_bonus').change(function(e) {
 			let id = $(this).parent().parent().parent().attr("data-target");
-			console.log($(`tr[data-target='${id}'] #roll_bonus`))
+			noisy_log($(`tr[data-target='${id}'] #roll_bonus`))
 			$(`tr[data-target='${id}'] #roll_bonus`).val($(this).val());
 			$(`tr[data-target='${id}'] #roll_bonus`).trigger("change");
 			qrm_update_popout();
@@ -5258,7 +5763,7 @@ function qrm_apply_hp_adjustment(healing=false){
 		let result = $(this).find('#qrm_roll_result').val();
 		if (result == ''){
 			//could swap this to an alert if people really think its needed...
-			console.log('No roll was performed on this token, but Apply was selected. Rerolling for ALL tokens.')
+			noisy_log('No roll was performed on this token, but Apply was selected. Rerolling for ALL tokens.')
 			$('#qrm_roll_button').click()
 		}
 		

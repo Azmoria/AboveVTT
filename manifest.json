@@ -2,14 +2,12 @@
 	"manifest_version": 3,
 	"name": "AboveVTT",
 	"description": "Integrated VTT for D&DBeyond",
-	"version": "1.50",
+	"version": "1.59",
 	"content_scripts": [
 		{
 			"matches": [
 				"https://www.dndbeyond.com/campaigns/*",
-				"https://www.dndbeyond.com/encounters/*",
-				"https://www.dndbeyond.com/profile/*/characters/*",
-				"https://www.dndbeyond.com/characters/*"
+				"https://www.dndbeyond.com/characters*"
 			],
 			"exclude_matches": [
 				"https://www.dndbeyond.com/campaigns/join/*"
@@ -62,8 +60,8 @@
 			"DDBApi.js",
 			"AjaxQueueModule.js",
 			"CoreFunctions.js",
-			"CampaignPage.js",
-			"Startup.js",
+			"CampaignPage.mjs",
+			"Startup.mjs",
 			"CharactersPage.js",
 			"EncounterHandler.js",
 			"SidebarPanel.js",
@@ -105,7 +103,8 @@
 			"WeatherOverlay.js",
 			"iframe.html",
 			"avttS3Upload.js",
-			"loadFrame.js"
+			"loadFrame.js",
+			"Load.js"	
 			],
 			"matches": [ "*://*.dndbeyond.com/*" ]	
 		}

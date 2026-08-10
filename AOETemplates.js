@@ -84,7 +84,7 @@ function setup_aoe_button(buttons) {
     aoeMenu.css("left", aoeButton.position().left);
 
 
-    $("#aoe_feet").keydown(function(e) {
+    $("#aoe_feet_in_menu").keydown(function(e) {
         if (e.key === "Escape") {
             $('#select-button').click();
         }
@@ -321,10 +321,10 @@ function build_aoe_token_options(style, shape, countGridSquares, name = "", line
             darkness: true
         }
     }
-    options = {
-        ...options,
-        ...find_or_create_token_customization('aoe', `_Area_of_Effects_${shape}_AoE`, 'aoeFolder', 'aoeFolder').allCombinedOptions()
-    }
+    options = $.extend(true, {}, 
+        options,
+        find_or_create_token_customization('aoe', `_Area_of_Effects_${shape}_AoE`, 'aoeFolder', 'aoeFolder').allCombinedOptions()
+    );
     
     options.imgsrc = build_aoe_img_name(style, shape, name);
     return options
@@ -333,7 +333,6 @@ function build_aoe_token_options(style, shape, countGridSquares, name = "", line
 function build_aoe_token_image(token, scale, rotation){
     let tokenImageContainer = $(`<div class=token-image style='transform:scale(var(--token-scale)) rotate(var(--token-rotation))'>`);
     let aoeClassName = token.options.imgsrc.replace("class=","").trim();
-    console.debug("build_aoe_token_image aoeClassName", aoeClassName);
     let tokenImage = $(`<div data-img="true" class='${aoeClassName}'></div>`);
 
     if (token.options.imgsrc.includes("cone")){

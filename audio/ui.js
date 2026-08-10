@@ -72,7 +72,7 @@ async function avttAudioCollectAssets(folderRelativePath) {
             continue;
         }
         for (const entry of entries) {
-            const keyValue = typeof entry === 'string' ? entry : entry?.Key || entry?.key || '';
+            const keyValue = typeof entry === 'string' ? entry : entry?.Key || '';
             if (!keyValue) {
                 continue;
             }
@@ -215,7 +215,7 @@ window.importAvttAudioSelections = importAvttAudioSelections;
  */
 
 const debounceSearch = mydebounce((searchFilter) => {      
-        window.TRACK_LIBRARY.filterTrackLibrary(searchFilter)
+    window.TRACK_LIBRARY.filterTrackLibrary(searchFilter)
 }, 500);
 
 
@@ -262,11 +262,13 @@ function init_mixer() {
             playlistInput.append(option);
         });
         mixerChannels.innerHTML = "";
+
+        const docFragment = $(document.createDocumentFragment());
         let youtube_section= $("<li class='audio-row map-audio-row'></li>");;    
         let channelNameDiv = $(`<div class='channelNameOverflow'><div class='channelName'>Animated Map Audio</div>`)
         let youtube_volume = $(`<input type="range" min="0" max="100" value="${window.MIXER.state()?.animatedMap?.volume != undefined ? window.MIXER.state().animatedMap.volume : window.YTPLAYER ? window.YTPLAYER.volume : 25}" step="1" class="volume-control" id="youtube_volume">`);
         $(youtube_section).append(channelNameDiv, youtube_volume);
-        $(mixerChannels).append(youtube_section);
+        docFragment.append(youtube_section);
         youtube_volume.on("change", function() {
             const newVolume = $("#youtube_volume").val();
             const masterVolume = $("#master-volume input").val();
@@ -395,7 +397,7 @@ function init_mixer() {
                     channel.paused = true;
                     window.MIXER.updateChannel(id, channel);
                 }
-            });``
+            });
 
             if(channel.loop) {
                 loop.toggleClass('pressed', true);
@@ -425,7 +427,7 @@ function init_mixer() {
                 mixer_pause_svg.css('display', 'none');
                 playPauseMixer.toggleClass('playing', false);
                 playPauseMixer.toggleClass('pressed', false);
-                $('head').append(`<style id="mixer-paused" />#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
+                $('head').append(`<style id="mixer-paused">#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
             }
             else {
                 mixer_pause_svg.css('display', 'block');
@@ -443,10 +445,10 @@ function init_mixer() {
                     setTimeout(function () { waitForPlayer(id, callback)}, 250);
                 }
             }
-
+            docFragment.append(item)
             waitForPlayer(id, () => {
                 $(item).append(channelNameDiv, window.MIXER.channelVolumeSlider(id), channel_play_pause, loop, remove, window.MIXER.channelProgressBar(id));
-                mixerChannels.append(item);
+                
                 if (channel.paused) {
                     play_svg.css('display', 'block');
                     pause_svg.css('display', 'none');
@@ -467,8 +469,9 @@ function init_mixer() {
                 }
             })
         });
-
-        $(mixerChannels).sortable({
+        const $mixerChannels = $(mixerChannels);
+        $mixerChannels.append(docFragment);
+        $mixerChannels.sortable({
             cancel:'.map-audio-row, .tokenTrack, input, .channel-progress-bar-progress, .channel-progress-bar-total',
             distance: 10,
             axis: 'y',
@@ -576,7 +579,7 @@ function init_mixer() {
             window.MIXER.mixerMode = 'soundboard';
         }
     
-        console.log("Playback Mode:", sequentialPlay.attr("title"));
+        noisy_log("Playback Mode:", sequentialPlay.attr("title"));
     });
 
     let crossFade = $(`<button class="cross-fade-button ${window.MIXER.state().fade == true ? 'pressed' : ''}"></button>`);
@@ -598,7 +601,7 @@ function init_mixer() {
         pause_svg.css('display', 'none');
         playPause.toggleClass('playing', false);
         playPause.toggleClass('pressed', false);
-        $('head').append(`<style id="mixer-paused" />#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
+        $('head').append(`<style id="mixer-paused">#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
     }
     else {
         pause_svg.css('display', 'block');
@@ -621,7 +624,7 @@ function init_mixer() {
             pause_svg.css('display', 'none');
             playPause.toggleClass('playing', false);
             playPause.toggleClass('pressed', false);
-             $('head').append(`<style id="mixer-paused" />#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
+             $('head').append(`<style id="mixer-paused">#sounds-panel button.pressed.playing{background: #ffd03b45 !important;}</style>`);
            
         }
         else {
@@ -646,8 +649,34 @@ function init_mixer() {
             "--overflow-speed": (overflowVal - nameWidth < 0) ? parseInt(nameWidth)*10+'ms' : 800+'ms'
         });   
     })
-    $("#sounds-panel .sidebar-panel-header").append(header, playlistInput, addPlaylistButton, copyPlaylistButton, removePlaylistButton, playlistFields, masterVolumeSlider(), mixerChannels);
+    const soundPanelHeader = $("#sounds-panel .sidebar-panel-header");
+    soundPanelHeader.append(header, playlistInput, addPlaylistButton, copyPlaylistButton, removePlaylistButton, playlistFields, masterVolumeSlider(), mixerChannels);
     $('#master-volume').append(clear, sequentialPlay, crossFade, playPause);
+  
+    let size, resizeQueued;
+    soundPanelHeader.resizable({
+        addClasses: false,
+        handles: "s",
+        containment: "#windowContainment",
+        start: function (event, ui) {
+            $(event.currentTarget).append($('<div class="iframeResizeCover"></div>'));
+        },
+        resize: function (event, ui) {
+            size = Math.round(ui.size.height);
+            if(resizeQueued)
+                return;
+            resizeQueued = true;
+            requestAnimationFrame(()=>{
+                const mixerListHeight = Math.max(0, size - 68);
+                $('#mixer-channels').css('max-height', `${mixerListHeight}px`);
+                resizeQueued = false;
+            });
+        },
+        stop: function (event, ui) {
+            $('.iframeResizeCover').remove();
+        },
+        minHeight: 150
+    });
 }
 
 
@@ -688,7 +717,7 @@ function addTracks(filteredTracks, shuffle = false) {
     });
     window.MIXER.addMultiChannels(channelData);
 
-    console.log(`Added ${filteredTracks.length} ${shuffle ? "shuffled " : ""}tracks to the Mixer.`);
+    noisy_log(`Added ${filteredTracks.length} ${shuffle ? "shuffled " : ""}tracks to the Mixer.`);
 }
 
 
@@ -697,7 +726,7 @@ function init_trackLibrary() {
     const header = document.createElement("h3");
     header.textContent = "Track Library";
 
-    const searchTrackLibary = $(`<input type='search' placeholder='Search' style='margin-bottom: 5px; width: 97%;'></input>`)
+    const searchTrackLibary = $(`<input type='search' placeholder='Search' style='margin-bottom: 5px; width: 97%;position: sticky; top: -11px; z-indeX: 1;'></input>`)
     searchTrackLibary.off().on('change keyup blur search', (e) => {      
         debounceSearch(e.target.value);
     });
@@ -767,7 +796,7 @@ function init_trackLibrary() {
     const cancelButton = $('<button class="add-track-cancel-button">X</button>');  
 
     // Mixer/ Track List QOL updates
-    const addTracksToMixer = $(`<button id='addTrack'>Add Visible to Mixer</button>`);
+    const addTracksToMixer = $(`<button id='addTracksToMixer'>Add Visible to Mixer</button>`);
     const addShuffledToMixer = $('<button id="addShuffledToMixer">Add Shuffled to Mixer</button>');
 
     // Click handlers

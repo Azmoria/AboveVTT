@@ -10,6 +10,13 @@
  * If you need to add things for when the CharacterPage is running, do that in CharacterPage.js
  * If you need to add things for all of the above situations, do that here */
 var CONDITIONS = {};
+
+const STANDARD_CONDITIONS = ["Blinded", "Charmed", "Deafened", "Exhaustion", "Frightened", "Grappled", "Incapacitated", "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
+
+const CUSTOM_CONDITIONS = ["Concentration(Reminder)", 'Reaction Used',"Flying", "Burning", "Rage", "Blessed", "Baned",
+							"Bloodied", "Advantage", "Disadvantage", "Bardic Inspiration", "Hasted",
+							"#1A6AFF", "#FF7433", "#FF4D4D", "#FFD433", "#884DFF", "#86FF66", "#33ffe3", "#c333ff", "#1e0066", "#656565"];
+
 $(function() {
 
   window.EXPERIMENTAL_SETTINGS = {};
@@ -28,6 +35,13 @@ $(function() {
     window.DM = false;
   }
 });
+
+class noLogError extends Error{
+  constructor(message, options) {
+    super(message, options); 
+    this.name = "noLogError";
+  }
+}
 
 const async_sleep = m => new Promise(r => setTimeout(r, m));
 
@@ -54,6 +68,7 @@ function getAltKeyName() {
 function getShiftKeyName() {
   return isMac() ? "&#8679;" : "SHIFT";
 }
+
 
 
 function mydebounce(func, timeout = 800){  
@@ -171,6 +186,22 @@ function build_combat_tracker_loading_indicator(subtext = "One moment while we f
   });
   return loadingIndicator.clone();
 }
+function add_dice_stream_gamelog_button(){    
+  if(window.JOINTHEDICESTREAM == undefined){
+    window.JOINTHEDICESTREAM = window.EXPERIMENTAL_SETTINGS['streamDiceRolls'];
+  }
+  if ($('.stream-dice-button').length == 0){
+    $(".glc-game-log>[class*='Container-Flex']").append($(`<div id="stream_dice"><div class='stream-dice-button ${window.EXPERIMENTAL_SETTINGS['streamDiceRolls'] ? `enabled` : ``}'>Dice Stream ${window.EXPERIMENTAL_SETTINGS['streamDiceRolls'] ? `Enabled` : `Disabled`}</div></div>`));
+    $(".stream-dice-button").off().on("click", function () {
+      if (window.JOINTHEDICESTREAM) {
+        update_dice_streaming_feature(false);
+      }
+      else {
+        update_dice_streaming_feature(true);
+      } 
+    })
+  }
+}
 /**
  * Add Dice buttons into sidebar.
  *
@@ -185,18 +216,23 @@ function inject_chat_buttons() {
     // make sure we only ever inject these once. This gets called a lot on the character sheet which is intentional, but just in case we accidentally call it too many times, let's log it, and return
     return;
   }
-
-  const chatTextWrapper = $(`<div class='chat-text-wrapper sidebar-hover-text' data-hover="Dice Rolling Format: /cmd diceNotation action  &#xa;
-    '/r 1d20'&#xa;
-    '/roll 1d4 punch:bludgeoning damage'&#xa;
-    '/hit 2d20kh1+2 longsword ADV'&#xa;
-    '/dmg 1d8-2 longsword:slashing'&#xa;
-    '/save 2d20kl1 DEX DISADV'&#xa;
-    '/skill 1d20+1d4 Thieves' Tools + Guidance'&#xa;
-    Advantage: 2d20kh1 (keep highest)&#xa;
-    Disadvantage: 2d20kl1 (keep lowest)&#xa;
-    '/w [playername] a whisper to playername'&#xa;
-    '/dm for a shortcut to whisper THE DM'&#xa;
+  add_dice_stream_gamelog_button();
+  const chatTextWrapper = $(`<div class='chat-text-wrapper sidebar-hover-text' data-hover="Dice Rolling Format: /cmd diceNotation action  
+    '/r 1d20'
+    '/roll 1d4 punch:bludgeoning damage'
+    '/hit 2d20kh1+2 longsword'
+    '/dmg 1d8-2 longsword:slashing'
+    '/save 2d20kl1 DEX'
+    '/skill 1d20+1d4 Thieves' Tools + Guidance'
+    '/heal 1d4+WIS Healing Word'
+Roll Modifiers:
+    Advantage: 2d20kh1 (keep highest)
+    Disadvantage: 2d20kl1 (keep lowest)
+    Min: 2d6min3 (minimum 3)
+    Reroll: 2d6ro<2 (reroll <2, Can also use = or <=)
+Other Commands:
+    '/w [playername] a whisper to playername'
+    '/dm for a shortcut to whisper THE DM'
     '/timer Timer Title 5:00' or '/timer 5:00'"><input id='chat-text' autocomplete="off" placeholder='Chat, /r 1d20+4..'></div>`
   );
   const diceRoller = $(`
@@ -270,9 +306,13 @@ function inject_chat_buttons() {
     }
   });
 
-  
+  if(window.rollButtonObserver)
+    window.rollButtonObserver.disconnect();
   window.rollButtonObserver = new MutationObserver(function() {
-        // Any time the DDB dice buttons change state, we want to synchronize our dice buttons to match theirs.
+      // Any time the DDB dice buttons change state, we want to synchronize our dice buttons to match theirs.
+      if ($("[class*='AnchoredPopover_wrapper']").length>0 && window.diceRoller?.getWaitingForRoll())
+        return;
+      
       $(".dice-die-button").each(function() {
         let dieSize = $(this).attr("data-dice");
         let ourDiceElement = $(`.dice-roller > div img[alt='${dieSize}']`);
@@ -316,7 +356,9 @@ function inject_chat_buttons() {
       }, 0);  
   })
 
-  let watchForDicePanel = new MutationObserver((mutations) => {
+  if(window.watchForDicePanel)
+    window.watchForDicePanel.disconnect();
+  window.watchForDicePanel = new MutationObserver((mutations) => {
    mutations.every(async (mutation) => {
       if (!mutation.addedNodes) return
 
@@ -327,7 +369,7 @@ function inject_chat_buttons() {
           const mutation_target = $(".dice-toolbar__dropdown, [class*='AnchoredPopover_wrapper']")[0];
           const mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
           window.rollButtonObserver.observe(mutation_target, mutation_config);
-          watchForDicePanel.disconnect();
+          window.watchForDicePanel.disconnect();
           return false;
         }
       }
@@ -335,13 +377,29 @@ function inject_chat_buttons() {
     })
   });
 
+  if (window.sendToDefaultObserver)
+    window.sendToDefaultObserver.disconnect();
   window.sendToDefaultObserver = new MutationObserver(function() {
     localStorage.setItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`, gamelog_send_to_text());
   })
 
+  if (window.diceResultsObserver)
+    window.diceResultsObserver.disconnect();
+  window.diceResultsObserver = new MutationObserver(function (mutations) {
+    mutations.every((mutation) => {
+      const firstAddedNode = $(mutation.addedNodes[0]);
+      if (firstAddedNode.is('[class*="-Line-Notation"]') && firstAddedNode.closest("[data-avtt-expression]").length > 0) {
+        replace_gamelog_message_expressions(firstAddedNode.closest("[data-avtt-expression]"))
+        return false;
+      }
+      return true;
+    })
+  })
 
-  let gamelogObserver = new MutationObserver((mutations) => {
-   mutations.every((mutation) => {
+  if(window.gamelogObserver)
+    window.gamelogObserver.disconnect();
+  window.gamelogObserver = new MutationObserver((mutations) => {
+    mutations.every((mutation) =>{
       if (!mutation.addedNodes) return
       for (let i = 0; i < mutation.addedNodes.length; i++) {
         // do things to your newly added nodes here
@@ -350,11 +408,14 @@ function inject_chat_buttons() {
           const sendto_mutation_target = $(".glc-game-log [class*='-SendToLabel'] ~ button")[0];
           const sendto_mutation_config = { attributes: true, childList: true, characterData: true, subtree: true };
           window.sendToDefaultObserver.observe(sendto_mutation_target, sendto_mutation_config);
+          const results_mutation_target = $(".glc-game-log")[0];
+          const results_mutation_config = { attributes: false, childList: true, characterData: false, subtree: true };
+          window.diceResultsObserver.observe(results_mutation_target, results_mutation_config);
           gamelogObserver.disconnect();
           return false;
         }
       }
-      return true // must return true if doesn't break
+      return true;
     })
   });
 
@@ -571,7 +632,6 @@ function monitor_console_logs() {
           timeStamp: TS(),
           value: Array.from(arguments)
         });
-        // Function.prototype.apply.call(console.log, console, arguments);
         original.apply(console, arguments);
       }
     }
@@ -637,7 +697,7 @@ function deleteDB(){
     objectStoreRequest.onsuccess = function(event) {       
       $('#exploredCanvas').remove();
       redraw_light();
-      alert('This campaigns local explored vision data has been cleared.')
+      showTempMessage('This campaigns local explored vision data has been cleared.')
     };
   }
 }
@@ -658,7 +718,7 @@ function deleteExploredScene(sceneId){
       if(sceneId == window.CURRENT_SCENE_DATA.id){
         $('#exploredCanvas').remove();
         redraw_light();
-        alert('Scene Explore Trail Data Cleared')
+        showTempMessage('Scene Explore Trail Data Cleared')
       }        
     };
 }
@@ -669,6 +729,7 @@ function sanitize_aoe_shape(shape){
             shape = "square";
             break;
         case "sphere":
+        case "emanation":
             shape = "circle";
             break;
         case "cylinder":
@@ -726,20 +787,45 @@ function add_aoe_to_statblock(html){
        
   })
 }
-
+async function embedDDBSection(target){
+  const ddbSections = target.find('.journal-ddb-section-embed')
+  const promises = [];
+  for(let i = 0; i<ddbSections.length; i++){
+    const $section = $(ddbSections[i]);
+    let url = $section.text().replaceAll("’", "'");
+    if(!url.includes('dndbeyond.com/sources'))
+      continue;
+    const promise = new Promise(async (resolve, reject) => { 
+      fetch_tooltip([undefined, url], url, (tooltip)=>{
+        resolve(tooltip);
+      });
+    });
+    const tooltip = await promise;
+    const html = $(tooltip.Tooltip).find('.tooltip-body>div:first-of-type');
+    $section.replaceWith(html);
+  }
+  return true;
+}
 function add_aoe_statblock_click(target, tokenId = undefined){
   target.find(`button.avtt-aoe-button`).off('click.aoe').on('click.aoe', function(e) {
     e.stopPropagation();
     const color = $(this).attr('data-style');
-    const shape = $(this).attr('data-shape');
-    const feet = $(this).attr('data-size');
+    let shape = $(this).attr('data-shape')
+    let feet = $(this).attr('data-size');
     const name = $(this).attr('data-name');
     const lineWidth = $(this).attr('data-line-width');
+
+
 
     if(is_abovevtt_page() || window.self != window.top){
       window.top.hide_player_sheet();
       window.top.minimize_player_sheet();
-
+      const circleIsSquare = window.top.get_avtt_setting_value('circleIsSquare');
+      shape = window.top.sanitize_aoe_shape(shape);
+      if(circleIsSquare && shape == 'circle'){
+        shape = 'square';
+        feet *= 2;
+      }
 
       let options = window.top.build_aoe_token_options(color, shape, feet / window.top.CURRENT_SCENE_DATA.fpsq, name, lineWidth / window.top.CURRENT_SCENE_DATA.fpsq)
       if(name == 'Darkness' || name == 'Maddening Darkness' ){
@@ -769,17 +855,13 @@ function add_aoe_statblock_click(target, tokenId = undefined){
   })
 }
 function create_update_token(options, save = true) {
-  console.log("create_update_token");
+  noisy_log("create_update_token");
   let self = this;
   let id = options.id;
   options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
 
   if (!(id in window.TOKEN_OBJECTS)) {
     window.TOKEN_OBJECTS[id] = new Token(options);
-
-    window.TOKEN_OBJECTS[id].sync = mydebounce(function(options) {
-      window.MB.sendMessage('custom/myVTT/token', options);
-    }, 300);
   }
 
   if(options.repositionAoe != undefined){
@@ -794,22 +876,32 @@ function create_update_token(options, save = true) {
   }
   
   window.TOKEN_OBJECTS[id].place(0);
-  window.TOKEN_OBJECTS[id].sync($.extend(true, {}, options));
+  window.TOKEN_OBJECTS[id].sync();
+  if(window.all_token_objects[id] == undefined){
+    window.all_token_objects[id] = window.TOKEN_OBJECTS[id]	
+  }
 
 }
+/** Logs that are super noisy should be sent through here.
+ * This allows us to enable these logs on the fly when we need to debug things that would otherwise flood the console */
+function noisy_log(...message) {
+    if (window.enableNoisyLogs === true) {
+        console.debug(...message);
+    }
+}
+
 function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undefined, specificName=undefined){
-  console.group("add_journal_roll_buttons")
   
   let pastedButtons = target.find('.avtt-roll-button, .integrated-dice__container, .avtt-aoe-button');
 
   for(let i=0; i<pastedButtons.length; i++){
     $(pastedButtons[i]).replaceWith($(pastedButtons[i]).text());
   }
+  const tokenExists = tokenId != undefined && window.all_token_objects?.[tokenId] != undefined;
+  const rollImage = specificImage ? specificImage : tokenExists ? window.all_token_objects[tokenId].options.imgsrc : window.PLAYER_IMG
+  const rollName = specificName ? specificName : tokenExists ? window.all_token_objects[tokenId].options.revealname == true || window.all_token_objects[tokenId].options.player_owned ? window.all_token_objects[tokenId].options.name : '' : window.PLAYER_NAME
 
-  const rollImage = specificImage ? specificImage : (tokenId) ? window.all_token_objects[tokenId].options.imgsrc : window.PLAYER_IMG
-  const rollName = specificName ? specificName : (tokenId) ? window.all_token_objects[tokenId].options.revealname == true || window.all_token_objects[tokenId].options.player_owned ? window.all_token_objects[tokenId].options.name : '' : window.PLAYER_NAME
-
-  const clickHandler = function(clickEvent) {
+  const clickHandler = function(clickEvent) { 
     clickEvent.stopPropagation();
     roll_button_clicked(clickEvent, rollName, rollImage, tokenId ? "monster" : undefined, tokenId)
   };
@@ -829,14 +921,14 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
   // to account for all the nuances of DNDB dice notation.
   // numbers can be swapped for any number in the following comment
   // matches "1d10", " 1d10 ", "1d10+1", " 1d10+1 ", "1d10 + 1" " 1d10 + 1 "
-  const strongRoll = /(<strong>)(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)(<\/strong>)/gi
-  const damageRollRegexBracket = /(\()(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)(\))/gi
-  const damageRollRegex = /([:\s>]|^)(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)([\.\):\s<,]|$)/gi
+  const strongRoll = /\s*(<strong>)(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)(<\/strong>)/gi
+  const damageRollRegexBracket = /\s*(\()(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)(\))/gi
+  const damageRollRegex = /\s*([:\s>]|^)(([0-9]+d[0-9]+)\s?([+-]\s?[0-9]+)?)([\.\):\s<,]|$)/gi
   // matches " +1 " or " + 1 "
-  const hitRollRegexBracket = /(?<![0-9]+d[0-9]+)(\()([+-]\s?[0-9]+)(\))/gi
-  const hitRollRegex = /(?<![0-9]+d[0-9]+)([:\s>]|^)([+-]\s?[0-9]+)([:\s<,]|$)/gi
-  const dRollRegex = /([\s>]|^)(\s?d[0-9]+)([^+-])/gi
-  const rechargeRegEx = /(Recharge [0-6]?\s?[—–-]?\s?[0-6])/gi
+  const hitRollRegexBracket = /\s*(?<![0-9]+d[0-9]+)(\()([+-]\s?[0-9]+)(\))/gi
+  const hitRollRegex = /\s*(?<![0-9]+d[0-9]+)([:\s>]|^)([+-]\s?[0-9]+)([:\s<,]|$)/gi
+  const dRollRegex = /\s*([\s>]|^)(\s?d[0-9]+)([^+-])/gi
+  const rechargeRegEx = /\s*(Recharge [0-6]?\s?[—–-]?\s?[0-6])/gi
   const actionType = "roll"
   const rollType = "AboveVTT"
   let updated = currentElement.html()
@@ -850,77 +942,140 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
     .replaceAll(rechargeRegEx, `<button data-exp='1d6' data-mod='' data-rolltype='recharge' data-actiontype='Recharge' class='avtt-roll-button' title='${actionType}'>$1</button>`)
 
   updated = add_aoe_to_statblock(updated);
-
-  
+      
   let ignoreFormatting = $(currentElement).find('.ignore-abovevtt-formating');
 
   let slashCommandElements = $(currentElement).find('.abovevtt-slash-command-journal')
 
   let $newHTML = $(`<div></div>`).html(updated);
-    $newHTML.find('.ignore-abovevtt-formating').each(function(index){
-      $(this).empty().append(ignoreFormatting[index].innerHTML);
-    })
+  $newHTML.find('.ignore-abovevtt-formating').each(function(index){
+    $(this).empty().append(ignoreFormatting[index].innerHTML);
+  })
 
-    $newHTML.find('.abovevtt-slash-command-journal').each(function(index){      
-      const slashCommands = [...slashCommandElements[index].innerHTML.matchAll(multiDiceRollCommandRegex)];
-      if (slashCommands.length === 0) return;
-      console.debug("inject_dice_roll slashCommands", slashCommands);
-      let updatedInnerHtml = slashCommandElements[index].innerHTML;
-      try {
-        slashCommands[0][0] = slashCommands[0][0].replace(/\(|\)/ig, '');
-        const diceRoll = DiceRoll.fromSlashCommand(slashCommands[0][0], window.PLAYER_NAME, window.PLAYER_IMG, "character", window.PLAYER_ID); // TODO: add gamelog_send_to_text() once that's available on the characters page without avtt running
-        updatedInnerHtml = updatedInnerHtml.replace(updatedInnerHtml, `<button class='avtt-roll-formula-button integrated-dice__container' title="${diceRoll.action?.toUpperCase() ?? "CUSTOM"}: ${diceRoll.rollType?.toUpperCase() ?? "ROLL"}" data-slash-command="${slashCommands[0][0]}">${diceRoll.expression}</button>`);
-      } catch (error) {
-        console.warn("inject_dice_roll failed to parse slash command. Removing the command to avoid infinite loop", slashCommands, slashCommands[0][0]);
-        updatedInnerHtml = updatedInnerHtml.replace(updatedInnerHtml, '');
-      }
-      $(this).empty().append(updatedInnerHtml);
-    })
-
-  
-  
-  
-
-
-  $(target).html($newHTML[0].innerHTML);
-
+  $newHTML.find('.abovevtt-slash-command-journal').each(function(index){      
+    const slashCommands = [...slashCommandElements[index].innerHTML.matchAll(multiDiceRollCommandRegex)];
+    if (slashCommands.length === 0) return;
+    noisy_log("inject_dice_roll slashCommands", slashCommands);
+    let updatedInnerHtml = slashCommandElements[index].innerHTML;
+    try {
+      slashCommands[0][0] = slashCommands[0][0].replace(/\(|\)/ig, '');
+      const diceRoll = DiceRoll.fromSlashCommand(slashCommands[0][0], window.PLAYER_NAME, window.PLAYER_IMG, "character", window.PLAYER_ID); // TODO: add gamelog_send_to_text() once that's available on the characters page without avtt running
+      updatedInnerHtml = updatedInnerHtml.replace(updatedInnerHtml, `<button class='avtt-roll-formula-button integrated-dice__container' title="${diceRoll.action?.toUpperCase() ?? "CUSTOM"}: ${diceRoll.rollType?.toUpperCase() ?? "ROLL"}" data-slash-command="${slashCommands[0][0]?.replace(/[><\s]+$|^[<>\s]+/gi, '')}">${diceRoll.expression}</button>`);
+    } catch (error) {
+      console.warn("inject_dice_roll failed to parse slash command. Removing the command to avoid infinite loop", slashCommands, slashCommands[0][0]);
+      updatedInnerHtml = updatedInnerHtml.replace(updatedInnerHtml, '');
+    }
+    $(this).empty().append(updatedInnerHtml);
+  })
 
   
-  $(target).find('button.avtt-roll-button[data-rolltype]').each(function(){
-    let rollAction = $(this).prevUntil('em>strong').find('strong').last().text().replace('.', '');
-    rollAction = (rollAction == '') ? $(this).prev('strong').last().text().replace('.', '') : rollAction;
-    rollAction = (rollAction == '') ? $(this).prevUntil('strong').last().prev().text().replace('.', '') : rollAction;
-    rollAction = (rollAction == '') ? $(this).parent().prevUntil('em>strong').find('strong').last().text().replace('.', '') : rollAction;
-    rollAction = (rollAction == '') ? $(this).closest('.mon-stat-block__attribute-value').prev().text().replace('.', '') : rollAction;
-    rollAction = (rollAction == '') ? $(this).closest('.mon-stat-block__tidbit, [class*="styles_attribute"]').find('>.mon-stat-block__tidbit-label, >[class*="styles_attributeLabel"]').text().replace('.', '') : rollAction;
-    let rollType = $(this).attr('data-rolltype')
-    let newStatBlockTables = $(this).closest('table').find('tbody tr:first th').text().toLowerCase();
+  
+  let $currTarget = $(target) 
+  const sidebar = $currTarget.closest('.ct-sidebar__inner');
+  if(sidebar.length>0 && sidebar.find(`[class*='styles_gameLogPane']`).length == 0){
+    
+    const currentTargetClone = $currTarget.clone(true, true);
+    currentTargetClone.show(); // incase of edits
+    $currTarget.hide();
+    $currTarget.before(currentTargetClone);
+    currentTargetClone.find(`[style*='display: none']`).remove();
+
+    //observer to see if original data edited
+    const observer = new MutationObserver((mutationsList) => {
+        observer.disconnect();
+        currentTargetClone.remove();
+        mutationsList.every(mutation =>{
+          $(mutation.target).closest('.above-vtt-visited').removeClass('above-vtt-visited');
+        }) 
+    });
+
+    
+    observer.observe($(target)[0], { characterData: true, subtree: true })
+    target = currentTargetClone;
+    $currTarget = $(target);
+    add_aoe_statblock_click($currTarget, tokenId);
+  } 
+  
+  $currTarget.html($newHTML[0].innerHTML);
+  $currTarget.find('.above-vtt-visited[style*="display: none"]').remove();
+
+
+ 
+
+
+  
+  $currTarget.find('button.avtt-roll-button[data-rolltype]').each(function(){
+    const targetButton = $(this);
+    let rollAction = targetButton.prevUntil('em>strong').find('strong').last().text().replace('.', '');
+    rollAction = (rollAction == '') ? targetButton.prev('strong').last().text().replace('.', '') : rollAction;
+    rollAction = (rollAction == '') ? targetButton.prevUntil('strong').last().prev().text().replace('.', '') : rollAction;
+    rollAction = (rollAction == '') ? targetButton.parent().prevUntil('em>strong').find('strong').last().text().replace('.', '') : rollAction;
+    rollAction = (rollAction == '') ? targetButton.closest('.mon-stat-block__attribute-value').prev().text().replace('.', '') : rollAction;
+    rollAction = (rollAction == '') ? targetButton.closest('.mon-stat-block__tidbit, [class*="styles_attribute"]').find('>.mon-stat-block__tidbit-label, >[class*="styles_attributeLabel"]').text().replace('.', '') : rollAction;
+    let rollType = targetButton.attr('data-rolltype')
+    let newStatBlockTables = targetButton.closest('table').find('tbody tr:first th').text().toLowerCase();
     if(newStatBlockTables.includes('str') || newStatBlockTables.includes('int')){
-      rollAction =  $(this).closest('tr').find('th').text();
-      rollType = $(this).closest('td').index() == 2 ? 'Check' : 'Save'
+      rollAction =  targetButton.closest('tr').find('th').text();
+      rollType = targetButton.closest('td').index() == 2 ? 'Check' : 'Save'
     }
-    else if($(this).closest('table').find('tr:first').text().toLowerCase().includes('str')){
-      let statIndex = $(this).closest('table').find('tr button').index($(this)); 
+    else if(targetButton.closest('table').find('tr:first').text().toLowerCase().includes('str')){
+      let statIndex = targetButton.closest('table').find('tr button').index(targetButton);  
       let stats = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
-      rollAction = stats[statIndex];
-      rollType = 'Check'
+      rollAction = stats[statIndex%6];
+      if(statIndex > 6)
+        rollType = 'Save'
+      else
+        rollType = 'Check'
     }
-    else if($(this).closest('.ability-block__stat')?.find('.ability-block__heading').length>0){
-      rollAction = $(this).closest('.ability-block__stat')?.find('.ability-block__heading').text();
+    else if(targetButton.closest('.ability-block__stat, [class*="styles_stat__"]')?.find('.ability-block__heading, [class*="styles_statHeading"]').length>0){
+      rollAction = targetButton.closest('.ability-block__stat, [class*="styles_stat__"]')?.find('.ability-block__heading, [class*="styles_statHeading"]').text();
       rollType = 'Check'
+    } else if(targetButton.closest('.dnd-sheet .abilities-table-container').length>0){
+      if(targetButton.closest('td').length>0){
+        const columnIndex = targetButton.closest('td')[0].cellIndex;
+        rollAction = targetButton.closest('tr').find('td').first().text();
+        rollType = columnIndex == 2 ? 'Save' : 'Check';
+      }
+    } else if(targetButton.closest('.dnd-sheet .skills-box').length>0){
+      if(targetButton.closest('td').length>0){
+        rollAction = `${targetButton.closest('tr').find('td:nth-last-child(2)').text()} (${targetButton.closest('tr').find('td:last').text()})`;
+        rollType = 'Check'
+      }
+    } else if(targetButton.closest('.dnd-sheet .combat-metric').length>0){
+      rollAction = targetButton.closest('.dnd-sheet .combat-metric').find('.label').text();
+      rollType = 'Roll'
+    } else if(targetButton.closest('.dnd-sheet .hp-box').length>0){
+      rollAction = targetButton.closest('.box-field').parent().find('.label').text();
+      rollType = 'Roll'
+    } else if(targetButton.closest('.dnd-sheet .attacks-field').length>0){
+      if(targetButton.closest('td').length>0){
+        const columnIndex = targetButton.closest('td')[0].cellIndex; 
+        rollAction = targetButton.closest('tr').find('td').first().text();
+        if(columnIndex == 1){ 
+          rollType = 'To Hit';
+        }else if(columnIndex == 2){
+          rollType = 'Damage';
+          let saveText = targetButton.closest('td').prev('td').text();
+          const regex = /\D*(\d+)\s+(CON|INT|WIS|CHA|DEX|STR).*|.*(CON|INT|WIS|CHA|DEX|STR)\s+(\d+)\D*/i
+          if(saveText.match(regex)){
+            saveText = saveText.replace(regex, '$2$3 $1$4').trim();
+            if(saveText != undefined) targetButton.attr('data-save', saveText);
+          }
+        }
+      }
     }
 
-    if(rollAction == ''){
+    if (rollAction == '' || rollAction == undefined){
       rollAction = 'Roll';
     } 
     else if(rollAction.replace(' ', '').toLowerCase() == 'savingthrows'){ 
-      rollAction = $(this)[0].previousSibling?.nodeValue?.replace(/[\W]+/gi, '');
-      rollAction = (rollAction == '') ? $(this).prev()?.text()?.replace(/[\W]+/gi, '') : rollAction;
+      rollAction = targetButton[0].previousSibling?.nodeValue?.replace(/[\W]+/gi, '');
+      rollAction = (rollAction == '') ? targetButton.prev()?.text()?.replace(/[\W]+/gi, '') : rollAction;
       rollType = 'Save';  
     }
     else if(rollAction.replace(' ', '').toLowerCase() == 'skills'){
-      rollAction = $(this)[0].previousSibling?.nodeValue?.replace(/[\W]+/gi, '');
-      rollAction = (rollAction == '') ? $(this).prev()?.text()?.replace(/[\W]+/gi, '') : rollAction;
+      rollAction = targetButton[0].previousSibling?.nodeValue?.replace(/[\W]+/gi, '');
+      rollAction = (rollAction == '') ? targetButton.prev()?.text()?.replace(/[\W]+/gi, '') : rollAction;
       rollType = 'Check'; 
     }
     else if(rollAction.replace(' ', '').toLowerCase() == 'proficiencybonus'){
@@ -935,15 +1090,17 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
       rollType = 'Roll';
     }
     
-    $(this).attr('data-actiontype', rollAction);
-    $(this).attr('data-rolltype', rollType);
-
-    const followingText = $(this)[0].nextSibling?.textContent?.trim()?.split(' ')[0]
+    const followingText = targetButton[0].nextSibling?.textContent?.trim()?.split(' ')[0]
     
     const damageType = followingText && window.ddbConfigJson?.damageTypes?.some(d => d.name.toLowerCase() == followingText.toLowerCase()) ? followingText : undefined
     if(damageType != undefined){
-      $(this).attr('data-damagetype', damageType);
+      targetButton.attr('data-damagetype', damageType);
     }
+    if(followingText && followingText.toLowerCase().match(/^\s*heal(ing)?/i)) rollType = 'Heal';
+    targetButton.attr('data-actiontype', rollAction);
+    targetButton.attr('data-rolltype', rollType);
+    
+   
   })
 
   const tokenName = window.all_token_objects && window.all_token_objects[tokenId]?.options?.name ? window.all_token_objects[tokenId]?.options?.name  : window.PLAYER_NAME
@@ -953,11 +1110,11 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
   // terminate the clones reference, overkill but rather be safe when it comes to memory
   currentElement = null;
 
-  $(target).find(".avtt-roll-button").click(clickHandler);
-  $(target).find(".avtt-roll-button").on("contextmenu", rightClickHandler);
+  $currTarget.find(".avtt-roll-button").click(clickHandler);
+  $currTarget.find(".avtt-roll-button").on("contextmenu", rightClickHandler);
 
-  $(target).find("button.avtt-roll-formula-button").off('click.avttRoll').on('click.avttRoll', function(clickEvent) {
-  clickEvent.stopPropagation();
+  $currTarget.find("button.avtt-roll-formula-button").off('click.avttRoll').on('click.avttRoll', function(clickEvent) {
+    clickEvent.stopPropagation();
 
     const slashCommand = $(clickEvent.currentTarget).attr("data-slash-command");
     const followingText = $(clickEvent.currentTarget)[0].nextSibling?.textContent?.trim()?.split(' ')[0]
@@ -965,7 +1122,7 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
     const diceRoll = DiceRoll.fromSlashCommand(slashCommand, tokenName, tokenImage, entityType, tokenId, damageType); // TODO: add gamelog_send_to_text() once that's available on the characters page without avtt running
     window.diceRoller.roll(diceRoll, undefined, undefined, undefined, undefined, damageType);
   });
-  $(target).find(`button.avtt-roll-formula-button`).off('contextmenu.rpg-roller').on('contextmenu.rpg-roller', function(e){
+  $currTarget.find(`button.avtt-roll-formula-button`).off('contextmenu.rpg-roller').on('contextmenu.rpg-roller', function(e){
     e.stopPropagation();
     e.preventDefault();
     let rollData = {}
@@ -979,7 +1136,9 @@ function add_journal_roll_buttons(target, tokenId=undefined, specificImage=undef
     
     
     if (rollData.rollType === "damage") {
-      damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, tokenName, tokenImage, entityType, tokenId, damageType)
+      const followingText = this.nextSibling?.textContent?.trim()?.split(' ')[0]
+      const damageType = followingText && window.ddbConfigJson.damageTypes.some(d => d.name.toLowerCase() == followingText.toLowerCase()) ? followingText : undefined
+      damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, tokenName, tokenImage, entityType, tokenId, damageType, undefined)
         .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
     } else {
       standard_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, tokenName, tokenImage, entityType, tokenId)
@@ -1016,7 +1175,7 @@ function notify_player_join() {
     pc: read_pc_object_from_character_sheet(window.PLAYER_ID)
   };
 
-  console.log("Sending playerjoin msg, abovevtt version: " + playerdata.abovevtt_version + ", sheet ID:" + window.PLAYER_ID);
+  noisy_log("Sending playerjoin msg, abovevtt version: " + playerdata.abovevtt_version + ", sheet ID:" + window.PLAYER_ID);
   whenAvailable('JOURNAL', function () { window.MB.sendMessage("custom/myVTT/playerjoin", playerdata) });
 }
 
@@ -1052,170 +1211,7 @@ function init_my_dice_details() {
  */
 //currently used for flat value rolls
 
-function send_ddb_dice_message(expression, displayName, imgUrl, rollType = "roll", damageType, actionType = "custom", sendTo = "") {
-  let diceRoll = new DiceRoll(expression);
-  diceRoll.action = actionType;
-  diceRoll.rollType = rollType;
-  diceRoll.name = displayName == true ? 'THE DM' : displayName;
-  diceRoll.avatarUrl = imgUrl;
-  // diceRoll.entityId = monster.id;
-  // diceRoll.entityType = monsterData.id;
 
-  console.log("with values", expression, displayName, imgUrl, rollType, damageType, actionType, sendTo)
-
-
-  try {
-    expression = expression.replace(/\s+/g, ''); // remove all whitespace
-
-    const supportedDieTypes = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
-
-    let roll = new rpgDiceRoller.DiceRoll(expression);
-
-    // rpgDiceRoller doesn't give us the notation of each roll so we're going to do our best to find and match them as we go
-    let choppedExpression = expression;
-    let notationList = [];
-    for (let i = 0; i < roll.rolls.length; i++) {
-      let currentRoll = roll.rolls[i];
-      if (typeof currentRoll === "string") {
-        let idx = choppedExpression.indexOf(currentRoll);
-        let previousNotation = choppedExpression.slice(0, idx);
-        notationList.push(previousNotation);
-        notationList.push(currentRoll);
-        choppedExpression = choppedExpression.slice(idx + currentRoll.length);
-      }
-    }
-    console.log("chopped expression", choppedExpression)
-    notationList.push(choppedExpression); // our last notation will still be here so add it to the list
-
-    if (roll.rolls.length != notationList.length) {
-      console.warn(`Failed to convert expression to DDB roll; expression ${expression}`);
-      console.groupEnd()
-      return false;
-    }
-
-    let convertedDice = [];       // a list of objects in the format that DDB expects
-    let allValues = [];           // all the rolled values
-    let convertedExpression = []; // a list of strings that we'll concat for a string representation of the final math being done
-    let constantsTotal = 0;       // all the constants added together
-    for (let i = 0; i < roll.rolls.length; i++) {
-      let currentRoll = roll.rolls[i];
-      if (typeof currentRoll === "object") {
-        let currentNotation = notationList[i];
-        let currentDieType = supportedDieTypes.find(dt => currentNotation.includes(dt)); // we do it this way instead of splitting the string so we can easily clean up things like d20kh1, etc. It's less clever, but it avoids any parsing errors
-        if (!supportedDieTypes.includes(currentDieType)) {
-          console.warn(`found an unsupported dieType ${currentNotation}`);
-          console.groupEnd()
-          return false;
-        }
-        if (currentNotation.includes("kh") || currentNotation.includes("kl")) {
-          let cleanerString = currentRoll.toString()
-            .replace("[", "(")    // swap square brackets with parenthesis
-            .replace("]", ")")    // swap square brackets with parenthesis
-            .replace("d", "")     // remove all drop notations
-            .replace(/\s+/g, ''); // remove all whitespace
-          convertedExpression.push(cleanerString);
-        } else {
-          convertedExpression.push(currentRoll.value);
-        }
-        let dice = currentRoll.rolls.map(d => {
-          allValues.push(d.value);
-          console.groupEnd()
-          return { dieType: currentDieType, dieValue: d.value };
-        });
-
-        convertedDice.push({
-          "dice": dice,
-          "count": dice.length,
-          "dieType": currentDieType,
-          "operation": 0
-        })
-      } else if (typeof currentRoll === "string") {
-        convertedExpression.push(currentRoll);
-      } else if (typeof currentRoll === "number") {
-        convertedExpression.push(currentRoll);
-        if (i > 0) {
-          if (convertedExpression[i - 1] == "-") {
-            constantsTotal -= currentRoll;
-          } else if (convertedExpression[i - 1] == "+") {
-            constantsTotal += currentRoll;
-          } else {
-            console.warn(`found an unexpected symbol ${convertedExpression[i - 1]}`);
-            console.groupEnd()
-            return false;
-          }
-        } else {
-          constantsTotal += currentRoll;
-        }
-      }
-    }
-    if(sendTo == ''){
-      sendTo = gamelog_send_to_text().trim().replace('/\s/gi', '');
-    }
-    sendTo = sendTo.toLowerCase();
-    
-    let ddbJson = {
-      id: uuid(),
-      dateTime: `${Date.now()}`,
-      gameId: `${window.gameId}`,
-      userId: `${window.myUser}`,
-      source: "web",
-      persist: true,
-      messageScope: sendTo === "everyone" ? "gameId" : "userId",
-      messageTarget: sendTo === "everyone" ? `${window.gameId}` : sendTo === "dungeonmaster" || sendTo === "dm" ? `${window.CAMPAIGN_INFO.dmId}` : `${window.myUser}`,
-      entityId: `${window.myUser}`,
-      entityType: "user",
-      eventType: "dice/roll/fulfilled",
-      data: {
-        action: actionType,
-        setId: window.mydice.data.setId,
-        context: {
-          entityId: `${window.myUser}`,
-          entityType: "user",
-          messageScope: sendTo === "everyone" ? "gameId" : "userId",
-          messageTarget: sendTo === "everyone" ? `${window.gameId}` : sendTo === "dungeonmaster" || sendTo === "dm"  ? `${window.CAMPAIGN_INFO.dmId}` : `${window.myUser}`,
-          name: displayName,
-          avatarUrl: imgUrl
-        },
-        rollId: uuid(),
-        rolls: [
-          {
-            diceNotation: {
-              set: convertedDice,
-              constant: constantsTotal
-            },
-            diceNotationStr: expression,
-            rollType: rollType,
-            rollKind: expression.includes("kh") ? "advantage" : expression.includes("kl") ? "disadvantage" : "",
-            result: {
-              constant: constantsTotal,
-              values: allValues,
-              total: roll.total,
-              text: convertedExpression.join("")
-            }
-          }
-        ]
-      }
-    };
-    if (window.MB?.ws?.readyState && window.MB.ws.readyState == window.MB.ws.OPEN) {
-      window.MB.ws.send(JSON.stringify(ddbJson));
-      console.groupEnd()
-      return true;
-    } else { // TRY TO RECOVER
-      get_cobalt_token(function (token) {
-        window.MB.loadWS(token, function () {
-          // TODO, CONSIDER ADDING A SYNCMEUP / SCENE PAIR HERE
-          window.MB.ws.send(JSON.stringify(ddbJson));
-        });
-      });
-      console.groupEnd()
-      return true; // we can't guarantee that this actually worked, unfortunately
-    }
-  } catch (error) {
-    console.warn(`failed to send expression as DDB roll; expression = ${expression}`, error);
-    console.groupEnd()
-    return false;
-  }
-}
 
 function general_statblock_formating(input){
   input = input.replace(/&nbsp;/g,' ')
@@ -1379,23 +1375,26 @@ function inject_dice(){
         </style>
     </div>
   `);
- window.encounterObserver = new MutationObserver(function(mutationList, observer) {
+  if(window.encounterObserver){
+    window.encounterObserver.disconnect();
+  }
+  window.encounterObserver = new MutationObserver(function(mutationList, observer) {
 
-  mutationList.forEach(mutation => {
-     try {
-       let mutationTarget = $(mutation.target);
-       
-       if(mutationTarget.hasClass(['encounter-details', 'encounter-builder', 'release-indicator'])){
-         mutationTarget.remove();
-       }
-       if($(mutation.addedNodes).is('.encounter-builder, .release-indicator')){
-         $(mutation.addedNodes).remove();
-       }
-     } catch{
-       console.warn("non_sheet_observer failed to parse mutation", error, mutation);
-     }
-   });
- })
+    mutationList.forEach(mutation => {
+      try {
+        let mutationTarget = $(mutation.target);
+        
+        if(mutationTarget.is('.encounter-details, .encounter-builder, .release-indicator')){
+          mutationTarget.remove();
+        }
+        if($(mutation.addedNodes).is('.encounter-builder, .release-indicator')){
+          $(mutation.addedNodes).remove();
+        }
+      } catch(error){
+        console.warn("non_sheet_observer failed to parse mutation", error, mutation);
+      }
+    });
+  })
 
  
  const mutation_target = $('#encounter-builder-root')[0];
@@ -1408,6 +1407,13 @@ function inject_dice(){
    delete window.encounterObserver;
  }, 300000);
  
+}
+
+function sendPointerEvent(targetSelector='', type="pointerdown", options = {}){
+  const pointerEvent = new PointerEvent(type, options)
+  const target = $(targetSelector);
+  console.assert(target.length>0, `Target not found for pointer event. Target selector: ${targetSelector}`, pointerEvent);
+  target[0]?.dispatchEvent(pointerEvent);
 }
 /**
  * Creates a transparent context background that can be clicked to close items
@@ -1497,11 +1503,11 @@ var MYCOBALT_TOKEN_EXPIRATION = 0;
  */
 function get_cobalt_token(callback) {
   if (Date.now() < MYCOBALT_TOKEN_EXPIRATION) {
-    console.log("TOKEN IS CACHED");
+    noisy_log("TOKEN IS CACHED");
     callback(MYCOBALT_TOKEN);
     return;
   }
-  console.log("GETTING NEW TOKEN");
+  noisy_log("GETTING NEW TOKEN");
   $.ajax({
     url: "https://auth-service.dndbeyond.com/v1/cobalt-token",
     type: "post",
@@ -1510,7 +1516,7 @@ function get_cobalt_token(callback) {
       withCredentials: true
     },
     success: function(data) {
-      console.log("GOT NEW TOKEN");
+      noisy_log("GOT NEW TOKEN");
       MYCOBALT_TOKEN = data.token;
       MYCOBALT_TOKEN_EXPIRATION = Date.now() + (data.ttl * 1000) - 10000;
       callback(data.token);
@@ -1582,15 +1588,15 @@ function dropBoxOptions(callback, multiselect = false, fileType=['images', 'vide
 function showErrorMessage(error, ...extraInfo) {
   removeError();
   window.logSnapshot = process_monitored_logs(false);
-
-  console.log("showErrorMessage", ...extraInfo, error.stack);
   if (!(error instanceof Error)) {
     if (typeof error === "object") {
       error = JSON.stringify(error);
     } 
     error = new Error(error?.toString());
   }
+
   const stack = error.stack || new Error().stack;
+  console.error(error, ...extraInfo);
   if(stack.includes('Internal Server Error') && stack.includes('AboveApi.getScene')){
     if(!window.DM){
       extraInfo.push('<br/><b>The last scene players were on may have been deleted by the DM. Ask the DM to click the player button beside an existing scene. Even if one is already highlighted click it again to update the server info.</b>')
@@ -1603,30 +1609,22 @@ function showErrorMessage(error, ...extraInfo) {
   
   const extraStrings = extraInfo.map(ei => {
     if (typeof ei === "object") {
-      if(JSON.stringify(ei).length>300)
-        return JSON.stringify(ei).substr(0, 300) + "...";
-      else
-        return JSON.stringify(ei)
+      return JSON.stringify(ei)
     } else {
-      if(ei?.toString().length>300)
-        return ei?.toString().substr(0, 300) + "...";
-      else
-        return ei?.toString()
+      return ei?.toString()
     }
   }).join('<br />');
   if(typeof error.message == 'object'){
     error.message = JSON.strigify(error.message);
   }
   let container = $("#above-vtt-error-message");
-  if(error.message.length > 300)
-    error.message = error.message.substr(0, 300) + "...";
   if ($('#error-message-stack').length == 0) {
     $("#above-vtt-error-message").remove();
     const container = $(`
       <div id="above-vtt-error-message">
         <h2>An unexpected error occurred!</h2>
         <h3 id="error-message">${error.message}</h3>
-        <div id="error-message-details">${extraStrings}</div>
+        <div id="error-message-details" style="max-height: 200px; overflow-y: auto;">${extraStrings}</div>
         <pre id="error-message-stack" style='max-height: 200px;'>${error.message}<br/>${extraStrings}</pre>
         <div id="error-github-issue"></div>
         <div class="error-message-buttons">
@@ -1654,7 +1652,38 @@ function showErrorMessage(error, ...extraInfo) {
     $("#error-message-stack").show();
   }
 }
-
+function showHardwareAccelWarning(){
+  if (localStorage.getItem("HardwareAccelWarningDismissed") === "true") 
+    return;
+  let canvas = document.createElement('canvas');
+  if(!!(canvas?.getContext("webgl", {failIfMajorPerformanceCaveat: true}) || canvas?.getContext("experimental-webgl", {failIfMajorPerformanceCaveat: true}))){
+    canvas = null;
+    return;
+  }
+  $("#above-vtt-error-message").remove();
+  const container = $(`
+    <div id="above-vtt-error-message">
+      <h2>Hardware Acceleration is not detected</h2>
+      <div id="error-message-details">
+        <p>It is recommended to enable hardware acceleration in your browser settings then restart your browser.</p>
+      </div>
+      <label style="display:flex;align-items:center;margin-top:0.75rem;cursor:pointer;">
+        <input id="hardware-accel-warning-hide" type="checkbox" style="margin-right:0.5rem;">
+        Do not show again
+      </label>
+      <div class="error-message-buttons">
+        <button id="close-error-button">Close</button>
+      </div>
+    </div>
+  `);
+  $(document.body).append(container);
+  $("#close-error-button").off().on("click", () => {
+    if ($("#hardware-accel-warning-hide").is(":checked")) {
+      localStorage.setItem("HardwareAccelWarningDismissed", "true");
+    }
+    removeError();
+  });
+}
 function showDiceDisabledWarning(){
   window.diceWarning = 1;
   let container = $("#above-vtt-error-message");
@@ -1697,12 +1726,16 @@ function showGoogleDriveWarning(){
  * @param {Error} error an error object to be parsed and displayed
  * @param {string|*[]} extraInfo other relevant information */
 function showError(error, ...extraInfo) {
+  if(error instanceof noLogError) 
+    return;
+  
   if (!(error instanceof Error)) {
     if (typeof error === "object") {
       error = JSON.stringify(error);
     } 
     error = new Error(error?.toString());
   }
+
   $('#loadingStyles').remove(); 
   showErrorMessage(error, ...extraInfo);
 
@@ -1713,7 +1746,7 @@ function showError(error, ...extraInfo) {
       add_issues_to_error_message(issues, error.message);
     })
     .catch(githubError => {
-      console.log("look_for_github_issue", "Failed to look for github issues", githubError);
+      noisy_log("look_for_github_issue", "Failed to look for github issues", githubError);
     });
   remove_loading_overlay();
 }
@@ -1773,21 +1806,20 @@ function add_issues_to_error_message(issues, errorMessage) {
         browser: get_browser(),
       });
       const errorBody = build_external_error_message(true);
-      console.log("look_for_github_issue", `appending createIssueUrl`, errorMessage, errorBody);
+      noisy_log("look_for_github_issue", `appending createIssueUrl`, errorMessage, errorBody);
       open_github_issue(errorMessage, errorBody);
     });
     $("#above-vtt-error-message .error-message-buttons").append(githubButton);
   }
 }
 
-function showTempMessage(messageString){
+function showTempMessage(messageString, options = { fadeDelay: 1000, fadeTime: 1000 }) {
   $('.abovevttTempMessage').remove();
   let messageBox = $(`<div class='abovevttTempMessage'>${messageString}</div>`);
   $('body').append(messageBox);
   setTimeout(function(){
-    messageBox.fadeOut(1000, function() { $(this).remove(); });
-  }, 1000);
-
+    messageBox.fadeOut(options.fadeTime, function() { $(this).remove(); });
+  }, options.fadeDelay);
 }
 function convertMmSsToMs(text) {
   const [minutes, seconds] = text.split(':').map(Number); //
@@ -1797,35 +1829,84 @@ function convertMmSsToMs(text) {
 function convertMsToMmSs(duration) {
   return  `${`${Math.floor(duration / 60000)}`.padStart(2, '0')}:${`${Math.floor((duration % 60000) / 1000)}`.padStart(2, '0')}`
 }
-function create_gamelog_timer(message, duration = 60000, startTime = Date.now()){
-  let timerId;
-  const startTimeString = convertMsToMmSs(duration);
-  const timerBox = $(`<div class='chatTimer' data-start='${startTime}'><span class='timerMessage'>${message}</span><span class='timerBar'>${startTimeString}</span></div>`);
-  const closeButton = $(`<span class='timerCloseButton'>&#10006;</span>`);
-  closeButton.on('click', function(){
-    clearInterval(timerId);
-    timerBox.remove();
-  });
-  timerBox.append(closeButton);
-  $(".glc-game-log > [class*='-GameLog']").before(timerBox);
-  timerId = setInterval(function(){
-    const elapsed = Date.now() - startTime;
-    const remaining = duration - elapsed;
-    if(remaining <= 0){
-      clearInterval(timerId);
+function setTimerInterval(timerBox, startTime){
+  const intervalTime = 1000;
+  return setInterval(function(){
+    window.chatTimers[startTime].remaining -= intervalTime;
+    if(window.chatTimers[startTime].remaining <= 0){
+      clearInterval(window.chatTimers[startTime].interval);
       setTimeout(function(){
         timerBox.remove();
       }, 5000)
       timerBox.find('.timerBar').css('color', 'red');
+      delete window.chatTimers[startTime];
     } else {
       const timerExists = $(`.chatTimer[data-start="${startTime}"]`).length > 0;
       if(!timerExists){
         $(".glc-game-log > [class*='-GameLog']").before(timerBox);
       }
-      const timeRemainingString = convertMsToMmSs(remaining);
+      const timeRemainingString = convertMsToMmSs(window.chatTimers[startTime].remaining);
       timerBox.find('.timerBar').text(timeRemainingString);
     }
-  }, 1000);
+  }, intervalTime);
+  
+}
+function create_gamelog_timer(message, duration = 60000, startTime = Date.now(), showCancelButton = window.DM) {
+    
+  if(window.chatTimers === undefined){
+    window.chatTimers = {};
+  }
+
+
+  
+  let timerId;
+  const startTimeString = convertMsToMmSs(duration);
+  const timerBox = $(`<div class='chatTimer' data-start='${startTime}'><span class='timerMessage'>${message}</span><span class='timerBar'>${startTimeString}</span></div>`);
+  const closeButton = $(`<span class='timerCloseButton'>&#10006;</span>`);
+  closeButton.on('click', function(){
+    clearInterval(window.chatTimers[startTime].interval);
+    timerBox.remove();
+  });
+  
+  if(showCancelButton){
+    const buttonContainer = $(`<span class='timerButtonContainer'></span>`);
+
+    const cancelButton = $(`<span class='timerCancelButton material-symbols-outlined'>stop</span>`);
+    cancelButton.on('click', function(){
+      clearInterval(window.chatTimers[startTime].interval);
+      delete window.chatTimers[startTime];
+      timerBox.remove();
+      window.MB.sendMessage("custom/myVTT/cancelTimer", {startTime});
+    });
+    buttonContainer.append(cancelButton);
+  
+
+    const pauseButton = $(`<span class='timerPauseButton material-symbols-outlined'>pause</span>`);
+    pauseButton.on('click', function(){
+      if(pauseButton.hasClass('paused')){
+        const newEndTime = Date.now() + window.chatTimers[startTime].remaining;
+        const newDuration = newEndTime - startTime;
+        window.chatTimers[startTime].interval = setTimerInterval(timerBox, startTime);
+        pauseButton.removeClass('paused');
+        pauseButton.text('pause');
+        window.MB.sendMessage("custom/myVTT/restartTimer", {startTime, newDuration});
+      }else{
+        clearInterval(window.chatTimers[startTime].interval);
+        window.MB.sendMessage("custom/myVTT/pauseTimer", {startTime});
+        pauseButton.addClass('paused');
+        pauseButton.text('play_arrow');
+      }
+
+    });
+    buttonContainer.append(pauseButton);
+    timerBox.append(buttonContainer);
+  }
+  timerBox.append(closeButton);
+  $(".glc-game-log > [class*='-GameLog']").before(timerBox);
+  window.chatTimers[startTime]= {
+    remaining: duration,
+    interval: setTimerInterval(timerBox, startTime)
+  }
 }
 /** The string "THE DM" has been used in a lot of places.
  * This prevents typos or case sensitivity in strings.
@@ -1902,7 +1983,7 @@ function color_from_pc_object(pc) {
   if (!isDefaultTheme && pc.decorations?.characterTheme?.themeColor) { // only the DM can use the default theme color
     return pc.decorations.characterTheme.themeColor;
   } else {
-    const pcIndex = window.pcs.findIndex(p => p.id === p.id);
+    const pcIndex = window.pcs.findIndex(p => p.id === pc.id);
     return get_token_color_by_index(pcIndex);
   }
 }
@@ -1944,7 +2025,15 @@ function my_player_id() {
     return `${window.PLAYER_ID}`;
   }
 }
+function removeUnusedPlayerData(object, isToken = true){
+    const unusedPlayerData = isToken 
+      ? ['image', 'attacks', 'attunedItems', 'campaign', 'campaignSetting', 'castingInfo', 'classes', 'deathSaveInfo', 'extras', 'immunities', 'level', 'passiveInsight', 'passiveInvestigation', 'passivePerception', 'proficiencyBonus', 'proficiencyGroups', 'race', 'readOnlyUrl', 'resistances', 'senses', 'skills', 'speeds', 'vulnerabilities'] 
+      : ['attacks', 'attunedItems', 'campaign', 'campaignSetting', 'classes'];
 
+    for (let i = 0; i < unusedPlayerData.length; i++) {
+      delete object[unusedPlayerData[i]];
+    }
+}
 /** @param {string} idOrSheet the playerId or pc.sheet of the pc you're looking for
  * @param {boolean} useDefault whether to return a generic default object if the pc object is not found
  * @return {object} The window.pcs object that matches the idOrSheet */
@@ -1961,10 +2050,7 @@ function find_pc_by_player_id(idOrSheet, useDefault = true) {
   const regex = new RegExp(regexStr, 'gi');
   const pc = window.pcs.find(pc => pc.sheet.match(regex) || pc.sheet == idOrSheet);
   if (pc) {
-    const unusedPlayerData = ['attacks', 'attunedItems', 'campaign', 'campaignSetting', 'classes'];
-    for (let i = 0; i < unusedPlayerData.length; i++) {
-      delete pc[unusedPlayerData[i]];
-    }
+    removeUnusedPlayerData(pc, false);
     return pc;
   }
   if (useDefault) {
@@ -1991,16 +2077,30 @@ async function rebuild_window_pcs() {
  * @returns {string[]}
  */
 function get_my_known_languages() {
+  if(is_spectator_page()) return ['Common', 'Telepathy']; //reasonable default
   const pc = find_pc_by_player_id(my_player_id())
   const knownLanguages = pc?.proficiencyGroups.find(g => g.group === "Languages")?.values?.trim().split(/\s*,\s*/gi) ?? [];
   knownLanguages?.push('Telepathy');
   return knownLanguages;
 }
 
+// the special string to whisper to spectator screens
+const SPECTATOR_WHISPER_ID = "-spectator";
+
+function canHearWhisper(whisper) {
+  if(!whisper) return true;
+  const myName = is_spectator_page() ? SPECTATOR_WHISPER_ID : window.PLAYER_NAME;
+  const myId = is_spectator_page() ? SPECTATOR_WHISPER_ID : `${window.myUser}`
+  return (whisper === myName || (Array.isArray(whisper) && whisper.includes(myId)));
+}
 
 function update_pc_with_data(playerId, data) {
   if (data.constructor !== Object) {
     console.warn("update_pc_with_data was given invalid data", playerId, data);
+    return;
+  }
+  if(!window.pcs){
+    console.warn('update_pc_with_data called before window.pcs initialized');
     return;
   }
   const index = window.pcs.findIndex(pc => pc.sheet.includes(playerId));
@@ -2008,7 +2108,7 @@ function update_pc_with_data(playerId, data) {
     console.warn("update_pc_with_data could not find pc with id", playerId);
     return;
   }
-  console.debug(`update_pc_with_data is updating ${playerId} with`, data);
+  noisy_log(`update_pc_with_data is updating ${playerId} with`, data);
   const pc = window.pcs[index];
   window.pcs[index] = {
     ...pc,
@@ -2024,8 +2124,7 @@ function update_pc_with_data(playerId, data) {
 
 
 const debounce_pc_token_update = mydebounce(() => {  
-  const unusedPlayerData = ['image', 'attacks', 'attunedItems', 'campaign', 'campaignSetting', 'castingInfo', 'classes', 'deathSaveInfo', 'decorations', 'extras', 'immunities', 'level', 'passiveInsight', 'passiveInvestigation', 'passivePerception', 'proficiencyBonus', 'proficiencyGroups', 'race', 'readOnlyUrl', 'resistances', 'senses', 'skills', 'speeds', 'vulnerabilities'];
-      
+  
   window.PC_TOKENS_NEEDING_UPDATES.forEach((playerId) => {
     const pc = find_pc_by_player_id(playerId, false);
     let token = window.TOKEN_OBJECTS[pc?.sheet];     
@@ -2036,9 +2135,7 @@ const debounce_pc_token_update = mydebounce(() => {
       const newImage = (token.options.alternativeImages == undefined || token.options.alternativeImages?.length == 0) ? pc.image : currentImage;
       const options = $.extend(true, {}, token.options, pc, { imgsrc: newImage });
       options.conditions = pc.conditions || [];
-      for (let i = 0; i < unusedPlayerData.length; i++) {
-        delete options[unusedPlayerData[i]];
-      }
+      removeUnusedPlayerData(options);
       token.hp = pc.hitPointInfo.current; // triggers concentration checks
       token.options.hitPointInfo = pc.hitPointInfo;
       token.options = $.extend(true, {}, options, { left: token.options.left, top: token.options.top });
@@ -2058,9 +2155,7 @@ const debounce_pc_token_update = mydebounce(() => {
       const newImage = (crossSceneToken.options.alternativeImages == undefined || crossSceneToken.options.alternativeImages?.length == 0) ? pc.image : currentImage;
       const options = $.extend(true, {}, crossSceneToken.options, pc, { imgsrc: newImage });
       options.conditions = pc.conditions || [];
-      for (let i = 0; i < unusedPlayerData.length; i++) {
-        delete options[unusedPlayerData[i]];
-      }
+      removeUnusedPlayerData(options);
       crossSceneToken.hp = pc.hitPointInfo.current; 
       crossSceneToken.options.hitPointInfo = pc.hitPointInfo;
       crossSceneToken.options = $.extend(true, {}, options);
@@ -2076,20 +2171,20 @@ const debounce_pc_token_update = mydebounce(() => {
 
 function update_pc_with_api_call(playerId) {
   if (!playerId) {
-    console.log('update_pc_with_api_call was called without a playerId');
+    noisy_log('update_pc_with_api_call was called without a playerId');
     return;
   }
   if (window.PC_TOKENS_NEEDING_UPDATES.includes(playerId)) {
-    console.log(`update_pc_with_api_call isn't adding ${playerId} because we're already waiting for debounce_pc_token_update to handle it`);
+    noisy_log(`update_pc_with_api_call isn't adding ${playerId} because we're already waiting for debounce_pc_token_update to handle it`);
   } else if (Object.keys(window.PC_NEEDS_API_CALL).includes(playerId)) {
-    console.log(`update_pc_with_api_call is already waiting planning to call the API to fetch ${playerId}. Nothing to do right now.`);
+    noisy_log(`update_pc_with_api_call is already waiting planning to call the API to fetch ${playerId}. Nothing to do right now.`);
   } else {
     const pc = find_pc_by_player_id(playerId, false);
     const twoSecondsAgo = new Date(Date.now() - 2000).getTime();
     if (pc && pc.lastSynchronized && pc.lastSynchronized > twoSecondsAgo) {
-      console.log(`update_pc_with_api_call is not adding ${playerId} to window.PC_NEEDS_API_CALL because it has been updated within the last 2 seconds`);
+      noisy_log(`update_pc_with_api_call is not adding ${playerId} to window.PC_NEEDS_API_CALL because it has been updated within the last 2 seconds`);
     } else {
-      console.log(`update_pc_with_api_call is adding ${playerId} to window.PC_NEEDS_API_CALL`);
+      noisy_log(`update_pc_with_api_call is adding ${playerId} to window.PC_NEEDS_API_CALL`);
       window.PC_NEEDS_API_CALL[playerId] = Date.now();
     }
   }
@@ -2101,16 +2196,16 @@ const debounce_fetch_character_from_api = mydebounce(() => {
   const idsAndDates = { ...window.PC_NEEDS_API_CALL }; // make a copy so we can refer to it later
   window.PC_NEEDS_API_CALL = {}; // clear it out in case we get new updates while the API call is active
   const characterIds = Object.keys(idsAndDates);
-  console.log('debounce_fetch_character_from_api is about to call DDBApi before update_pc_with_data for ', characterIds);
+  noisy_log('debounce_fetch_character_from_api is about to call DDBApi before update_pc_with_data for ', characterIds);
   DDBApi.fetchCharacterDetails(characterIds).then((characterDataCollection) => {
     characterDataCollection.forEach((characterData) => {
       // check if we've synchronized this player data while the API call was active because we don't want to update the PC with stale data
       const lastSynchronized = find_pc_by_player_id(characterData.characterId, false)?.lastSynchronized;
       if (!lastSynchronized || lastSynchronized < idsAndDates[characterData.characterId]) {
-        console.log('debounce_fetch_character_from_api is about to call update_pc_with_data with', characterData.characterId, characterData);
+        noisy_log('debounce_fetch_character_from_api is about to call update_pc_with_data with', characterData.characterId, characterData);
         update_pc_with_data(characterData.characterId, characterData);
       } else {
-        console.log(`debounce_fetch_character_from_api is not calling update_pc_with_data for ${characterData.characterId} because ${lastSynchronized} < ${idsAndDates[characterData.characterId]}`);
+        noisy_log(`debounce_fetch_character_from_api is not calling update_pc_with_data for ${characterData.characterId} because ${lastSynchronized} < ${idsAndDates[characterData.characterId]}`);
       }
     });
   });
@@ -2119,7 +2214,7 @@ const debounce_fetch_character_from_api = mydebounce(() => {
 async function harvest_game_id() {
   if (is_campaign_page()) {
     const fromPath = window.location.pathname.split("/").pop();
-    console.log("harvest_game_id found gameId in the url:", fromPath);
+    noisy_log("harvest_game_id found gameId in the url:", fromPath);
     return fromPath;
   }
 
@@ -2128,13 +2223,12 @@ async function harvest_game_id() {
   }
 
   if (is_characters_page()) {
-   
-    
+
+    // The "Join MAPS" button on the character sheet uses /games/<id> — this is the current DDB format
     const fromLink = $("[href^='/games/']").attr("href")?.split("/")?.pop();
     if (typeof fromLink === "string" && fromLink.length > 1) {
       return fromLink;
     }
-    
 
     // we didn't find it on the page so hit the DDB API, and try to pull it from there
     const characterId = window.location.pathname.split("/").pop();
@@ -2156,18 +2250,50 @@ async function harvest_campaign_secret() {
 
   if (typeof window.gameId !== "string" || window.gameId.length <= 1) {
     if (window.gameId === false){
-      return
+      return ""; // character is not in a campaign; resolve with "" so set_campaign_secret gets a string, not undefined
     }
     throw new Error("harvest_campaign_secret requires gameId to be set. Make sure you call harvest_game_id first");
   }
 
   if (is_campaign_page()) {
-    return $(".ddb-campaigns-invite-primary").text().split("/").pop();
+    // DDB renders this element asynchronously via React — poll until it's populated.
+    // Hard timeout guards against background-tab timer throttling where setInterval may stall.
+    return new Promise((resolve) => {
+      let settled = false;
+      let poll; // hoisted so finish() can clearInterval before the first tick races with giveUpTimer
+
+      function finish(joinLink) {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(giveUpTimer);
+        resolve(joinLink);
+      }
+
+      let attempts = 0;
+      const maxAttempts = 20;
+      poll = setInterval(() => {
+        if (settled) { clearInterval(poll); return; }
+        attempts++;
+        const joinLink = $(".ddb-campaigns-invite-primary").text().split("/").pop();
+        if (typeof joinLink === "string" && joinLink.length > 0) {
+          finish(joinLink);
+        } else if (attempts >= maxAttempts) {
+          console.warn("harvest_campaign_secret: campaign join link not found on campaign page after polling");
+          finish("");
+        }
+      }, 500);
+
+      const giveUpTimer = setTimeout(() => {
+        console.warn("harvest_campaign_secret: campaign page join link timed out (background tab throttling?)");
+        finish("");
+      }, 11000);
+    });
   }
 
   const secretFromLocalStorage = read_campaign_info(window.gameId);
-  if (typeof secretFromLocalStorage === "string" && secretFromLocalStorage.length > 1) {
-    console.log("harvest_campaign_secret found it in localStorage");
+  if (typeof secretFromLocalStorage === "string" && secretFromLocalStorage.length > 0) {
+    noisy_log("harvest_campaign_secret found it in localStorage");
     return secretFromLocalStorage;
   }
 
@@ -2183,21 +2309,59 @@ async function harvest_campaign_secret() {
   });
   $(document.body).append(iframe);
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    let settled = false;
+    let poll; // hoisted so giveUpTimer and the load handler can both reach it
+
+    function finish(joinLink) {
+      if (settled) return;
+      settled = true;
+      clearInterval(poll);
+      clearTimeout(giveUpTimer);
+      iframe.remove();
+      resolve(joinLink);
+    }
+
+    // Safety net for the case where the load event never fires (15s > 20×500ms polling window)
+    const giveUpTimer = setTimeout(() => {
+      console.warn("harvest_campaign_secret: iframe timed out waiting for campaign page");
+      finish("");
+    }, 15000);
+
     iframe.on("load", function (event) {
-      if (!this.src) {
-        // it was just created. no need to do anything until it actually loads something
+      // Skip the initial about:blank load that fires when the iframe is first created,
+      // and any intermediate blank state during navigation (observed on some Firefox versions).
+      if (!this.contentDocument || !this.src || !this.src.includes(`/campaigns/${window.gameId}`)) {
         return;
       }
-      try {
-        const joinLink = $(event.target).contents().find(".ddb-campaigns-invite-primary").text().split("/").pop();
-        console.log("harvest_campaign_secret found it by loading the campaign page in an iframe");
-        resolve(joinLink);
-      } catch(error) {
-        console.error("harvest_campaign_secret failed to find the campaign secret by loading the campaign page in an iframe", error);
-        reject("harvest_campaign_secret loaded it in localStorage")
-      }
-      $(event.target).remove();
+
+      // If DDB redirects within the iframe a second load event fires; clear any previous
+      // polling loop before starting a new one to prevent concurrent leaked intervals.
+      clearInterval(poll);
+
+      // DDB uses React which renders the join link asynchronously after the load event fires.
+      // Poll until the element is populated or we run out of attempts (10s window).
+      let attempts = 0;
+      const maxAttempts = 20;
+      poll = setInterval(() => {
+        if (settled) { clearInterval(poll); return; }
+        attempts++;
+        try {
+          const joinLink = $(event.target).contents().find(".ddb-campaigns-invite-primary").text().split("/").pop();
+          if (typeof joinLink === "string" && joinLink.length > 0) {
+            noisy_log("harvest_campaign_secret found it by loading the campaign page in an iframe");
+            finish(joinLink);
+          } else if (attempts >= maxAttempts) {
+            console.warn("harvest_campaign_secret: campaign join link not populated in iframe after polling");
+            // Resolve with "" rather than rejecting — callers have no .catch() handler and
+            // store_campaign_info silently skips empty secrets.
+            finish("");
+          }
+        } catch(error) {
+          console.error("harvest_campaign_secret failed reading iframe content", error);
+          finish("");
+        }
+      }, 500);
     });
 
     iframe.attr("src", `/campaigns/${window.gameId}`);
@@ -2211,7 +2375,7 @@ function set_campaign_secret(campaignSecret) {
 function projector_scroll_event(event){
       event.stopImmediatePropagation();
       if($('#projector_toggle.enabled > [class*="is-active"]').length>0){
-            let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
+            let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
             let center = center_of_view(); 
 
 
@@ -2228,7 +2392,7 @@ function projector_scroll_event(event){
               scrollPercentageX:  (window.pageXOffset + window.innerWidth/2 - sidebarSize/2) / Math.max( document.body.scrollWidth, document.body.offsetWidth, 
                    document.documentElement.clientWidth, document.documentElement.scrollWidth, document.documentElement.offsetWidth ),
               zoom: zoom,
-              mapPos: convert_point_from_view_to_map(center.x, center.y, true, true)
+              mapPos: convert_point_from_view_to_map(center.x, center.y, true)
             });
       }
 }
@@ -2237,15 +2401,22 @@ function projector_scroll_event(event){
 function store_campaign_info() {
   const campaignId = window.gameId;
   const campaignSecret = window.CAMPAIGN_SECRET;
-  if (typeof campaignId !== "string" || campaignId.length < 0) return;
-  if (typeof campaignSecret !== "string" || campaignSecret.length < 0) return;
+  if (typeof campaignId !== "string" || campaignId.length <= 0) return;
+  if (typeof campaignSecret !== "string" || campaignSecret.length <= 0) return;
+  // save all previous compaign secrets for later restoration
+  const previous = read_campaign_info(campaignId);
+  if(previous) {
+    if(previous === campaignSecret) return; //short circuit - no need to write
+    const previousPrevious = localStorage.getItem(`AVTT-CampaignInfo-${campaignId}-previous`) || "";
+    localStorage.setItem(`AVTT-CampaignInfo-${campaignId}-previous`, previousPrevious ? `${previous},${previousPrevious}` : previous);
+  }
   localStorage.setItem(`AVTT-CampaignInfo-${campaignId}`, campaignSecret);
 }
 
 /** @param {string} campaignId the DDB id of the campaign
  * @return {string|undefined} the join link secret if it exists */
 function read_campaign_info(campaignId) {
-  if (typeof campaignId !== "string" || campaignId.length < 0) return undefined;
+  if (typeof campaignId !== "string" || campaignId.length <= 0) return undefined;
   const cs = localStorage.getItem(`AVTT-CampaignInfo-${campaignId}`);
   if (typeof cs === "string" && cs.length > 0) return cs;
   return undefined;
@@ -2254,6 +2425,7 @@ function read_campaign_info(campaignId) {
 /** @param {string} campaignId the DDB id of the campaign */
 function remove_campaign_info(campaignId) {
   localStorage.removeItem(`AVTT-CampaignInfo-${campaignId}`);
+  //todo: remove -previous as well?
 }
 
 // Low res thumbnails have the form https://www.dndbeyond.com/avatars/thumbnails/17/212/60/60/636377840850178381.jpeg
@@ -2293,10 +2465,45 @@ function find_game_id() {
     }
   }
 
-  console.log("find_game_id found:", window.gameId);
+  noisy_log("find_game_id found:", window.gameId);
   return window.gameId;
 }
+function parse_img(url) {
+	if (typeof url !== "string") {
+		noisy_log("parse_img is converting", url, "to an empty string");
+		return "";
+	}
+	let retval = url.trim();
+	if (retval.startsWith("data:")) {
+		console.warn("parse_img is removing a data url because those are not allowed"); 
+		return "";
+	}
+	if (retval.includes("https://drive.google.com") || retval.includes("https://drive.usercontent.google.com")) {
+		const match = retval.match(GOOGLE_DRIVE_ID_REGEX);
+		if (match) {
+			return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w3000`;
+		} else if (retval.includes("https://drive.google.com")) {
+			// Fallback: split by '/' to get ID
+			return `https://drive.google.com/thumbnail?id=${retval.split('/')[5]}&sz=w3000`;
+		}
+	} else if (retval.startsWith("https://www.googleapis.com/drive/v3/files/")) {
+		const fileid = retval.split('files/')[1].split('?')[0];
+		return `https://drive.google.com/thumbnail?id=${fileid}&sz=w3000`;
+	} else if (retval.includes("dropbox.com")) {
+		const splitUrl = url.split('dropbox.com');
+		return `https://dl.dropboxusercontent.com${splitUrl[splitUrl.length - 1]}`;
+	} else if (retval.includes("https://1drv.ms/")) {
+		if (retval.split('/')[4].length !== 1) {
+			return `https://api.onedrive.com/v1.0/shares/u!${btoa(url)}/root/content`;
+		}
+		return retval;
+	}
+	if (retval.includes("discordapp.com")) {
+		return update_old_discord_link(retval);
+	}
 
+	return retval;	
+}
 async function normalize_scene_urls(scenes) {
   if (!Array.isArray(scenes) || scenes.length === 0) {
     return [];
@@ -2307,6 +2514,7 @@ async function normalize_scene_urls(scenes) {
       if (sceneData?.itemType === ItemType.Folder) {
         return sceneData;
       }
+      delete sceneData.map;
       return Object.assign(sceneData, {
         dm_map: await parse_img(sceneData.dm_map),
         player_map: await parse_img(sceneData.player_map),
@@ -2319,37 +2527,79 @@ async function normalize_scene_urls(scenes) {
 async function getAvttStorageUrl(url, highPriority = false){
   return await getFileFromS3(url.replace('above-bucket-not-a-url/', ''), highPriority);
 }
-async function updateImgSrc(url, container, video, highPriority = true, callback = () =>{}){
-  if(video == true && url?.includes('onedrive')){
-    container.attr('src', url.replace('embed?', 'download?'));
-  }
-  else if(url.includes("https://1drv.ms/"))
-  {
-    if(url.split('/')[4].length == 1){
-      url = url;
-    }
-    else{
-      url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
-    }
-    container.attr('src', url);
+async function updateImgSrc(url, container, video, highPriority = true, callback){
+  
+ 
+    const handleIntersection = (entries, observer) => {
+      entries.forEach(async (entry) => {
+        if (!entry.isIntersecting)  return;
+        
+        const state = window.updateImageState.get(entry.target);
+        if(!state) return;
 
-  }
-  else if(url?.includes('google')){
-    throttleImgSrc(() => {
-      container.attr('src', parse_img(url));
-    })
-  }
-  else if(url.startsWith('above-bucket-not-a-url'))
-  {
-    url = await getAvttStorageUrl(url, highPriority)
-    container.attr('src', url);
-    callback();
-  }
-  else{
-    url = parse_img(url);
-    container.attr('src', url);
-  }
+        const targetContainer = $(entry.target);
+        let url = state.url;
+
+          if(video == true && url?.includes('onedrive')){
+            targetContainer.attr('src', url.replace('embed?', 'download?'));
+          }
+          else if(url.includes("https://1drv.ms/"))
+          {
+            if(url.split('/')[4].length == 1){
+              url = url;
+            }
+            else{
+              url = "https://api.onedrive.com/v1.0/shares/u!" + btoa(url) + "/root/content";
+            }
+            targetContainer.attr('src', url);
+
+          }
+          else if(url?.includes('google')){
+            throttleImgSrc(() => {
+              targetContainer.attr('src', parse_img(url));
+            })
+          }
+          else if(url.startsWith('above-bucket-not-a-url'))
+          {
+            url = await getAvttStorageUrl(url, true)
+            targetContainer.attr('src', url);
+            if (state.callback && !state.callbackFired) {
+              state.callbackFired = true;
+              state.callback();
+            }
+          }
+          else{
+            url = parse_img(url);
+            targetContainer.attr('src', url);
+          }
+        
+        observer.unobserve(entry.target);
+        window.updateImageState.delete(entry.target);
+        
+      });
+    };
+
+   
+    const options = {
+      root: null, // uses the default browser viewport
+      rootMargin: '200px 200px 200px 200px',
+      threshold: 0.1 // triggers when at least 10% of the image is visible
+    };
+
+    if(!window.inViewObserver)
+      window.inViewObserver = new IntersectionObserver(handleIntersection, options);
+    if(!window.updateImageState)
+      window.updateImageState = new WeakMap();
+
+    window.updateImageState.set(container[0], {
+      url,
+      callback,
+      callbackFired: false
+    });
+
+    window.inViewObserver.observe(container[0]);
 }
+
 async function updateTokenSrc(url, container, video=false){
   url = await parse_img(url)
   if(video == true && url?.includes('onedrive')){
@@ -2522,7 +2772,7 @@ async function look_for_github_issue(...searchTerms) {
  */
 function inject_sidebar_send_to_gamelog_button(sidebarPaneContent) {
   // we explicitly don't want this to happen in `.ct-game-log-pane` because otherwise it will happen to the injected gamelog messages that we're trying to send here
-  console.log("inject_sidebar_send_to_gamelog_button")
+  noisy_log("inject_sidebar_send_to_gamelog_button")
   let button = $(`<button id='castbutton'">SEND TO GAMELOG</button>`);
   // button.css({
   //  "margin": "10px 0px",
@@ -2621,7 +2871,19 @@ function inject_sidebar_send_to_gamelog_button(sidebarPaneContent) {
     
   });
 }
-
+function chat_command_error(message = `Invalid roll. Hover the input to see valid formats`) {
+  const chatWrapper = $('.chat-text-wrapper');
+  const chatTextFocus = $('#chat-text:focus');
+  chatTextFocus.addClass("chat-error-shake");
+  chatWrapper.attr('data-content', message);
+  chatWrapper.addClass('invalidExpression');
+  setTimeout(function () {
+        chatTextFocus.removeClass("chat-error-shake");
+  }, 150);
+  setTimeout(function () {
+        chatWrapper.removeClass('invalidExpression');
+  }, 3000);
+}
 function find_items_in_cache_by_id_and_name(items = []) {
   const foundItems = [];
   for (let item of items) {
@@ -2750,7 +3012,7 @@ function add_items_to_party_inventory(items = []) {
   }
 
   DDBApi.addItemsToPartyInventory(data).then(response => {
-    console.log('add_items_to_party_inventory response:', response);
+    noisy_log('add_items_to_party_inventory response:', response);
     window.partyInventoryQueue.onResponseReceived();
   }).catch(error => {
     console.error('add_items_to_party_inventory error:', error);
@@ -2790,7 +3052,7 @@ function add_custom_item_to_party_inventory(item) {
   
 
   DDBApi.addCustomItemToPartyInventory(data).then(response => {
-    console.log('add_custom_item_to_party_inventory response:', response);
+    noisy_log('add_custom_item_to_party_inventory response:', response);
     window.partyInventoryQueue.onResponseReceived();
   }).catch(error => {
     console.error('add_custom_item_to_party_inventory error:', error);
@@ -2807,7 +3069,7 @@ function add_currency_to_party_inventory(currency = {cp:0,sp:0,gp:0,ep:0,pp:0}) 
 
 
   DDBApi.addCurrenciesToPartyInventory(data).then(response => {
-    console.log('add_currency_to_party_inventory response:', response);
+    noisy_log('add_currency_to_party_inventory response:', response);
     window.partyInventoryQueue.onResponseReceived();
   }).catch(error => {
     console.error('add_currency_to_party_inventory error:', error);
@@ -2818,7 +3080,7 @@ function add_currency_to_party_inventory(currency = {cp:0,sp:0,gp:0,ep:0,pp:0}) 
 async function fetch_github_issue_comments(issueNumber) {
   const request = await fetch("https://api.github.com/repos/cyruzzo/AboveVTT/issues?labels=bug", { credentials: "omit" });
   const response = await request.json();
-  console.log(response);
+  noisy_log(response);
   return response;
 }
 
@@ -2829,7 +3091,7 @@ function open_github_issue(title, body) {
 
 function display_url_embeded(url){
   const encodedUrl = encodeURIComponent(url);
-  const src = `${window.EXTENSION_PATH}iframe.html?src=${encodedUrl}`;
+  const src = `${window.EXTENSION_PATH}iframe.html?src=${encodedUrl.replace(/'/g, '%27')}`;
   const iframe = $(`<iframe id='embededFileFrame' data-src='${url}' src='${src}'></iframe>`);
   iframe.css({
     width: 'calc(100% + 2px)',
@@ -2848,9 +3110,186 @@ function display_url_embeded(url){
   $('body').append(container);
 }
 
-function find_or_create_generic_draggable_window(id, titleBarText, addLoadingIndicator = true, addPopoutButton = false, popoutSelector=``, width='80%', height='80%', top='10%', left='10%', showSlow = true, cancelClasses='', hideOnX = false) {
-  console.log(`find_or_create_generic_draggable_window id: ${id}, titleBarText: ${titleBarText}, addLoadingIndicator: ${addLoadingIndicator}, addPopoutButton: ${addPopoutButton}`);
-  const existing = id.startsWith("#") ? $(id) : $(`#${id}`);
+//+++ dialog menus in the style of top level tools
+// todo:
+// -- more general options for dialog menus (when used beyond send-player buttons)
+function dialogMenuOption(rootId, container, opt) {
+  if(opt.type === 'hr') {
+    $(`<span class="js-popup-decoration">${opt.label || ""}</span>`).appendTo(container);      
+  } else {
+    const icon = opt.icon ? `<span class="material-symbols-outlined" style="font-size: inherit;">${opt.icon}</span>` : "";
+    // hasTooltip style has some layout issues so doing old school for now:
+    const button = $(`<button id='${rootId}_${opt.id}' class="js-popup-option" data-id='${opt.id}'>${icon}${opt.label}</button>`);
+    if(opt.tooltip) button.attr('title', opt.tooltip)
+    //ddbc-tab-options__header-heading
+    const callback = opt.callback;
+    const closeAfter = opt.closeAfter;
+    if(opt.active) button.addClass("js-popup--is-active");
+    button.on('click', function (e) {
+      const buttonSelectedClasses = "js-popup--is-active"
+      $(this).toggleClass(buttonSelectedClasses);
+      e.preventDefault()
+      if(callback) callback(e);
+      if(closeAfter) $(e.target).closest(".js-popup")?.[0]?.close();      
+    });
+    button.appendTo(container);
+  }
+}
+function createDialogMenu(rootId, options) {
+  const dialog = $(`<dialog id="${rootId}" class="js-popup">
+  <form method="dialog"><div class="js-popup-options prevent-sidebar-modal-close"/></form></dialog>`);
+  const contain = dialog.find('.js-popup-options')[0]
+  options.map((opt) => dialogMenuOption(rootId, contain, opt));
+  return dialog[0]; //note: return native element, NOT jquery
+}
+function basic_sanitize_html(html){
+  let sanitized = DOMPurify.sanitize(html,{ALLOWED_TAGS: ['video','img','div','p', 'b', 'button', 'span', 'path', 'polygon', 'rect', 'svg', 'circle', 'a', 'hr', 'ul', 'li', 'ol', 'h3', 'h2', 'h4', 'h1', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'br', 'input', 'strong', 'em'], ADD_ATTR: ['target', 'contenteditable']}); //This array needs to include all HTML elements the extension sends via chat.
+  sanitized = sanitized.replace(/(\n\s{2,})+(<)|(>)(\n\s{2,})+|(\s{2,}\n)+(<)|(>)(\s{2,}\n)+/gi, '$2$3$6$7');
+  return sanitized;
+}
+
+//turn an element into a menu trigger
+function makeDialogMenuTrigger(element, trigger, menuId, createMenu, onShow) {
+  const elementId = uuid(); //give it a uuid so we can find it later in menu code
+  element.attr('id', elementId);
+  element.addClass("js-popup-trigger")
+  element.off(trigger).on(trigger, (e) => {
+    //create the dialog on first use
+    e.preventDefault();
+    e.stopPropagation();
+    const dialog = $("#"+menuId, e.target.ownerDocument)?.[0] || createMenu(menuId, e.target);
+    if(dialog.open) {
+      dialog.close();
+    } else {
+      if(onShow) onShow(e, dialog, elementId); //before show callback
+
+      $(dialog).attr("data-whichbutton", elementId) //remember who triggered
+      const rect = $(e.target)[0].getBoundingClientRect();
+      const menuRect = {height: $(dialog).height(), width:  $(dialog).width()};
+      const winW = e.target.ownerDocument.defaultView.innerWidth;
+      const winH = e.target.ownerDocument.defaultView.innerHeight;
+      const top = Math.max(10, (rect.bottom + menuRect.height > winH) 
+        ? rect.top - menuRect.height 
+        : rect.bottom);
+      const left = Math.max(10, (rect.left + menuRect.width > winW) 
+        ? winW - menuRect.width - 10 
+        : rect.left);      
+      $(dialog).css({
+        position: 'fixed', // Stays put during scroll
+        top: top + 'px',
+        left: left + 'px',
+      });
+      dialog.show(); 
+
+    }
+  });
+  return element;
+}
+
+function dialogCloser(e, force) {
+  e.target.ownerDocument.querySelectorAll('dialog.js-popup[open]').forEach(menu => {
+    const isClickInside = menu.contains(e.target);
+    const isTriggerClick = e.target.closest('.js-popup-trigger');
+    const isClickOnChild = menu.contains(e.target);
+    if (!isClickInside && !isTriggerClick && !isClickOnChild || force) menu.close();
+  });
+}
+function addDialogCloser(element) {
+  const doc = element.ownerDocument;
+  //even tho named function so multiple event listeners shouldn't happen
+  //attempt to optimize
+  if (doc._hasDialogCloser) return;
+  doc.addEventListener('mousedown', dialogCloser);
+  doc._hasDialogCloser = true;
+}
+
+function sendPopElement(element, whisper) {
+  const what = element.find("img, video, .magnify, .monster-image");
+  const src = what.find('source').length>0 ? what.find('source').attr('src') : what.attr("src");
+  const video = what.prop('nodeName') === 'VIDEO';  
+  if(src) {
+    const msg = { src, timed: 10000, from: window.PLAYER_ID, type: video ? "iframe" : "image" };
+    if(whisper) msg.whisper = whisper;
+    window.MB.sendMessage('custom/myVTT/Popup',  msg);
+  } else {
+    console.error("Could not find image to pop", src);
+  }
+}
+function sendClonedElement(element, whisper) {
+  const targetBlock = $(element).clone();
+  targetBlock.find('button.block-send-to-game-log').remove();
+  targetBlock.find('img, video').removeAttr('width height style').toggleClass('magnify', true);
+  const video = targetBlock.find('video');
+
+  if(video) {
+    const videoElements = targetBlock.find('video');
+    for(let i=0; i<videoElements.length; i++){
+      const videoElement = videoElements[i];
+      const source = $(videoElement).find('source');
+      const src = source.length>0 ? source.attr('src') : $(videoElement).attr('src');
+      source.remove();
+      $(videoElement).attr({muted:'muted', disableRemotePlayback: true, src:src, href:src});
+    }
+  }
+  send_html_to_gamelog(`<p>${targetBlock[0].outerHTML}</p>`, whisper);
+}
+
+function createSendPlayerMenu(menuId, target) {
+  // If campaign changes then will need to remove and re-create menu
+  const callback_with_selection = (e, verb) => {
+    const dialog = $(e.target).closest(".js-popup")?.[0];      
+    const options = $(e.target).closest(".js-popup-options")?.[0];
+    const selected = $(options).find('.js-popup--is-active').map((i, el) => el.getAttribute('data-id')).get().filter((a)=> !a.startsWith('_'));
+    const theTriggeringButton = $(`button#${$(dialog).attr("data-whichbutton")}`, e.target.ownerDocument);
+    //todo: if selected is everyone then use undefined here:
+    ((verb === 'pop') ? sendPopElement : sendClonedElement)(theTriggeringButton.parent(), selected);
+    $(e.target).removeClass('js-popup--is-active');
+  };
+  const toggle_everyone = (e, skipCount) => {
+    $(e.target).removeClass('js-popup--is-active');    
+    const options = $(e.target).closest(".js-popup-options");
+    const selected = $(options).find('.js-popup--is-active');
+    if(selected.length === 0) {
+      options.children().slice(skipCount+1).toggleClass('js-popup--is-active');
+    } else {
+      selected.toggleClass('js-popup--is-active');      
+    }
+  }
+  const users = [...new Map(window.playerUsers.map(p => [p.userId, {id: p.userId, label: p.userName, active: true}])).values(), { id: SPECTATOR_WHISPER_ID, label: "-Spectator-", active: true}];
+  const menu = createDialogMenu(menuId, [
+    { id: "_send", label: "Send To Log", callback: (e) => callback_with_selection(e, "send"), icon: "login", tooltip: "Send to Gamelog of selected users", closeAfter: true},
+    { id: "_pop", label: "Popup", icon: "toast", callback: (e) => callback_with_selection(e, "pop"), tooltip: "Popup a momentary image for selected users", closeAfter: true },
+    { id: "_everyone", label: "Toggle All", icon: "toggle_on", callback: (e) => toggle_everyone(e, 3), tooltip: "Toggle user buttons below"},
+    { type: "hr", label: "Users" },
+    ...users
+  ]);
+  $(target).closest('body').append(menu);
+  addDialogCloser(target);
+  return menu;
+}
+
+function setPlayerButtonSetPopupStatus(e, dialog, buttonId) {
+  const hasPopupOption = $(`button#${buttonId}`, e.target.ownerDocument).attr("data-haspopup");
+  $("#send-player-menu__pop", e.target.ownerDocument).css("display", hasPopupOption ? "" : "none"); 
+}
+function createSendPlayerButton(parent, icon, hasPopupOption=false ) {
+  const element = $(`<button width="200px" height="200px"> <span class="material-symbols-outlined">${icon}</span></button>`);
+  const button = makeDialogMenuTrigger(element, 'contextmenu', "send-player-menu", createSendPlayerMenu, setPlayerButtonSetPopupStatus);
+  button.off('click').on('click', (e)=> {
+    e.preventDefault();
+    e.stopPropagation();
+    sendClonedElement($(e.target).closest("button").parent());
+  });
+  if(hasPopupOption) button.attr("data-haspopup", "1");
+  button.addClass("block-send-to-game-log");
+  return button;
+}
+//-end- dialog menus 
+
+function find_or_create_generic_draggable_window(id, titleBarText, addLoadingIndicator = true, addPopoutButton = false, popoutSelector=``, width='80%', height='80%', top='10%', left='10%', showSlow = true, cancelClasses='', hideOnX = false, alwaysDisplayTitle = false, onCloseCallback = () => {}) {
+  noisy_log(`find_or_create_generic_draggable_window id: ${id}, titleBarText: ${titleBarText}, addLoadingIndicator: ${addLoadingIndicator}, addPopoutButton: ${addPopoutButton}`);
+
+  const existing = $(`[id="${id.replace('#', '')}"]`);
   if (existing.length > 0) {
     return existing;
   }
@@ -2907,6 +3346,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
       $(event.currentTarget).closest('.resize_drag_window').hide();
     }
     else{
+      onCloseCallback();
       close_and_cleanup_generic_draggable_window($(event.currentTarget).closest('.resize_drag_window').attr('id'));
     }
 
@@ -2963,10 +3403,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     minWidth: 200,
     minHeight: 200
   });
-
-  container.on('mousedown', function(event) {
-    frame_z_index_when_click($(event.currentTarget));
-  });
+  frame_z_index_when_click(container, true);
 
   container.draggable({
     addClasses: false,
@@ -2981,7 +3418,8 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     },
     cancel: cancelClasses
   });
-
+  if(alwaysDisplayTitle)
+    titleBar.prepend(`<div class="title_bar_text">${titleBarText}</div>`);
   titleBar.on('dblclick', function(event) {
     const titleBar = $(event.currentTarget);
     if (titleBar.hasClass("restored")) {
@@ -3002,7 +3440,8 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
 
       titleBar.addClass("minimized");
       titleBar.removeClass("restored");
-      titleBar.prepend(`<div class="title_bar_text">${titleBarText}</div>`);
+      if (!alwaysDisplayTitle)
+        titleBar.prepend(`<div class="title_bar_text">${titleBarText}</div>`);
     } else if(titleBar.hasClass("minimized")) {
       container.data("prev-minimized-top", container.css("top"));
       container.data("prev-minimized-left", container.css("left"));
@@ -3012,7 +3451,8 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
       container.css("left", container.data("prev-left"));
       titleBar.addClass("restored");
       titleBar.removeClass("minimized");
-      titleBar.find(".title_bar_text").remove();
+      if (!alwaysDisplayTitle)
+        titleBar.find(".title_bar_text").remove();
       if(container.find('#sourceChapterIframe').length>0){
         $('#sourceChapterIframe')[0].contentWindow.scrollTo(0, container.data("prev-scroll"));
       }
@@ -3024,7 +3464,7 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
 }
 
 function close_and_cleanup_generic_draggable_window(id) {
-  const container = id.startsWith("#") ? $(id) : $(`#${id}`);
+  const container = $(`[id="${id.replace('#', '')}"]`);
   container.off('dblclick');
   container.off('mousedown');
   container.draggable('destroy');

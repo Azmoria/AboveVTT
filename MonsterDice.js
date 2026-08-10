@@ -8,7 +8,7 @@
  */
 function scan_monster(target, stats, tokenId) {
 	console.group("scan_monster")
-	console.log("adding in avtt dice buttons")
+	noisy_log("adding in avtt dice buttons")
 	// remove homebrew panels
 	target.find(".homebrew-creation-actions").remove();
 	target.find(".homebrew-previous-versions").remove();
@@ -105,7 +105,7 @@ function add_ability_tracker_inputs_on_each(target, tokenId){
 		target.find('strong').each(function(){
 			let currentElement = $(this).nextUntil('strong').addBack();
 			if (currentElement.find(".injected-input").length == 0) {
-				const matchForEachSlot = currentElement.text().match(/([0-9])\/Day each:|([0-9])\/Day:/gi)
+				const matchForEachSlot = currentElement.text().match(/([0-9]+)\/Day each:|([0-9]+)\/Day:/gi)
 
 				if (matchForEachSlot){
 					let numberFound = parseInt(matchForEachSlot[0]);
@@ -141,7 +141,7 @@ function add_ability_tracker_inputs_on_each(target, tokenId){
 		target.find(".mon-stat-block__description-block-content > p").each(function() {
 			let currentElement = $(this).clone();
 			if (currentElement.find(".injected-input").length == 0) {
-				const matchForEachSlot = currentElement.text().match(/([0-9])\/Day each:/i)
+				const matchForEachSlot = currentElement.text().match(/([0-9]+)\/Day each:/i)
 				if (matchForEachSlot){
 					let numberFound = parseInt(matchForEachSlot[1]);
 					$(this).children().each(function (indexInArray, valueOfElement) { 
@@ -186,17 +186,17 @@ function rebuild_ability_trackers(target, tokenId){
  * @param {string} descriptionPostfix 
  * @returns 
  */
-function createCountTracker(token, key, remaining, foundDescription, descriptionPostfix, callback) {
-	const input = $(`<input class="injected-input" data-token-id="${token.id}" data-tracker-key="${key}" type="number" value="${remaining}"> ${foundDescription} ${descriptionPostfix}</input>`);
+function createCountTracker(token, key, remaining, foundDescription, descriptionPostfix, callback, noteId) {
+	const input = $(`<input class="injected-input" data-token-id="${token?.options?.id}" data-tracker-key="${key}" type="number" value="${remaining}"></input><span class='added-input-desc'> ${foundDescription} ${descriptionPostfix}</span>`);
 	input.off('input').on('input', function(){
 		resizeInput(input[0]);
 	})
 	input.off("change").on("change", function(changeEvent) {
 		resizeInput(input[0]);
 		const updatedValue = changeEvent.target.value;
-		console.log(`add_ability_tracker_inputs ${key} changed to ${updatedValue}`);
-		if(callback)
-			callback(key, updatedValue);
+		noisy_log(`add_ability_tracker_inputs ${key} changed to ${updatedValue}`);
+		if(callback && noteId)
+			callback(key, updatedValue, noteId);
 		else
 			token.track_ability(key, updatedValue);
 	});
@@ -251,9 +251,9 @@ function add_ability_tracker_inputs(target, tokenId) {
 			return;
 
 		if ($(this).find(".injected-input").length === 0) {
-			processInput(element, /\(([0-9]) slots?\)/, "slots remaining")
-			processInput(element, /\(([0-9])\/Day\)/i, "remaining")
-			processInput(element, /can take ([0-9]) legendary actions/i, "Legendary Actions remaining", false)
+			processInput(element, /\(?([0-9]+) slots?\)?/, "slots remaining")
+			processInput(element, /\(?([0-9]+)\/Day\)?/i, "remaining")
+			processInput(element, /can take ([0-9]+) legendary actions/i, "Legendary Actions remaining", false)
 		}
 		element = null
 	});	
@@ -340,10 +340,6 @@ function scan_player_creature_pane(target) {
  	} catch { }
 	const displayName = `${window.PLAYER_NAME} (${creatureName} ${creatureType})`;
 	
-	const clickHandler = function(clickEvent) {
-		roll_button_clicked(clickEvent, displayName, creatureAvatar, "monster", 'playerExtra');
-	};
-
 	const rightClickHandler = function(contextmenuEvent) {
 		roll_button_contextmenu_handler(contextmenuEvent, displayName, creatureAvatar, "monster", 'playerExtra');
 	}
@@ -377,10 +373,6 @@ function scan_player_creature_pane(target) {
 
 
 	add_journal_roll_buttons(target, 'playerExtra', creatureAvatar, displayName);
-
-
-
-	container.find(".avtt-roll-button").off('click.roller').on('click.roller', clickHandler);
 	container.find(".avtt-roll-button").on("contextmenu", rightClickHandler);
 
 	container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("contextmenu.sendToGamelog").on("contextmenu.sendToGamelog", function (e) {
@@ -483,11 +475,12 @@ function roll_button_contextmenu_handler(contextmenuEvent, displayName, imgUrl, 
 	const rollType = pressedButton.attr('data-rolltype');
 	const actionType = pressedButton.attr('data-actiontype');
 	const damageType = pressedButton.attr('data-damagetype');
+	const save = pressedButton.attr('data-save');
 
 
 
 	if (rollType === "damage" || (expression !== "1d20" && !/^1d20/gi.test(expression))) {
-		damage_dice_context_menu(`${expression}${modifier}`, modifier, actionType, rollType, displayName, imgUrl, entityType, entityId, damageType)
+		damage_dice_context_menu(`${expression}${modifier}`, modifier, actionType, rollType, displayName, imgUrl, entityType, entityId, damageType, save)
 			.present(contextmenuEvent.clientY, contextmenuEvent.clientX) // TODO: convert from iframe to main window
 	} else {
 		standard_dice_context_menu(`${expression}${modifier}`, modifier, actionType, rollType, displayName, imgUrl, entityType, entityId)
@@ -509,6 +502,7 @@ function roll_button_clicked(clickEvent, displayName, imgUrl, entityType = undef
 	let modifier = pressedButton.attr('data-mod')?.replaceAll("(", "")?.replaceAll(")", "");
 	let rollType = pressedButton.attr('data-rolltype');
 	const action = pressedButton.attr('data-actiontype');
+	const save = pressedButton.attr('data-save');
 	const damageType = pressedButton.attr('data-damagetype');
 	modifier = modifier == 0 ? '+0' : modifier;
 
@@ -540,7 +534,7 @@ function roll_button_clicked(clickEvent, displayName, imgUrl, entityType = undef
 		imgUrl,
 		entityType,
 		entityId
-	), undefined, undefined, undefined, undefined, damageType);
+	), undefined, undefined, undefined, save, damageType);
 	
 	pressedButton = null
 }

@@ -86,7 +86,7 @@ function standard_dice_context_menu(expression, modifierString = "", action = un
     return menu;
 }
 
-function damage_dice_context_menu(diceExpression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined, damageType = undefined) {
+function damage_dice_context_menu(diceExpression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined, damageType = undefined, spellSave = undefined) {
     if (typeof modifierString !== "string") {
         modifierString = "";
     }
@@ -114,14 +114,16 @@ function damage_dice_context_menu(diceExpression, modifierString = "", action = 
             let diceRoll;
             if (rollAsIndex === 0) {
                 // crit damage
-                diceExpression = diceExpression.replaceAll(/([+-])?([\d]+)d/gi, function(m, m1, m2){
-                    return m1 == '-' ? `${m1}${parseInt(m2)}d` : `${m1 != undefined ? m1 : ''}${parseInt(m2)*2}d`
+                diceExpression = diceExpression.replaceAll(/([+-]|^)([\d]+)?d([\d]+)/gi, function(m, m1, m2, m3){
+                    m2 = m2 != undefined ? m2 : 1;
+                    return m1 == '-' ? `${m1}${parseInt(m2)}d${m3}` : `${m1 != undefined ? m1 : ''}${parseInt(m2)*2}d${m3}`
                 })
                 diceRoll = new DiceRoll(diceExpression)
             } 
              else if (rollAsIndex === 1) {
                 // perfect crit damage
-                diceExpression = diceExpression.replaceAll(/(([+-])?([\d]+)d([\d]+).*?)([+-]|$)/gi, function(m, m1, m2, m3, m4, m5){
+                diceExpression = diceExpression.replaceAll(/(([+-]|^)([\d]+)?d([\d]+).*?)([+-]|$)/gi, function(m, m1, m2, m3, m4, m5){
+                    m3 = m3 != undefined ? m3 : 1;
                     return `${m1}${m2 == '-' ? '' : `+${parseInt(m3)*parseInt(m4)}${m5}`}`
                 })
                 diceRoll = new DiceRoll(diceExpression)
@@ -136,6 +138,7 @@ function damage_dice_context_menu(diceExpression, modifierString = "", action = 
             }
              else { // not possible
                 console.warn("DiceContextMenu unexpectedly gave an  invalid row index for section 1! rollAsIndex: ", rollAsIndex, ", dcm: ", dcm);
+                return;
             }
 
 
@@ -150,7 +153,7 @@ function damage_dice_context_menu(diceExpression, modifierString = "", action = 
 
             const doubleDamage = rollAsIndex === 2 ? 3 : undefined;
 
-            window.diceRoller.roll(diceRoll, undefined, rollAsIndex == 2 ? 3 : undefined, undefined, undefined, damageType, doubleDamage);
+            window.diceRoller.roll(diceRoll, undefined, rollAsIndex == 2 ? 3 : undefined, undefined, spellSave, damageType, doubleDamage);
             
         });
 

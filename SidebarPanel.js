@@ -378,7 +378,7 @@ function build_token_option_select_input(option, currentValue, changeHandler) {
     }
   }
   inputElement.change(function (event) {
-    console.log("update", event.target.name, "to", event.target.value);
+    noisy_log("update", event.target.name, "to", event.target.value);
     if (event.target.value === "enabled") {
       changeHandler(option.name, true);
       update_hover_text(wrapper, option.enabledDescription);
@@ -477,6 +477,7 @@ function build_flyout_input(settingOption, currentValue, changeHandler){
     if (typeof changeHandler !== 'function') {
     changeHandler = function(){};
   }
+
   let wrapper = $(`
    <div class="token-image-modal-footer-select-wrapper" data-option-name="${settingOption.name}">
      <div class="token-image-modal-footer-title">${settingOption.label}</div>
@@ -485,10 +486,11 @@ function build_flyout_input(settingOption, currentValue, changeHandler){
   let flyoutButton = $(`<button class='sidebar-panel-footer-button avtt-small-settings-edit'>Edit</button>`);
     flyoutButton.on("click", function (clickEvent) {
         build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
-          let currentValue = get_avtt_setting_value(settingOption.name);
+            let currentValue = get_avtt_setting_value(settingOption.name);
+
             let optionsContainer = build_sidebar_token_options_flyout(settingOption.options, currentValue, function(name, value) {
                 currentValue[name] = value;
-            }, function(){changeHandler(settingOption.name, currentValue)}, false, true);
+            }, function(){changeHandler(settingOption.name, currentValue)}, false, true, false, settingOption);
             flyout.append(optionsContainer);
             position_flyout_left_of($('#settings-panel .sidebar-panel-body'), flyout);
         });
@@ -501,13 +503,22 @@ function build_custom_button_input(settingOption) {
     changeHandler = function(){};
   }
   let wrapper = $(`
-     <div class="token-image-modal-footer-select-wrapper" data-option-name="${settingOption.name}">
+     <div class="token-image-modal-footer-select-wrapper sidebar-hover-text" ${settingOption.description ? `data-hover="${settingOption.description}"` : ''} data-option-name="${settingOption.name}">
        <div class="token-image-modal-footer-title">${settingOption.label}</div>
      </div>
   `);
-  let flyoutButton = $(`<button class='sidebar-panel-footer-button avtt-small-settings-edit'>${settingOption.buttonText}</button>`);
-  flyoutButton.on("click", function(e){settingOption.customFunction(e, $('#settings-panel .sidebar-panel-body'))});
-  wrapper.append(flyoutButton)
+  if(Array.isArray(settingOption.buttonText) && Array.isArray(settingOption.customFunction) && settingOption.buttonText.length == settingOption.customFunction.length){
+     for(let i = 0; i < settingOption.buttonText.length; i++){
+          let flyoutButton = $(`<button class='sidebar-panel-footer-button avtt-small-settings-edit' style="margin-left: 5px;">${settingOption.buttonText[i]}</button>`);
+          flyoutButton.on("click", function(e){settingOption.customFunction[i](e, $('#settings-panel .sidebar-panel-body'))});
+          wrapper.append(flyoutButton)
+     }
+  } else{
+      let flyoutButton = $(`<button class='sidebar-panel-footer-button avtt-small-settings-edit'>${settingOption.buttonText}</button>`);
+      flyoutButton.on("click", function(e){settingOption.customFunction(e, $('#settings-panel .sidebar-panel-body'))});
+      wrapper.append(flyoutButton)
+  }
+
   return wrapper;
 }
 function build_text_input(settingOption, currentValue, changeHandler) {
@@ -727,7 +738,7 @@ class SidebarListItem {
     if(monsterData.img_main == null || monsterData.img_main == "http://api.open5e.com/"){
       monsterData.img_main = 'https://www.dndbeyond.com/avatars/4675/675/636747837794884984.jpeg'
     }
-    let item = new SidebarListItem(monsterData.slug, monsterData.name, monsterData.img_main, ItemType.Open5e, RootFolder.Open5e.path, RootFolder.Open5e.id);
+    let item = new SidebarListItem(monsterData.key, monsterData.name, monsterData.img_main, ItemType.Open5e, RootFolder.Open5e.path, RootFolder.Open5e.id);
     item.monsterData = monsterData;
     return item;
   }
@@ -791,9 +802,9 @@ class SidebarListItem {
     item.shape = shape;
     let parsedSize = parseInt(size);
     if (isNaN(parsedSize)) {
-      item.size = parsedSize;
-    } else {
       item.size = 1;
+    } else {
+      item.size = parsedSize;
     }
     item.style = style;
     return item;
@@ -911,7 +922,7 @@ class SidebarListItem {
           case ItemType.Scene:
           case ItemType.PC:
           case ItemType.Encounter:
-            if(this.encounterId == undefined)
+            if(this.encounterId == undefined && this.folderPath != '/')
               return true;
           default:
             return false;
@@ -919,15 +930,6 @@ class SidebarListItem {
       case ItemType.MyToken:
       case ItemType.Scene:
         return true;
-      case ItemType.PC:
-      case ItemType.Monster:
-      case ItemType.isTypeOpen5eMonster:
-      case ItemType.BuiltinToken:
-      case ItemType.Encounter:
-        if(this.encounterId != undefined)
-          return false;
-        else
-          return true;
       case ItemType.Aoe: // we technically could support this, but I don't think we should
       default:
         return false;
@@ -957,6 +959,7 @@ class SidebarListItem {
   nameOrContainingFolderMatches(searchTerm) {
     if (typeof this.name !== "string") return false;
     let fullPath = this.fullPath().replace(/^(\/Scenes)/i, '')
+    searchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
     return fullPath.match(new RegExp(searchTerm, 'i')) != null;
   }
 }
@@ -1048,7 +1051,7 @@ async function avttTokenCollectAssets(folderRelativePath) {
       continue;
     }
     for (const entry of entries) {
-      const keyValue = typeof entry === "string" ? entry : entry?.Key || entry?.key || "";
+      const keyValue = typeof entry === "string" ? entry : entry?.Key || "";
       if (!keyValue) {
         continue;
       }
@@ -1316,7 +1319,7 @@ function find_sidebar_list_item(html) {
   if (encounterId !== undefined && encounterId !== null && encounterId !== "") {
     foundItem = window.tokenListItems.find(item => item.isTypeEncounter() && item.encounterId === encounterId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
   }
@@ -1325,7 +1328,7 @@ function find_sidebar_list_item(html) {
   if (typeof sceneId === "string" && sceneId.length > 0) {
     foundItem = window.sceneListItems.find(item => item.id === sceneId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
   }
@@ -1334,7 +1337,7 @@ function find_sidebar_list_item(html) {
     // explicitly using '==' instead of '===' to allow (33253 == '33253') to return true
     foundItem = window.monsterListItems.find(item => item.monsterData.id == html.attr("data-monster"));
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
   }
@@ -1343,28 +1346,28 @@ function find_sidebar_list_item(html) {
   if (typeof htmlId === "string" && htmlId.length > 0) {
     foundItem = window.tokenListItems.find(li => li.id === htmlId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
     foundItem = window.sceneListItems.find(li => li.id === htmlId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
     foundItem = window.sceneListFolders.find(li => li.id === htmlId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
     // explicitly using '==' instead of '===' to allow (33253 == '33253') to return true
     foundItem = window.monsterListItems.find(item => item.monsterData.id == html.attr("data-monster"));
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
     foundItem = window.open5eListItems.find(item => item.id == htmlId);
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item', foundItem);
+      noisy_log('find_sidebar_list_item', foundItem);
       return foundItem;
     }
   }
@@ -1385,13 +1388,13 @@ function find_sidebar_list_item_from_path(fullPath) {
   let foundItem;
   if (fullPath.startsWith(RootFolder.Scenes.path)) {
     foundItem = window.sceneListItems?.find(matchingPath);
-    console.log('find_sidebar_list_item_from_path sceneListItems', foundItem);
+    noisy_log('find_sidebar_list_item_from_path sceneListItems', foundItem);
     if (foundItem === undefined) {
       foundItem = window.sceneListFolders?.find(matchingPath);
-      console.log('find_sidebar_list_item_from_path sceneListFolders', foundItem);
+      noisy_log('find_sidebar_list_item_from_path sceneListFolders', foundItem);
     }
     if (foundItem !== undefined) {
-      console.log('find_sidebar_list_item_from_path', foundItem);
+      noisy_log('find_sidebar_list_item_from_path', foundItem);
       return foundItem;
     }
   }
@@ -1410,7 +1413,7 @@ function find_sidebar_list_item_from_path(fullPath) {
   if (foundItem === undefined) {
     console.warn(`find_sidebar_list_item found nothing at path: ${fullPath}`);
   }
-  console.log('find_sidebar_list_item_from_path', foundItem);
+  noisy_log('find_sidebar_list_item_from_path', foundItem);
   return foundItem;
 }
 
@@ -1598,7 +1601,7 @@ function build_sidebar_list_row(listItem) {
   rowItem.append(imgHolder);
   if (listItem.type !== "aoe" && !listItem.isTypeScene()){
     let tokenCustomizations = find_token_customization(listItem.type, listItem.id);
-    let listingImage = (tokenCustomizations?.tokenOptions?.alternativeImages && tokenCustomizations.tokenOptions?.alternativeImages?.[0] != undefined) ? tokenCustomizations.tokenOptions.alternativeImages[0] : listItem.image; 
+    let listingImage = tokenCustomizations?.tokenOptions?.defaultImage != undefined ? tokenCustomizations.tokenOptions.defaultImage : (tokenCustomizations?.tokenOptions?.alternativeImages && tokenCustomizations.tokenOptions?.alternativeImages?.[0] != undefined) ? tokenCustomizations.tokenOptions.alternativeImages[0] : listItem.image; 
     let img;
     let video = false;
     let isAvttBucketFile = listingImage?.startsWith('above-bucket-not-a-url');
@@ -1606,7 +1609,7 @@ function build_sidebar_list_row(listItem) {
       listingImage = avttSidebarApplyThumbnailPrefix(listingImage);
     }
     if(listingImage?.includes != undefined && listingImage.includes('folder.svg')){
-    img = $(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 309.267 309.267" style="enable-background:new 0 0 309.267 309.267;" xml:space="preserve">
+    img = $(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" x="0px" y="0px" viewBox="0 0 309.267 309.267" style="enable-background:new 0 0 309.267 309.267;" xml:space="preserve">
         <g>
           <path style="fill:${tokenCustomizations?.color ? `${tokenCustomizations?.color}` : listItem.color ? listItem.color : '#D0994B'};" d="M260.944,43.491H125.64c0,0-18.324-28.994-28.994-28.994H48.323c-10.67,0-19.329,8.65-19.329,19.329   v222.286c0,10.67,8.659,19.329,19.329,19.329h212.621c10.67,0,19.329-8.659,19.329-19.329V62.82   C280.273,52.15,271.614,43.491,260.944,43.491z"/>
           <path style="fill:#E4E7E7;" d="M28.994,72.484h251.279v77.317H28.994V72.484z"/>
@@ -1615,10 +1618,10 @@ function build_sidebar_list_row(listItem) {
     </svg>`)
     }
     else if (!isAvttBucketFile && (tokenCustomizations?.tokenOptions?.videoToken == true || ['.mp4', '.webm','.mkv'].some(d => listingImage?.includes(d)))){
-        img = $(`<video disableRemotePlayback muted src="" loading="lazy" alt="${listItem.name} image" class="token-image video-listing" />`);   
+        img = $(`<video disableRemotePlayback muted src="" alt="${listItem.name} image" class="token-image video-listing" />`);   
         video = true;
     } else{
-        img = $(`<img src="" loading="lazy" alt="${listItem.name} image" class="token-image" />`);
+        img = $(`<img src="" alt="${listItem.name} image" class="token-image" />`);
     }
     updateImgSrc(listingImage, img, video, false);
     imgHolder.append(img);
@@ -1889,9 +1892,11 @@ function build_sidebar_list_row(listItem) {
       }
       break;
     case ItemType.MyToken:
-      subtitle.hide();
-      // TODO: Style specifically for My Tokens
-      row.css("cursor", "default");
+      if(window.JOURNAL.notes[listItem.id] !== undefined){
+        const statBlock = $(`<div>${window.JOURNAL.notes[listItem.id].text}</div>`)
+        const cr = window.JOURNAL.getCustomCR(statBlock);
+        subtitle.append(`<div class="subtitle-attibute challenge-rating"><span class="plain-text">CR</span>${cr}</div>`)
+      }
       break;
     case ItemType.PC:
       const pc = find_pc_by_player_id(listItem.sheet, false);
@@ -1943,7 +1948,7 @@ function build_sidebar_list_row(listItem) {
       expandButton.on("click", function (clickEvent) {
         clickEvent.stopPropagation();
         let r = $(clickEvent.target).closest(".sidebar-list-item-row");
-        console.log(r);
+        noisy_log(r);
         if (r.hasClass("expanded")) {
           r.removeClass("expanded");
           r.find(".player-expansion-button .material-icons").text("expand_more");
@@ -1959,14 +1964,14 @@ function build_sidebar_list_row(listItem) {
       subtitle.append(`<div class="subtitle-attibute" title="Walk Speed"><span class="material-icons">directions_run</span><span class="walking-value"">${walkingSpeed}</span></div>`);
 
       let climbingSvg = `
-      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" viewBox="0 0 100 100" width:"16px" xml:space="preserve">
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" x="0px" y="0px" viewBox="0 0 100 100" width:"16px" xml:space="preserve">
       <style type="text/css">
         .climb-svg .st0{fill:#738694;}
       </style>
       <path class="st0" d="M46.1,24.9c4.1,0,7.4-3.3,7.4-7.3c0-4.1-3.3-7.4-7.4-7.4c-4.1,0-7.4,3.3-7.4,7.4C38.7,21.6,42,24.9,46.1,24.9z   M59.7,44.2c0,0,0,3.1,0,3.1C79.9,37.2,87.7,2.9,87.7,0H85C83.9,7.2,75.2,35.9,59.7,44.2z M53.5,100h3.1V66.9l-3.1,1.5V100z   M27.4,41.4l10.7-4.2V52h18.5V34.8L73.1,8.3c1.2-1.9,0.7-4.5-1.3-5.7c-1.9-1.2-4.5-0.7-5.6,1.2L52.2,26.4l-8.5,0  c-0.5,0-1.1,0.1-1.6,0.3l-14.6,5.7L19.9,21c-1.2-1.9-3.8-2.5-5.7-1.2c-1.9,1.2-2.5,3.8-1.3,5.8l9.4,14.3  C23.4,41.4,25.5,42.2,27.4,41.4z M72.2,51.1c-0.7-2.6-3.8-4.6-6.3-3.4L56.6,52v3.1H38.1L23.6,88.3c-1.1,2.5,0.1,5.7,2.7,7.1  c2.6,1.5,5.6,0.6,6.6-1.9l11.8-27.2c1,0.3,2.2,0.4,3.3,0.4c1.1,0,2.1-0.2,3-0.5l13.3-6.2l2.9,11.7c0.7,2.6,3.3,4.2,5.9,3.5  s4.2-3.3,3.5-5.9L72.2,51.1z"/>
       </svg>`;
        let flyingSvg = `    
-      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" width:"16px" viewBox="0 0 147.1918 306.252" enable-background="new 0 0 147.1918 306.252" xml:space="preserve">
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" x="0px" y="0px" width:"16px" viewBox="0 0 147.1918 306.252" enable-background="new 0 0 147.1918 306.252" xml:space="preserve">
       <g>
         <path d="M8.0042,101.7569c0.8867,0,1.7881-0.1485,2.6719-0.4619c8.1865-2.9209,14.958-8.1631,20.6826-14.0489   c6.1074-6.3056,11.0987-13.4463,15.1934-19.997v42.2343c0,0.2681,0.0137,0.5327,0.04,0.794c-0.0049,0.498,0.0108,1,0.0664,1.5078   l11,99.999c0.7051,6.3975,6.1192,11.1338,12.4102,11.1338c0.457,0,0.918-0.0244,1.3828-0.0762   c0.707-0.0776,1.3867-0.226,2.0488-0.4135c0.6621,0.1875,1.3428,0.3359,2.0498,0.4135c0.4649,0.0518,0.9258,0.0762,1.3828,0.0762   c6.2911,0,11.7051-4.7363,12.4092-11.1338l11.001-99.999c0.0088-0.0806,0.0068-0.1597,0.0146-0.2402   c0.1817-0.6573,0.2862-1.3467,0.2862-2.0616V67.2696c1.832,2.9248,3.8408,5.9648,6.0312,8.9775   c7.3838,10.0586,16.8135,20.334,29.8428,25.0469c0.8828,0.3125,1.7852,0.4609,2.6709,0.4609   c3.293,0.001,6.3779-2.0469,7.541-5.3301c1.4766-4.164-0.7031-8.7353-4.8672-10.2119c-4.9785-1.748-9.9453-5.3525-14.5498-10.1103   c-6.9258-7.1114-12.8525-16.5987-17.374-24.4356c-2.2764-3.9316-4.1963-7.4209-5.9355-10.2295   c-0.8907-1.4189-1.6934-2.6533-2.7686-3.9228c-0.5576-0.6387-1.1689-1.3067-2.1914-2.0635   c-0.7149-0.4961-1.7402-1.1621-3.2578-1.5303c-0.1446-0.0576-0.294-0.105-0.4434-0.1543   c-4.0859,7.8535-12.2959,13.2325-21.7451,13.2325c-9.4482,0-17.6582-5.3794-21.7441-13.2325   c-0.1573,0.0523-0.3155,0.1031-0.4688,0.1651c-0.7988,0.2021-1.4765,0.4795-2.0068,0.7558   c-1.8369,1.0127-2.6016,1.9287-3.3516,2.7451c-1.3096,1.5372-2.2422,3.0342-3.3398,4.8262   c-3.6905,6.1279-8.6426,15.7031-15.127,24.6055C21.1302,75.7862,13.2406,83.503,5.3304,86.2119   c-4.166,1.4766-6.3437,6.0489-4.8691,10.2139C1.6253,99.7061,4.7113,101.7559,8.0042,101.7569z"/>
         <path d="M73.597,44.9991c12.4268,0,22.5-10.0743,22.5-22.4991c0-12.4277-10.0732-22.5-22.5-22.5c-12.4258,0-22.5,10.0723-22.5,22.5   C51.097,34.9248,61.1712,44.9991,73.597,44.9991z"/>
@@ -2008,7 +2013,13 @@ function build_sidebar_list_row(listItem) {
       break;
     case ItemType.Monster:
       row.attr("data-monster", listItem.monsterData.id);
-      subtitle.append(`<div class="subtitle-attibute"><span class="plain-text">CR</span>${convert_challenge_rating_id(listItem.monsterData.challengeRatingId)}</div>`);
+      if(window.JOURNAL.notes[listItem.id] !== undefined){
+        const statBlock = $(`<div>${window.JOURNAL.notes[listItem.id].text}</div>`)
+        const cr = window.JOURNAL.getCustomCR(statBlock);
+        subtitle.append(`<div class="subtitle-attibute challenge-rating"><span class="plain-text">CR</span>${cr}</div>`)
+      } else{
+        subtitle.append(`<div class="subtitle-attibute challenge-rating"><span class="plain-text">CR</span>${convert_challenge_rating_id(listItem.monsterData.challengeRatingId)}</div>`);   
+      }
       if (listItem.monsterData.isHomebrew === true) {
         subtitle.append(`<div class="subtitle-attibute"><span class="material-icons">alt_route</span>Homebrew</div>`);
       } else if (listItem.monsterData.isReleased === false) {
@@ -2033,9 +2044,9 @@ function build_sidebar_list_row(listItem) {
       break;
     case ItemType.Open5e:
       row.attr("data-monster", listItem.monsterData.id);
-      subtitle.append(`<div class="subtitle-attibute"><span class="plain-text">CR</span>${convert_challenge_rating_id(listItem.monsterData.challengeRatingId)}</div>`);
+      subtitle.append(`<div class="subtitle-attibute challenge-rating"><span class="plain-text">CR</span>${convert_challenge_rating_id(listItem.monsterData.challengeRatingId)}</div>`);
       if (listItem.monsterData.isHomebrew === true) {
-        subtitle.append(`<div class="subtitle-attibute"><span class="material-icons" style="width: 15px;font-family: 'Material Symbols Outlined'; font-size:15px;">book_2</span>${listItem.monsterData.document__slug}</div>`);
+        subtitle.append(`<div class="subtitle-attibute"><span class="material-icons" style="width: 15px;font-family: 'Material Symbols Outlined'; font-size:15px;">book_2</span>${listItem.monsterData.document?.key}</div>`);
       } 
       break;
     case ItemType.BuiltinToken:
@@ -2058,7 +2069,6 @@ function build_sidebar_list_row(listItem) {
         $("#scenes-panel .dm_scenes_button.selected-scene").removeClass("selected-scene");
         $(clickEvent.currentTarget).addClass("selected-scene");
         window.MB.sendMessage("custom/myVTT/switch_scene", { sceneId: listItem.id, switch_dm: true });
-        add_zoom_to_storage();
       });
       let switch_players = $(`<button class='player_scenes_button token-row-button' title="Move Players To This Scene"></button>`);
       switch_players.append(svg_everyone());
@@ -2077,7 +2087,6 @@ function build_sidebar_list_row(listItem) {
         }
         window.splitPlayerScenes = {};
         $('#scenes-panel .sidebar-list-item-row-details~img').remove();
-        add_zoom_to_storage()
       });
       rowItem.append(switch_dm);
       rowItem.append(switch_players);
@@ -2120,10 +2129,10 @@ function build_sidebar_list_row(listItem) {
 function did_click_row(clickEvent) {
   clickEvent.stopPropagation();
 
-  console.log("did_click_row", clickEvent);
+  noisy_log("did_click_row", clickEvent);
   let clickedRow = $(clickEvent.target).closest(".list-item-identifier");
   let clickedItem = find_sidebar_list_item(clickedRow);
-  console.log("did_click_row", clickedItem);
+  noisy_log("did_click_row", clickedItem);
 
   let rowId = clickedRow.attr('data-id');
 
@@ -2165,7 +2174,7 @@ function did_click_row(clickEvent) {
               : clickedItem.image;
             flyout.append(`<img class='list-item-image-flyout' src="${src}" alt="scene map preview" />`);
           }
-          flyout.css("right", "340px");
+          flyout.css("right", get_sidebar_width() + "px");
         });
         clickedRow.off("mouseleave").on("mouseleave", function (mouseleaveEvent) {
           $(mouseleaveEvent.currentTarget).off("mouseleave");
@@ -2207,10 +2216,10 @@ function did_click_row(clickEvent) {
         }
       }
       else if (clickedItem.monsterData.isReleased === true || clickedItem.monsterData.isHomebrew === true) {
-        console.log(`Opening monster with id ${clickedItem.monsterData.id}, url ${clickedItem.monsterData.url}`);
+        noisy_log(`Opening monster with id ${clickedItem.monsterData.id}, url ${clickedItem.monsterData.url}`);
         open_monster_item(clickedItem);
       } else {
-        console.log(`User does not have access to monster with id ${clickedItem.monsterData.id}. Opening ${clickedItem.monsterData.url}`);
+        noisy_log(`User does not have access to monster with id ${clickedItem.monsterData.id}. Opening ${clickedItem.monsterData.url}`);
         window.open(clickedItem.monsterData.url, '_blank');
       }
       break;
@@ -2230,7 +2239,7 @@ function did_click_row(clickEvent) {
         }
       }
       else {
-        console.log(`Opening open5e monster with id ${clickedItem.monsterData.slug}`);
+        noisy_log(`Opening open5e monster with id ${clickedItem.monsterData.key}`);
         open_monster_item(clickedItem, true);
       }
       break;
@@ -2264,10 +2273,10 @@ function did_click_row(clickEvent) {
  */
 function did_click_row_gear(clickEvent) {
   clickEvent.stopPropagation();
-  console.log("did_click_row_gear", clickEvent);
+  noisy_log("did_click_row_gear", clickEvent);
   let clickedRow = $(clickEvent.target).closest(".list-item-identifier");
   let clickedItem = find_sidebar_list_item(clickedRow);
-  console.log("did_click_row_gear", clickedItem);
+  noisy_log("did_click_row_gear", clickedItem);
   display_sidebar_list_item_configuration_modal(clickedItem);
 }
 
@@ -2545,7 +2554,7 @@ function edit_encounter(clickEvent) {
   clickEvent.stopPropagation();
   const clickedRow = $(clickEvent.target).closest(".list-item-identifier");
   const clickedItem = find_sidebar_list_item(clickedRow);
-  console.log('edit encounter clicked');
+  noisy_log('edit encounter clicked');
 
   const customization = find_or_create_token_customization(ItemType.Folder, clickedItem.id);
 
@@ -2649,35 +2658,7 @@ function edit_encounter(clickEvent) {
           cr = foundCR;
         }
         else if(hasCustomStatBlock){
-          if(window.JOURNAL.notes[itemCustomization.tokenOptions.statBlock] != undefined){
-           
-            statBlock.find('style').remove();
-            statBlock=statBlock[0].innerHTML;
-            let crText = $(statBlock).find('.custom-challenge-rating.custom-stat').text();
-            if(crText == '' || crText == undefined){
-              let searchText = statBlock.replaceAll('mon-stat-block-2024', '').replaceAll(/\&nbsp\;/g,' ')
-
-              let statBlockCR = searchText.matchAll(/[\s>]CR[\s]+([0-9]+(\/[0-9])?)/gi).next()
-              if(statBlockCR.value != undefined){
-                if(statBlockCR.value[1] != undefined)
-                    crText = statBlockCR.value[1];
-              } 
-              else{
-                statBlockCR = searchText.matchAll(/[\s>](CR[\W]|challenge)[\s\S]*?[\s>]([0-9]+(\/[0-9])?)/gi).next()
-
-                if(statBlockCR.value != undefined){
-                    if(statBlockCR.value[2] != undefined)
-                        crText = statBlockCR.value[2];
-                }  
-              }
-
-                    
-            }
-            if(crText != '' && crText != undefined)
-              cr = eval(crText);   
-            else
-              cr = 0;
-          }
+          cr = window.JOURNAL.getCustomCR(statBlock);
         }
         for(let j = 0; j<item.quantity; j++ ){
           if(item.type != 'pc'){
@@ -2839,10 +2820,10 @@ function edit_encounter(clickEvent) {
  */
 function did_click_add_button(clickEvent) {
   clickEvent.stopPropagation();
-  console.log("did_click_add_button", clickEvent);
+  noisy_log("did_click_add_button", clickEvent);
   let clickedRow = $(clickEvent.target).closest(".list-item-identifier");
   let clickedItem = find_sidebar_list_item(clickedRow);
-  console.log("did_click_add_button", clickedItem);
+  noisy_log("did_click_add_button", clickedItem);
   let hidden = clickEvent.shiftKey ? true : undefined; // we only want to force hidden if the shift key is help. otherwise let the global and override settings handle it
   create_and_place_token(clickedItem, hidden, undefined, undefined, undefined);
   update_pc_token_rows();
@@ -2924,7 +2905,7 @@ function display_folder_configure_modal(listItem) {
     console.warn("display_folder_configure_modal was called with an incorrect type", listItem);
     return;
   }
-  console.log('display_folder_configure_modal', listItem);
+  noisy_log('display_folder_configure_modal', listItem);
 
   let sidebarId = "folder-configuration-modal";
   let sidebarModal = new SidebarPanel(sidebarId, true);
@@ -2936,24 +2917,24 @@ function display_folder_configure_modal(listItem) {
 
   const renameFolder = function(newFolderName, input, event) {
     let oldPath = harvest_full_path(input);
-    console.log(`renameFolder oldPath: ${oldPath}, newFolderName: ${newFolderName}`);
+    noisy_log(`renameFolder oldPath: ${oldPath}, newFolderName: ${newFolderName}`);
     if (oldPath.endsWith(`/${newFolderName}`)) {
       // It did not change. Nothing to do here.
       return undefined;
     }
     let foundItem = find_sidebar_list_item(input);
-    console.log(`before renameFolder foundItem id: ${foundItem.id}, name: ${foundItem.name}, folderPath: ${foundItem.folderPath}`);
+    noisy_log(`before renameFolder foundItem id: ${foundItem.id}, name: ${foundItem.name}, folderPath: ${foundItem.folderPath}`);
     let updatedFullPath = rename_folder(foundItem, newFolderName, true);
-    console.log(`after  renameFolder foundItem id: ${foundItem.id}, name: ${foundItem.name}, folderPath: ${foundItem.folderPath}, updatedFullPath: ${updatedFullPath}`);
+    noisy_log(`after  renameFolder foundItem id: ${foundItem.id}, name: ${foundItem.name}, folderPath: ${foundItem.folderPath}, updatedFullPath: ${updatedFullPath}`);
     if (updatedFullPath) {
       // the name has been changed. Update the input so we know it has been changed later
       set_full_path(input, updatedFullPath);
-      console.log('inside updatedFullPath');      
+      noisy_log('inside updatedFullPath');      
       sidebarModal.updateHeader(newFolderName, updatedFullPath, "Edit or delete this folder.");
-      console.log('returning updatedFullPath');
+      noisy_log('returning updatedFullPath');
       return updatedFullPath;
     } else {
-      console.log('else updatedFullPath');
+      noisy_log('else updatedFullPath');
       // there was a naming conflict, and the user has been alerted. select the entire text so they can easily change it
       input.select();
       return false;
@@ -2980,6 +2961,28 @@ function display_folder_configure_modal(listItem) {
               </div>`;
 
   sidebarModal.body.append(folderColorInput);
+  if(listItem.id == RootFolder.Monsters.id){
+    const customization = find_or_create_token_customization(ItemType.Folder, listItem.id, listItem.parentId, RootFolder.MyTokens.id);
+    const includeDDBImage = {
+        name: "includeDDB",
+        label: "Include DDB Image",
+        type: 'dropdown',
+        options: [
+            { value: 'fullAvatarImage', label: 'Full Size and Token/Avatar Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+            { value: 'fullImage', label: 'Full Size Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+            { value: 'avatarImage', label: 'Token/Avatar Image', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." },
+            { value: false, label: 'Disabled', description: "Include monster's default avatar and/or full image when enabled. When disabled will only have the avatar image if no custom images are added." }
+        ],
+        defaultValue: false
+    };
+    const isIncludeDDB = customization?.allCombinedOptions()?.includeDDB;
+    const includeDDBToggle = build_dropdown_input(includeDDBImage, isIncludeDDB, function (key, value) {
+        customization.setTokenOption(key, value);
+        persist_token_customization(customization);     
+    });
+    sidebarModal.body.append(includeDDBToggle);
+}
+
   let colorPickers = sidebarModal.body.find('input.spectrum');
   colorPickers.spectrum({
       type: "color",
@@ -3011,7 +3014,7 @@ function display_folder_configure_modal(listItem) {
   saveButton.on("click", function (clickEvent) {
     if (itemType === ItemType.MyToken || itemType === ItemType.Scene || (itemType === ItemType.PC && listItem.id !== RootFolder.Players.id) || (itemType === ItemType.Encounter && listItem.id !== RootFolder.Encounters.id)){
       let nameInput = $(clickEvent.currentTarget).closest(".sidebar-panel-body").find("input[name='folderName']");
-      console.log(`saveButton nameInput`, nameInput);
+      noisy_log(`saveButton nameInput`, nameInput);
       let renameResult = renameFolder(nameInput.val(), nameInput, clickEvent);
     }
     close_sidebar_modal();
@@ -3233,6 +3236,127 @@ function build_and_display_sidebar_flyout(clientY, buildFunction) {
   });
 }
 
+async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], event, options = {id: undefined, token: undefined, container: undefined}) {
+  if(event == undefined){
+    console.warn('Event required for tooltip flyout', event);
+    return;
+  }
+  let container = options.container;
+  let currentTarget = $(event.currentTarget);
+  currentTarget.toggleClass('loading-tooltip', true);
+  if(container == undefined){
+
+    currentTarget.off('mousemove.cursor');
+    container = currentTarget.closest(".sidebar-flyout");
+    if(container.find('.tooltip-header').length === 0){
+      container = currentTarget.closest("#resizeDragMon");
+    }
+    if (container.length === 0) {
+        container = currentTarget.closest(".token");
+    }
+    if (container.length === 0) {
+        container = currentTarget.closest(".sidebar-modal");
+    }
+    if (container.length === 0) {
+        container = is_characters_page() ? $(".ct-sidebar__inner [class*='styles_content']") : $(".sidebar__pane-content");
+    }
+  }
+  const containerParentIdArray = container?.attr("data-parents-id") != undefined ? JSON.parse(container.attr("data-parents-id")) : [];
+  if(container?.attr("data-id") != undefined){
+    containerParentIdArray.push(container.attr("data-id"));
+  }
+  flyout.addClass(classes)
+  const flyoutId = uuid();
+  flyout.attr("data-id", flyoutId);
+  flyout.attr("data-parents-id", JSON.stringify(containerParentIdArray));
+  const tooltipHtml = $(tooltipHtmlString);
+  tooltipHtml.find('style:not(#embededStyles)').remove();
+  await window.JOURNAL.translateHtmlAndBlocks(tooltipHtml, options.id)
+  add_journal_roll_buttons(tooltipHtml, options.id);
+  add_aoe_statblock_click(tooltipHtml, options.id);
+  add_tooltip_aoe_buttons(tooltipHtml, options.id);
+  window.JOURNAL.add_journal_tooltip_targets(tooltipHtml);
+  window.JOURNAL.block_send_to_buttons(tooltipHtml);
+  add_stat_block_hover(tooltipHtml);
+  if(options.id != undefined || options.token != undefined)
+    tooltipHtml.find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId: options.id, token: options.token})})
+  flyout.find("a").attr("target", "_blank");
+  flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function (event) {
+    event.preventDefault();
+    render_source_chapter_in_iframe(event.target.href);
+  });
+  if(options.isRitual){
+    const ritualIcon = $(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12.17 14.83" class="ritual-icon-svg"><path fill="var(--font-color, #111)" d="M3,0H1.22A1.23,1.23,0,0,0,0,1.24V13.6a1.23,1.23,0,0,0,1.22,1.24H11.41a.77.77,0,0,0,.76-.77c0-.43-.34-1-.76-1H2.13c-.33,0-.61,0-.61-.34s.27-1,.61-1H11a1.23,1.23,0,0,0,1.22-1.24V1.24A1.23,1.23,0,0,0,11,0H3.08"></path><path fill="var(--background-color, #FFF)" d="M4.35,2.23A11.66,11.66,0,0,1,6.2,2.09a3.12,3.12,0,0,1,2.08.54A1.7,1.7,0,0,1,8.86,4,1.8,1.8,0,0,1,7.64,5.67v0A1.72,1.72,0,0,1,8.58,7a13.32,13.32,0,0,0,.53,1.88H7.84a9.62,9.62,0,0,1-.45-1.59c-.19-.88-.51-1.16-1.21-1.18H5.57V8.88H4.35Zm1.22,3H6.3c.83,0,1.35-.44,1.35-1.11S7.12,3,6.33,3a3.53,3.53,0,0,0-.76.06Z"></path></svg>`);         
+    tooltipHtml.find('[class*="-castingtime"]>[class*="-value"]').append(ritualIcon);
+  }
+  if(options.componentText != ''){
+    tooltipHtml.find('[class*="body-statblock-item-components"]').append(`<p style="margin:0; font-size:11px; opacity:0.8">${options.componentText}</p>`)
+  }
+
+  flyout.append(tooltipHtml);
+  tooltipHtmlString = tooltipHtml[0].outerHTML;
+  let sendToGamelogButton = $(`<a class="ddbeb-button" href="#">Send To Gamelog</a>`);
+  sendToGamelogButton.css({ "float": "right" });
+  sendToGamelogButton.on("click", function(ce) {
+      ce.stopPropagation();
+      ce.preventDefault();
+      const tooltipWithoutButton = $(tooltipHtmlString);
+      tooltipWithoutButton.css({
+          "width": "100%",
+          "max-width": "100%",
+          "min-width": "100%"
+      });
+      let outerHtml = $(tooltipWithoutButton[0].outerHTML);
+      outerHtml.find('style').remove();
+      send_html_to_gamelog(outerHtml[0].outerHTML);
+  });
+
+  const buttonFooter = $("<div></div>");
+  buttonFooter.css({
+      height: "40px",
+      width: "100%",
+      position: "relative",
+      background: "#fff"
+  });
+  flyout.append(buttonFooter);
+  buttonFooter.append(sendToGamelogButton);
+  if(options.container == undefined){
+      let flyoutLeft = event.clientX+20
+        if(flyoutLeft + 400 > window.innerWidth){
+          flyoutLeft = window.innerWidth - 420
+        }
+      flyout.css({
+        left: flyoutLeft,
+        width: '400px'
+      })
+  }else{
+    const didResize = position_flyout_on_best_side_of(container, flyout);
+    if (didResize) {
+        // only mess with the html that DDB gave us if we absolutely have to
+        tooltipHtml.css({
+            "width": "100%",
+            "max-width": "100%",
+            "min-width": "100%"
+        });
+    }
+
+  }
+  let flyoutTop = event.clientY;
+  let flyoutHeight = flyout.height() + 25;
+  let bottom = (event.clientY + flyoutHeight);
+  
+  if (bottom > window.innerHeight) {
+    flyoutTop = flyoutTop - (bottom - window.innerHeight) - 25;
+  }
+  flyout.css('top', flyoutTop);
+
+  flyout.hover(function (hoverEvent) {
+      remove_tooltip(500);
+  });
+  flyout.css("background-color", "#fff");
+  currentTarget.toggleClass('loading-tooltip', false);
+}
+
 function position_flyout_on_best_side_of(container, flyout, resizeFlyoutToFit = true) {
   let didResize = false;
   if (!container || container.length === 0 || !flyout || flyout.length === 0) {
@@ -3274,18 +3398,27 @@ function position_flyout_right_of(container, flyout) {
 }
 
 function remove_sidebar_flyout(removeHoverNote) {
-  console.log("remove_sidebar_flyout");
+  noisy_log("remove_sidebar_flyout");
   let flyouts = $(`.sidebar-flyout`)
-  let hovered = $(`.tooltip-flyout:hover`).length>0 == true;
+  
   if(removeHoverNote == false){
     flyouts = $(`.sidebar-flyout:not('.note-flyout')`)
   }
-  if(!hovered)
-    flyouts.remove();
+  flyouts.each(function(i, flyout) {
+    const parentsData = $(flyout).attr("data-parents-id");
+    const dataId = $(flyout).attr("data-id");
+    const flyoutParentsIdArray = parentsData ? JSON.parse(parentsData) : [];
+    const hovered = (flyoutParentsIdArray.length == 0 
+                      ? $(`.sidebar-flyout:hover`).length>0 
+                      : $(flyout).is(":hover")) || $(`.sidebar-flyout[data-parents-id*="${dataId}"]:hover`).length>0;
+    
+    if(!hovered)
+      $(flyout).remove();
+  });
 }
 
 async function list_item_image_flyout(hoverEvent) {
-  console.log("list_item_image_flyout", hoverEvent);
+  noisy_log("list_item_image_flyout", hoverEvent);
   $(`#list-item-image-flyout`).remove(); // never duplicate
   if (hoverEvent.type === "mouseenter") {
     const imgsrc = $(hoverEvent.currentTarget).find("img").attr("src");
@@ -3298,7 +3431,7 @@ async function list_item_image_flyout(hoverEvent) {
   }
 }
 
-function  disable_draggable_change_folder() {
+function  disable_draggable_change_folder(skipHide=false) {
 
   $(document).off("click.clearSelectScenes").on('click.clearSelectScenes', function(e) { 
     const target = $(e.target);
@@ -3307,7 +3440,7 @@ function  disable_draggable_change_folder() {
     }
   });
     
-  if(window.reorderState != undefined){
+  if(window.reorderState != undefined && !skipHide){
     window.reorderState = undefined;
     $(".token-row-drag-handle").remove();
 
@@ -3413,7 +3546,7 @@ function add_expand_collapse_buttons_to_header(sidebarPanel, addHideButton=false
  */
 async function enable_draggable_change_folder(listItemType) {
 
-  await disable_draggable_change_folder();
+  await disable_draggable_change_folder(true);
   window.reorderState = listItemType; // if you move the current scene, it will reload. When that happens, we need to know to re-enter this state.
   const droppableOptions = {
     greedy: true,
@@ -3455,13 +3588,12 @@ async function enable_draggable_change_folder(listItemType) {
             persist_token_customization(customization);
           }
           rebuild_token_items_list();
-          enable_draggable_change_folder(ItemType.PC);
         } else {
           console.warn("Unable to reorder item by dropping it on the body", window.reorderState, draggedItem);
         }
       } else {
         let folderItem = find_sidebar_list_item(droppedFolder);
-        console.log("enable_draggable_change_folder dropped", draggedItem, folderItem);
+        noisy_log("enable_draggable_change_folder dropped", draggedItem, folderItem);
         
         for(let i=0; i<selectedItems.length; i++){
           draggedRow = $(selectedItems[i]);

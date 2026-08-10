@@ -1,14 +1,7 @@
 
 function consider_upscaling(target){
-		if(target.hpps < 60 && target.hpps > 25  && target.vpps < 60 && target.vpps > 25){
-			target.scale_factor=2;
-		}
-		else if(target.hpps <=25 || target.vpps <=25){
-			target.scale_factor=4;
-		}
-		else{
-			target.scale_factor=1;
-		}
+	const targetScale = Math.max(Math.ceil(60 / target.hpps), Math.ceil(60 / target.vpps));
+	target.scale_factor = clamp(targetScale, 1, 6);	
 }
 
 function handle_basic_form_toggle_click(event){
@@ -20,8 +13,8 @@ function handle_basic_form_toggle_click(event){
 		$(event.currentTarget).removeClass("rc-switch-unknown");
 		$(event.currentTarget).addClass("rc-switch-checked");
 	  }
-}
-
+	  
+	}
 function handle_map_toggle_click(event){
 	handle_basic_form_toggle_click(event)
 	// validate image input expects the target to be the input not the t oggle
@@ -376,33 +369,11 @@ function create_full_scene_from_uvtt(data, url, doorType, doorHidden){ //this se
 
 }
 
-function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function(){}, copiedSceneData = window.CURRENT_SCENE_DATA) {
+function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid = function () { }, copiedSceneData = $.extend(true, {}, window.CURRENT_SCENE_DATA)) {
 	let scene = window.ScenesHandler.scenes[scene_id];
 	window.WIZARDING = true;
-	function form_row(name, title, inputOverride=null, imageValidation=false) {
-		const row = $(`<div style='width:100%;' id='${name}_row'/>`);
-		const rowLabel = $("<div style='display: inline-block; width:30%'>" + title + "</div>");
-		rowLabel.css("font-weight", "bold");
-		const rowInputWrapper = $("<div style='display:inline-block; width:60%; padding-right:8px' />");
-		let rowInput
-		if(!inputOverride){
-			if (imageValidation){
-				rowInput = $(`<input type="text" onClick="this.select();" name=${name} style='width:100%' autocomplete="off" value="${scene[name] || "" }" />`);
-			}else{
-				rowInput = $(`<input type="text" name=${name} style='width:100%' autocomplete="off" value="${scene[name] || ""}" />`);
-			}
-			 
-		}
-		else{
-			rowInput = inputOverride
-		}
-		
-		rowInputWrapper.append(rowInput);
-		row.append(rowLabel);
-		row.append(rowInputWrapper);
-		return row
-	};
-
+	window.CURRENT_SCENE_DATA.grid = "1";
+	window.CURRENT_SCENE_DATA.gridOver = "1";
 	function form_toggle(name, hoverText, defaultOn, callback){
 		const toggle = $(
 			`<button id="${name}_toggle" name=${name} type="button" role="switch" data-hover="${hoverText}"
@@ -415,44 +386,18 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 		return toggle
 	}
 
-	async function handle_form_grid_on_change(){
-		// not editting this scene, don't show live updates to grid
-		if (scene.id !== window.CURRENT_SCENE_DATA.id){
-			return
-		}
-	
-		const {hpps, vpps, offsetx, offsety, grid_color, grid_line_width, grid_subdivided, grid} = await get_edit_form_data()
-		// redraw grid with new information
-		if(grid === "1" && window.CURRENT_SCENE_DATA.scale_check){
-			let conversion = window.CURRENT_SCENE_DATA.scale_factor * window.CURRENT_SCENE_DATA.conversion
-			redraw_grid(parseFloat(hpps*conversion), parseFloat(vpps*conversion), offsetx*conversion, offsety*conversion, grid_color, grid_line_width, grid_subdivided )
-		}
-		else if(grid === "1"){
-			redraw_grid(parseFloat(hpps), parseFloat(vpps), offsetx, offsety, grid_color, grid_line_width, grid_subdivided )
-		}
-		// redraw grid using current scene data
-		else if(grid === "0"){
-			clear_grid()
-		}
-	}
-
 	$("#edit_dialog").remove();
 
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
-	console.log('edit_scene_dialog');
+	noisy_log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
 	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
 
-
-
-
 	scene_properties = $('<div id="scene_properties"/>');
 	dialog.append(scene_properties);
 
-
-
-	adjust_create_import_edit_container(dialog, undefined, undefined, window.innerWidth-340, 340);
+	adjust_create_import_edit_container(dialog, undefined, undefined, window.innerWidth-get_sidebar_width(), get_sidebar_width());
 
 	let container = scene_properties;
 
@@ -464,9 +409,6 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	let uuid_hidden = $("<input name='uuid' type='hidden'/>");
 	uuid_hidden.val(scene['uuid']);
 	form.append(uuid_hidden);
-
-	let grid_buttons = $("<div/>");
-
 	let gridType = $(`
 		<div id="gridType">
 			<fieldset>
@@ -521,8 +463,6 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 		regrid();
 	})
 
-
-
 	let verticalMinorAdjustment = $(`<div id="verticalMinorAdjustment">
 			<label for="verticalMinorAdjustmentInput">Minor Vertical Adjustment</label>
 			<input type="range" name='verticalMinorAdjustmentInput' min="1" max="100" value="50" class="slider" id="verticalMinorAdjustmentInput" data-orientation="vertical">
@@ -555,9 +495,6 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 			}	
 		}
 		moveAligners(false, true);
-		
-		console.log('verticalMinorAdjustment');
-
 	});
 	horizontalMinorAdjustment.find('input').on('change input',function(){
 		if(window.CURRENT_SCENE_DATA.gridType == 1){
@@ -571,7 +508,6 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 			}	
 		}
 		moveAligners(false, true);
-		console.log('horizontalMinorAdjustment');
 	});
 	form.append(gridType, verticalMinorAdjustment, horizontalMinorAdjustment)
 
@@ -581,7 +517,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	manual.append($(`
 			<div id='linkAligners' title='Locks the draggable grid aligners to 1:1 aspect ratio' class='hideHex'><div style='display:inline-block; width:40%'>Link Aligners 1:1</div><input style='display: none;' type='number' min='0' max='1' step='1' name='alignersLinked'></div></div>
 			<div title='The size the ruler will measure a side of a square.'><div style='display:inline-block; width:40%'>Measurement:</div><div style='display:inline-block; width:60'%'><input type='number' name='fpsq' placeholder='5' value='${window.CURRENT_SCENE_DATA.fpsq}'> <input name='upsq' placeholder='ft' value='${window.CURRENT_SCENE_DATA.upsq}'></div></div>
-			<div id='gridSubdividedRow' class='hideHex' style='display: ${(window.CURRENT_SCENE_DATA.fpsq == 10 || window.CURRENT_SCENE_DATA.fpsq == 15 || window.CURRENT_SCENE_DATA.fpsq == 20) ? 'block' : 'none'}' title='Split grid into 5ft sections'><div style='display:inline-block; width:40%'>Split into 5ft squares</div><div style='display:inline-block; width:60'%'><input style='display: none;' type='number' min='0' max='1' step='1' name='grid_subdivided'></div></div>
+			<div id='gridSubdividedRow' class='hideHex' style='display: ${(window.CURRENT_SCENE_DATA.fpsq % 5 == 0 && window.CURRENT_SCENE_DATA.fpsq>5) ? 'block' : 'none'}' title='Split grid into 5ft sections'><div style='display:inline-block; width:40%'>Split into 5ft squares</div><div style='display:inline-block; width:60'%'><input style='display: none;' type='number' min='0' max='1' step='1' name='grid_subdivided'></div></div>
 			<div id='additionalGridInfo' class='closed'>Additional Grid Info / Manual Settings</div>
 			<div title='Number of grid squares Width x Height.'><div style='display:inline-block; width:30%'>Grid size</div><div style='display:inline-block;width:70%;'><input id='squaresWide' class='hideHorizontalHex' type='number' min='1' step='any' value='${$("#scene_map").width() / window.CURRENT_SCENE_DATA.hpps}'><span style='display: inline' class='squaresWide hideHorizontalHex'> squares wide</span><br class='hideHorizontalHex'/><input type='number' id='squaresTall' class='hideVerticalHex' value='${$("#scene_map").height() / window.CURRENT_SCENE_DATA.vpps}' min='1' step="any"><span style='display: inline' class='squaresTall hideVerticalHex'> squares tall</span></div></div>
 			<div title='Grid offset from the sides of the map in pixels. From top left corner of square and from middle of hex.'>
@@ -614,7 +550,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 	}));
 
 	manual.find('input[name="fpsq"]').on('change blur', function(){
-		if(window.CURRENT_SCENE_DATA.gridType == 1 && $(this).val() == 10 || $(this).val() == 15 || $(this).val() == 20){
+		if (window.CURRENT_SCENE_DATA.gridType == 1 && $(this).val() % 5 == 0 && $(this).val() > 5){
 			$('#gridSubdividedRow').css('display', 'block');
 			$('#gridInstructions').text(`Select a 3x3 square using the selectors to align your grid. To change the grid to be appropriately sized for medium creatures enable split grid.`)
 		}
@@ -684,7 +620,7 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 		else
 			width = 1;
 		const dash = [30, 5]
-		const color = "rgba(255, 0, 0,0.5)";
+		const color = "rgba(255, 0, 0,1)";
 		window.CURRENT_SCENE_DATA.gridType = gridType;
 		if(manual.find('input[name="offsety"]').val()== undefined || manual.find('input[name="offsetx"]').val()==undefined || (manual.find('#squaresTall').val()==undefined || manual.find('#squaresWide').val()==undefined ))
 			return;
@@ -724,18 +660,9 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 				$('input[name="offsetx"]').attr('data-prev-value', window.CURRENT_SCENE_DATA.offsetx);
 				$('input[name="offsety"]').attr('data-prev-value', window.CURRENT_SCENE_DATA.offsety);			
 			}
-		
-			
-			redraw_grid(null,null,null,null,color,width,null,dash);
 		}
-		else if(window.CURRENT_SCENE_DATA.gridType == 2){
-			redraw_hex_grid(null,null,null,null,color,width,null,dash, false);
-		}
-		else if(window.CURRENT_SCENE_DATA.gridType == 3){
-			redraw_hex_grid(null,null,null,null,color,width,null,dash, true);
-		}
-
-		//to do: move the grid aligners to match the input settings.
+		//to do: move the grid aligners to match the input settings for hex
+		redraw_grid(null,null,null,null,color,width,null,dash);		
 	}			
 
 
@@ -765,112 +692,37 @@ function open_grid_wizard_controls(scene_id, aligner1, aligner2, regrid=function
 				delete window.CURRENT_SCENE_DATA.scaleAdjustment;
 			}
 			let gridMeasurement = $('input[name="fpsq"]').val();
-			if(gridMeasurement == 5){
-				grid_5();
-			}else if(gridMeasurement == 10){
-				grid_10();
-			}else if(gridMeasurement == 15){
-				grid_15();
-			}else if(gridMeasurement == 20){
-				grid_20();
-			}else{
-				$("#scene_selector_toggle").show();
-				$("#tokens").show();
-				
-				window.CURRENT_SCENE_DATA = {
-					...window.CURRENT_SCENE_DATA,
-					upsq: $('input[name="upsq"]').val(),
-					fpsq: $('input[name="fpsq"]').val(),
-					grid_subdivided: "0"
-				}
-				consider_upscaling(window.CURRENT_SCENE_DATA);
-				window.ScenesHandler.persist_current_scene();
-				$("#wizard_popup").empty().append("You're good to go!!");
-				$("#exitWizard").remove();
-				$("#wizard_popup").delay(2000).animate({ opacity: 0 }, 4000, function() {
-					$("#wizard_popup").remove();
-				});
-				$("#light_container, #darkness_layer, #raycastingCanvas").css('visibility', 'visible');
+
+			$("#scene_selector_toggle").show();
+			$("#tokens").show();
+			const subDivided = gridMeasurement > 5 && gridMeasurement % 5 == 0 ? $('input[name="grid_subdivided"]').val() : '0';
+			window.CURRENT_SCENE_DATA = {
+				...window.CURRENT_SCENE_DATA,
+				upsq: $('input[name="upsq"]').val(),
+				fpsq: subDivided != 0 ? '5' : gridMeasurement,
+				grid_subdivided: subDivided,
+				grid: copiedSceneData.grid,
+				gridOver: copiedSceneData.gridOver
 			}
+			if (subDivided != 0){
+				window.CURRENT_SCENE_DATA.hpps = window.CURRENT_SCENE_DATA.hpps/(gridMeasurement/5)
+				window.CURRENT_SCENE_DATA.vpps = window.CURRENT_SCENE_DATA.vpps/(gridMeasurement/5)
+			}
+			consider_upscaling(window.CURRENT_SCENE_DATA);
+			window.ScenesHandler.persist_current_scene();
+			$("#wizard_popup").empty().append("You're good to go!!");
+			$("#exitWizard").remove();
+			$("#wizard_popup").delay(2000).animate({ opacity: 0 }, 4000, function() {
+				$("#wizard_popup").remove();
+			});
+			$("#light_container, #darkness_layer, #raycastingCanvas").css('visibility', 'visible');
+			
 			$(`#sources-import-main-container`).remove();
 			$('#scene_map_container').css('background', '');
 	});
 
 
-	let grid_5 = function() {
 
-
-		$("#scene_selector_toggle").show();
-		$("#tokens").show();
-		
-		window.CURRENT_SCENE_DATA = {
-			...window.CURRENT_SCENE_DATA,
-			fpsq: "5",
-			grid_subdivided: "0"
-		}
-		consider_upscaling(window.CURRENT_SCENE_DATA);
-		window.ScenesHandler.persist_current_scene();
-		$("#light_container").css('visibility', 'visible');
-		$("#darkness_layer").css('visibility', 'visible');
-	};
-
-	let grid_10 = function() {
-
-			
-			let subdivided = $('input[name="grid_subdivided"]').val() == 1;
-			$("#scene_selector_toggle").show();
-			$("#tokens").show();
-			$("#wizard_popup").empty().append("You're good to go! AboveVTT is now super-imposing a grid that divides the original grid map in half. If you want to hide this grid just edit the manual grid data.");
-			window.CURRENT_SCENE_DATA = {
-				...window.CURRENT_SCENE_DATA,
-				hpps: (subdivided) ? window.CURRENT_SCENE_DATA.hpps/2 : window.CURRENT_SCENE_DATA.hpps,
-				vpps: (subdivided) ? window.CURRENT_SCENE_DATA.vpps/2 : window.CURRENT_SCENE_DATA.vpps,
-				fpsq: (subdivided) ? '5' : '10',
-				grid_subdivided: $('input[name="grid_subdivided"]').val()
-			}
-			consider_upscaling(window.CURRENT_SCENE_DATA);
-			window.ScenesHandler.persist_current_scene();
-			$("#light_container").css('visibility', 'visible');
-			$("#darkness_layer").css('visibility', 'visible');
-	}
-
-	let grid_15 = function() {
-		
-		let subdivided = $('input[name="grid_subdivided"]').val() == 1;
-		$("#scene_selector_toggle").show();
-		$("#tokens").show();
-		window.CURRENT_SCENE_DATA = {
-			...window.CURRENT_SCENE_DATA,
-			hpps: (subdivided) ? window.CURRENT_SCENE_DATA.hpps/3 : window.CURRENT_SCENE_DATA.hpps,
-			vpps: (subdivided) ? window.CURRENT_SCENE_DATA.vpps/3 : window.CURRENT_SCENE_DATA.vpps,
-			fpsq:  (subdivided) ? '5' : '15',
-			grid_subdivided: "0"
-		}
-		consider_upscaling(window.CURRENT_SCENE_DATA);
-		window.ScenesHandler.persist_current_scene();
-
-		$("#light_container").css('visibility', 'visible');
-		$("#darkness_layer").css('visibility', 'visible');
-	}
-
-
-	let grid_20 = function() {
-		
-		let subdivided = $('input[name="grid_subdivided"]').val() == 1;
-		$("#scene_selector_toggle").show();
-		$("#tokens").show();
-		window.CURRENT_SCENE_DATA = {
-			...window.CURRENT_SCENE_DATA,
-			hpps: (subdivided) ? window.CURRENT_SCENE_DATA.hpps/4 : window.CURRENT_SCENE_DATA.hpps,
-			vpps: (subdivided) ? window.CURRENT_SCENE_DATA.vpps/4 : window.CURRENT_SCENE_DATA.vpps,
-			fpsq: (subdivided) ? '5' : '20',
-			grid_subdivided: "0"
-		}
-		consider_upscaling(window.CURRENT_SCENE_DATA);		
-		window.ScenesHandler.persist_current_scene();		
-		$("#light_container").css('visibility', 'visible');
-		$("#darkness_layer").css('visibility', 'visible');
-	}
 
 	cancel = $("<button type='button' id='cancel_importer'>Cancel</button>");
 	cancel.click(function() {
@@ -940,7 +792,7 @@ function edit_scene_vision_settings(scene_id){
 	$("#edit_dialog").remove();
 
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
-	console.log('edit_scene_dialog');
+	noisy_log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
 	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
@@ -1118,6 +970,7 @@ function edit_scene_vision_settings(scene_id){
 		window.CURRENT_SCENE_DATA.daylight = originalColor;
 		$('#VTT').css('--daylight-color', originalColor);
 		if (scene.id === window.CURRENT_SCENE_DATA.id){
+			//todo: eval whether hex grid could be active here
 			if(window.CURRENT_SCENE_DATA.grid === "1"){
 				redraw_grid()
 			}
@@ -1132,7 +985,7 @@ function edit_scene_vision_settings(scene_id){
 	})
 	const submitButton = $("<button type='button'>Save</button>");
 	submitButton.click(async function() {
-		console.log("Saving scene changes")
+		noisy_log("Saving scene changes")
 
 		const formData = await get_edit_form_data();
 		for (key in formData) {
@@ -1147,6 +1000,7 @@ function edit_scene_vision_settings(scene_id){
 		$("#scene_selector").removeAttr("disabled");
 		$("#scene_selector_toggle").click();
 		if(window.CURRENT_SCENE_DATA.id != window.ScenesHandler.scenes[scene_id].id) {
+			window.CURRENT_SCENE_DATA.id = window.ScenesHandler.scenes[scene_id].id;
 			$(`.scene-item[data-scene-id='${window.ScenesHandler.scenes[scene_id].id}'] .dm_scenes_button`).click();
 		}
 		did_update_scenes();
@@ -1209,8 +1063,10 @@ function edit_scene_dialog(scene_id) {
 		}
 	
 		const {hpps, vpps, offsetx, offsety, grid_color, grid_line_width, grid_subdivided, grid} = await get_edit_form_data()
+		const gridOver = +($("#gridOverSelect").val() || 0);
 		// redraw grid with new information
 		window.CURRENT_SCENE_DATA.grid = grid;
+		window.CURRENT_SCENE_DATA.gridOver = +gridOver;
 		if(grid === "1" && window.CURRENT_SCENE_DATA.scale_check){
 			let conversion = window.CURRENT_SCENE_DATA.scale_factor * window.CURRENT_SCENE_DATA.conversion
 			redraw_grid(parseFloat(hpps*conversion), parseFloat(vpps*conversion), offsetx*conversion, offsety*conversion, grid_color, grid_line_width, grid_subdivided )
@@ -1218,7 +1074,6 @@ function edit_scene_dialog(scene_id) {
 		else if(grid === "1"){
 			redraw_grid(parseFloat(hpps), parseFloat(vpps), offsetx, offsety, grid_color, grid_line_width, grid_subdivided )
 		}
-		// redraw grid using current scene data
 		else if(grid === "0"){
 			clear_grid()
 		}
@@ -1227,7 +1082,7 @@ function edit_scene_dialog(scene_id) {
 	$("#edit_dialog").remove();
 
 	scene.fog_of_war = "1"; // ALWAYS ON since 0.0.18
-	console.log('edit_scene_dialog');
+	noisy_log('edit_scene_dialog');
 	$("#scene_selector").attr('disabled', 'disabled');
 	const dialog = $(`<div id='edit_dialog' data-scene-id='${scene.id}'></div>`);
 	dialog.css('background', "url('/content/1-0-1487-0/skins/waterdeep/images/mon-summary/paper-texture.png')");
@@ -1452,18 +1307,31 @@ function edit_scene_dialog(scene_id) {
 			if ($(event.currentTarget).hasClass("rc-switch-checked")) {
 				// it was checked. now it is no longer checked
 				$(event.currentTarget).removeClass("rc-switch-checked");
-				
+				form.find("#gridOver_row").hide()
 			} else {
 				// it was not checked. now it is checked
 				$(event.currentTarget).removeClass("rc-switch-unknown");
 				$(event.currentTarget).addClass("rc-switch-checked");
+				form.find("#gridOver_row").show()				
 			}
-				handle_form_grid_on_change()
+			handle_form_grid_on_change()
 		})
 	)
-	showGridControls.append(gridColor)
-	showGridControls.append(gridStroke)
-	showGridControls.append(gridStrokeLabel, gridStrokeNumberInput);
+	const goVal = scene.gridOver || 0;
+	const gridOver = $(`<select id='gridOverSelect' style="float:right" name="gridOver" >
+		<option value='0' ${goVal == 0 ? 'selected' : ''}>Under Darkness/Fog</option>
+		<option value='1' ${goVal == 1 ? 'selected' : ''}>Over Darkness/Fog</option>
+		</select>`);
+/*
+<option value='2' ${goVal == 2 ? 'selected' : ''}>Drag Assist</option>
+<option value='3' ${goVal == 3 ? 'selected' : ''}>Only Drag Assist</option>
+
+Azmoria: These options were very confusing to me, and I couldn't get them to behave consistently especially when using shift+g toggle.
+Tbh I feel like these overcomplicate things
+*/
+	
+	gridOver.on('change', handle_form_grid_on_change);
+	showGridControls.append(gridColor, gridOver, gridStroke, gridStrokeLabel, gridStrokeNumberInput)
 	form.append(form_row('drawGrid', 'Draw Grid', showGridControls))
 	form.find('#drawGrid_row').attr('title', 'Draw the grid on the map. When enabled more settings for grid appearance will be available.')
 	const colorPickers = form.find('input.spectrum');
@@ -1480,6 +1348,11 @@ function edit_scene_dialog(scene_id) {
 	colorPickers.on('change.spectrum', handle_form_grid_on_change); // commit the changes when the user clicks the submit button
 	colorPickers.on('hide.spectrum', handle_form_grid_on_change);   // the hide event includes the original color so let's change it back when we get it
 
+
+
+
+	if(scene.grid == 0) form.find("#gridOver_row").hide();
+	
 	const playlistSelect = $(`<select id='playlistSceneSelect'><option value='0'>None</option></select>`)
 	const playlists = window.MIXER.playlists();
 
@@ -1538,8 +1411,11 @@ function edit_scene_dialog(scene_id) {
 		const max = parseFloat($(this).attr('max'));
 		const percentage = Math.round((val - min) / (max - min) * 100);
 		particleCount.text(percentage + '%');
-		window.CURRENT_SCENE_DATA.weatherIntensity = val;
-		set_weather();
+		if (window.CURRENT_SCENE_DATA.id == scene.id){
+			window.CURRENT_SCENE_DATA.weatherIntensity = val;
+			set_weather();
+		}
+
 	});
 
 	weatherSelect.on('change', function() {
@@ -1555,9 +1431,11 @@ function edit_scene_dialog(scene_id) {
 			particleCount.text(percentage + '%');
 			intensityRow.show();
 		}
-		window.CURRENT_SCENE_DATA.weather = selectedWeather;
-		window.CURRENT_SCENE_DATA.weatherIntensity = intensitySlider.val();
-		set_weather();
+		if (window.CURRENT_SCENE_DATA.id == scene.id) {
+			window.CURRENT_SCENE_DATA.weather = selectedWeather;
+			window.CURRENT_SCENE_DATA.weatherIntensity = intensitySlider.val();
+			set_weather();
+		}
 	});
 
 	if (weatherValue === 0 || weatherValue === '0') {
@@ -1572,7 +1450,7 @@ function edit_scene_dialog(scene_id) {
 		)
 	initialPosition.find('button#initialPosition').off('click.setPos').on('click.setPos', function(e){
 		initialPosition.find(`input[name='initial_zoom']`).val(parseFloat(window.ZOOM));
-		const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
+		const sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
 		initialPosition.find(`input[name='initial_x']`).val(parseFloat(window.scrollX)+window.innerWidth/2-sidebarSize/2);
 		initialPosition.find(`input[name='initial_y']`).val(parseFloat(window.scrollY)+window.innerHeight/2);
 	})
@@ -1618,9 +1496,11 @@ function edit_scene_dialog(scene_id) {
 
 	const submitButton = $("<button type='button'>Save</button>");
 	submitButton.click(async function() {
-		console.log("Saving scene changes")
+		noisy_log("Saving scene changes")
 
 		const formData = await get_edit_form_data();
+		scene.gridOver = +($("#gridOverSelect").val() || 0);
+		
 		for (key in formData) {
 			scene[key] = formData[key];
 		}
@@ -1637,6 +1517,7 @@ function edit_scene_dialog(scene_id) {
 		$("#scene_selector").removeAttr("disabled");
 		$("#scene_selector_toggle").click();
 		if(window.CURRENT_SCENE_DATA.id != window.ScenesHandler.scenes[scene_id].id) {
+			window.CURRENT_SCENE_DATA.id = window.ScenesHandler.scenes[scene_id].id;
 			$(`.scene-item[data-scene-id='${window.ScenesHandler.scenes[scene_id].id}'] .dm_scenes_button`).click();
 		}
 		did_update_scenes();
@@ -1797,8 +1678,8 @@ function display_scenes(notOwned = false) {
 		return;
 	}
 	fill_importer(window.ScenesHandler.sources[source_name].chapters[chapter_name].scenes, 0);
-	console.log(window.ScenesHandler.sources[source_name].chapters[chapter_name].scenes);
-	console.log("mostrati...");
+	noisy_log(window.ScenesHandler.sources[source_name].chapters[chapter_name].scenes);
+	noisy_log("mostrati...");
 	/*$("#scene_select").empty();
 	
 	let source_name=$("#source_select").val();
@@ -1811,7 +1692,7 @@ function display_scenes(notOwned = false) {
 }
 
 function ddb_style_chapter_select(source, chapters) {
-	console.log("ddb_style_chapter_select", chapters);
+	noisy_log("ddb_style_chapter_select", chapters);
 	const menu = $(`
 		<div class="sidebar-scroll-menu">
 			<ul class="quick-menu quick-menu-tier-1">
@@ -1829,7 +1710,7 @@ function ddb_style_chapter_select(source, chapters) {
 	`);
 	const chapterList = menu.find("ul.chapter-list");
 	for (const chapterKey in chapters) {
-		console.log("building", chapterKey, chapters[chapterKey]);
+		noisy_log("building", chapterKey, chapters[chapterKey]);
 		const chapterListItem = ddb_style_chapter_list_item(chapterKey, chapters[chapterKey].title);
 		chapterList.append(chapterListItem);
 		chapterListItem.find("a").click(function(e) {
@@ -1852,7 +1733,7 @@ function ddb_style_chapter_select(source, chapters) {
 }
 
 function ddb_style_chapter_list_item(chapterKey, chapterTitle) {
-	console.log("ddb_style_chapter_list_item", chapterKey, chapterTitle)
+	noisy_log("ddb_style_chapter_list_item", chapterKey, chapterTitle)
 	return $(`
 		<li class="quick-menu-item quick-menu-item-tier-2 quick-menu-item-closed">
 			<div class="quick-menu-item-label">
@@ -1987,6 +1868,7 @@ function default_scene_data() {
 		offsetx: 0,
 		offsety: 0,
 		grid: 0,
+		gridOver: 0, //0- never, 1-always, 2-drag help+under, 3-drag help only
 		snap: 0,
 		reveals: [[0, 0, 0, 0, 2, 0, 1]],
 		order: Date.now(),
@@ -2022,6 +1904,7 @@ async function build_scene_data_payload(parentId, fullPath, sceneName = "New Sce
 		title: candidate,
 		player_map: mapUrl || "",
 		parentId,
+		...get_custom_scene_settings()
 	};
 
 	const normalizedFullPath = sanitize_folder_path(sanitizedFullPath);
@@ -2051,7 +1934,7 @@ async function build_scene_data_payload(parentId, fullPath, sceneName = "New Sce
 
 
 function init_scenes_panel() {
-	console.log("init_scenes_panel");
+	noisy_log("init_scenes_panel");
 
 	scenesPanel.updateHeader("Scenes");
 	add_expand_collapse_buttons_to_header(scenesPanel);
@@ -2150,7 +2033,7 @@ async function did_update_scenes() {
 }
 
 function rebuild_scene_items_list() {
-	console.group("rebuild_scene_items_list");
+
 
 	window.sceneListFolders = window.ScenesHandler.scenes
 		.filter(s => s.itemType === ItemType.Folder)
@@ -2164,18 +2047,16 @@ function rebuild_scene_items_list() {
 
 	update_token_folders_remembered_state();
 
-	console.groupEnd();
 }
 
 async function migrate_scene_folders() {
 
-	console.log(`migrate_scene_folders MB`, window.MB)
 
 	// collect scenes that need to be migrated
 	const scenesNeedingMigration = window.ScenesHandler.scenes.filter(s => s.itemType === undefined); // scenes that have been migrated have an itemType
 	if (!scenesNeedingMigration) {
 		// nothing to migrate
-		console.log("migrate_scene_folders does not need to migrate");
+		noisy_log("migrate_scene_folders does not need to migrate");
 		return;
 	}
 
@@ -2191,32 +2072,32 @@ async function migrate_scene_folders() {
 		.sort()
 		.forEach(folderPath => {
 			if (!pathsWithoutFolders.includes(folderPath)) { // make sure we don't make duplicate folders
-				console.debug(`migrate_scene_folders scenesNeedingMigration parsing ${folderPath}`);
+				noisy_log(`migrate_scene_folders scenesNeedingMigration parsing ${folderPath}`);
 				pathsWithoutFolders.push(folderPath);
 			}
 			// now make sure we get nested folders that only have folders in them
 			const backfillPathParts = folderPath.split("/");
 			while (backfillPathParts.length > 0) {
 				const lastPathPart = backfillPathParts.pop();
-				console.debug(`migrate_scene_folders dropping lastPathPart ${lastPathPart}`);
+				noisy_log(`migrate_scene_folders dropping lastPathPart ${lastPathPart}`);
 				const backfillPath = sanitize_folder_path(backfillPathParts.join("/"));
 				if (!pathsWithoutFolders.includes(backfillPath)) { // make sure we don't make duplicate folders
-					console.debug(`migrate_scene_folders adding backfillPath ${backfillPath}`);
+					noisy_log(`migrate_scene_folders adding backfillPath ${backfillPath}`);
 					pathsWithoutFolders.push(backfillPath);
 				}
 			}
 		});
 
-	console.debug(`migrate_scene_folders pathsWithoutFolders before filter ${pathsWithoutFolders}`);
+	noisy_log(`migrate_scene_folders pathsWithoutFolders before filter ${pathsWithoutFolders}`);
 	pathsWithoutFolders = pathsWithoutFolders.filter(fp => fp && fp !== '' && fp !== "/").sort();
-	console.log("migrate_scene_folders pathsWithoutFolders", pathsWithoutFolders);
+	noisy_log("migrate_scene_folders pathsWithoutFolders", pathsWithoutFolders);
 
 	pathsWithoutFolders.forEach(folderPath => {
 			let pathParts = folderPath.split("/");
 			let folderName = pathParts.pop();
 			let parentPath = sanitize_folder_path(pathParts.join("/"));
 			const parentId = folders.concat(newFolders).find(f => f.folderPath === parentPath)?.id || RootFolder.Scenes.id;
-			console.log(`migrate_scene_folders creating folderPath: ${folderPath}, parentPath: ${parentPath}, folderName: ${folderName}, parentId: ${parentId}, folders: `, folders);
+			noisy_log(`migrate_scene_folders creating folderPath: ${folderPath}, parentPath: ${parentPath}, folderName: ${folderName}, parentId: ${parentId}, folders: `, folders);
 			newFolders.push({
 				id: uuid(),
 				title: folderName,
@@ -2231,11 +2112,11 @@ async function migrate_scene_folders() {
 			unmigratedScene.itemType = ItemType.Scene;
 			const parentFolder = folders.concat(newFolders).find(f => f.folderPath === unmigratedScene.folderPath);
 			if (parentFolder) {
-				console.log("migrate_scene_folders setting parentId: ", parentFolder.id, parentFolder);
+				noisy_log("migrate_scene_folders setting parentId: ", parentFolder.id, parentFolder);
 				unmigratedScene.parentId = parentFolder.id;
 			} else {
 				unmigratedScene.parentId = RootFolder.Scenes.id;
-				console.log("migrate_scene_folders setting parentId: ", RootFolder.Scenes.id);
+				noisy_log("migrate_scene_folders setting parentId: ", RootFolder.Scenes.id);
 			}
 		});
 
@@ -2244,9 +2125,9 @@ async function migrate_scene_folders() {
 	let foldersToMigrate = itemsToMigrate.filter(i => i.itemType === ItemType.Folder);
 	let scenesToMigrate = itemsToMigrate.filter(i => i.itemType === ItemType.Scene);
 	if (scenesToMigrate.length > 0) {
-		console.log("migrate_scene_folders is migrating scenes", scenesToMigrate);
+		noisy_log("migrate_scene_folders is migrating scenes", scenesToMigrate);
 		for (const scene of scenesToMigrate) {
-			console.log('migrate_scene_folders is sending update_scene', scene)
+			noisy_log('migrate_scene_folders is sending update_scene', scene)
 			// startup_step is not defined at this point?
 			$("#loading-overlay-beholder > .sidebar-panel-loading-indicator > .loading-status-indicator__subtext").text(`Migrating scene ${scene.title}`);
 			window.MB.sendMessage("custom/myVTT/update_scene", scene);
@@ -2255,7 +2136,7 @@ async function migrate_scene_folders() {
 	}
 
 	if (foldersToMigrate.length > 0) {
-		console.log("migrate_scene_folders is migrating folders", foldersToMigrate);
+		noisy_log("migrate_scene_folders is migrating folders", foldersToMigrate);
 		await AboveApi.migrateScenes(window.gameId, foldersToMigrate);
 		$("#loading-overlay-beholder > .sidebar-panel-loading-indicator > .loading-status-indicator__subtext").text(`Uploading scene folders`);
 		await async_sleep(2000); // give the DB 2 seconds to persist the new data before fetching it again
@@ -2374,65 +2255,7 @@ async function redraw_scene_list(searchTerm) {
 											</div>
 										</div>
 									</div>`
-									flyout.addClass("prevent-sidebar-modal-close"); // clicking inside the tooltip should not close the sidebar modal that opened it
-									flyout.addClass('note-flyout');
-									const tooltipHtml = $(noteHover);
-									await window.JOURNAL.translateHtmlAndBlocks(tooltipHtml, noteId);
-									add_journal_roll_buttons(tooltipHtml);
-									window.JOURNAL.add_journal_tooltip_targets(tooltipHtml);
-									add_stat_block_hover(tooltipHtml, sceneId);
-									add_aoe_statblock_click(tooltipHtml, sceneId);
-
-									$(tooltipHtml).find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId})})
-									flyout.append(tooltipHtml);
-									let sendToGamelogButton = $(`<a class="ddbeb-button" href="#">Send To Gamelog</a>`);
-									sendToGamelogButton.css({ "float": "right" });
-									sendToGamelogButton.on("click", function (ce) {
-										ce.stopPropagation();
-										ce.preventDefault();
-
-										send_html_to_gamelog(noteHover);
-									});
-
-									flyout.css({
-										right: '350px',
-										width: '400px'
-									})
-									let flyoutTop = e.clientY;
-									let flyoutHeight = flyout.height() + 25;
-									let bottom = (e.clientY + flyoutHeight);
-
-									if (bottom > window.innerHeight) {
-										flyoutTop = flyoutTop - (bottom - window.innerHeight) - 25;
-									}
-									flyout.css('top', flyoutTop);
-									const buttonFooter = $("<div></div>");
-									buttonFooter.css({
-										height: "40px",
-										width: "100%",
-										position: "relative",
-										background: "#fff"
-									});
-									window.JOURNAL.block_send_to_buttons(flyout);
-									flyout.append(buttonFooter);
-									buttonFooter.append(sendToGamelogButton);
-									flyout.find("a").attr("target", "_blank");
-									flyout.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function (event) {
-										event.preventDefault();
-										render_source_chapter_in_iframe(event.target.href);
-									});
-
-
-									flyout.hover(function (hoverEvent) {
-										if (hoverEvent.type === "mouseenter") {
-											clearTimeout(removeToolTipTimer);
-											removeToolTipTimer = undefined;
-										} else {
-											remove_tooltip(500);
-										}
-									});
-
-									flyout.css("background-color", "#fff");
+									setup_tooltip_flyout(flyout, noteHover, ['note-flyout'], e, {id: noteId})
 								});
 							}, 500);
 
@@ -2502,7 +2325,7 @@ async function redraw_scene_list(searchTerm) {
        enable_draggable_change_folder(ItemType.Scene)
 }
 
-async function create_scene_inside(parentId, fullPath = RootFolder.Scenes.path, sceneName = "New Scene", mapUrl = "") {
+async function create_scene_inside(parentId, fullPath = RootFolder.Scenes.path, sceneName = "New Scene", mapUrl = "", sceneArray = undefined) {
 	const sanitizedFullPath = sanitize_folder_path(fullPath || RootFolder.Scenes.path);
 	const existingNames = new Set(
 		window.ScenesHandler.scenes
@@ -2513,7 +2336,10 @@ async function create_scene_inside(parentId, fullPath = RootFolder.Scenes.path, 
 	const sceneData = await build_scene_data_payload(parentId, sanitizedFullPath, sceneName, mapUrl, existingNames);
 
 	window.ScenesHandler.scenes.push(sceneData);
-
+	if(Array.isArray(sceneArray)){
+		sceneArray.push(sceneData);
+		return sceneArray;
+	}
 	await AboveApi.migrateScenes(window.gameId, [sceneData]);
 
 	const sceneIndex = window.ScenesHandler.scenes.findIndex((scene) => scene.id === sceneData.id);
@@ -2607,7 +2433,7 @@ async function avttScenesCollectAssets(folderRelativePath) {
 			continue;
 		}
 		for (const entry of entries) {
-			const keyValue = typeof entry === "string" ? entry : entry?.Key || entry?.key || "";
+			const keyValue = typeof entry === "string" ? entry : entry?.Key || "";
 			if (!keyValue) {
 				continue;
 			}
@@ -2869,9 +2695,9 @@ function create_scene_folder_inside(listItem) {
 }
 
 function rename_scene_folder(item, newName, alertUser) {
-	console.log(`rename_scene_folder`, item, newName, alertUser);
+	noisy_log(`rename_scene_folder`, item, newName, alertUser);
 	const folderIndex = window.ScenesHandler.scenes.findIndex(s => s.id === item.id);
-	console.log(`rename_scene_folder folderIndex: ${folderIndex}`)
+	noisy_log(`rename_scene_folder folderIndex: ${folderIndex}`)
 	if (folderIndex < 0) {
 		const warningMessage = `Could not find a folder with id: ${item.id}`
 		console.warn('rename_scene_folder', warningMessage, item);
@@ -2880,9 +2706,9 @@ function rename_scene_folder(item, newName, alertUser) {
 		}
 		return;
 	}
-	console.log(`rename_scene_folder before`, window.ScenesHandler.scenes[folderIndex].title);
+	noisy_log(`rename_scene_folder before`, window.ScenesHandler.scenes[folderIndex].title);
 	window.ScenesHandler.scenes[folderIndex].title = newName;
-	console.log(`rename_scene_folder after`, window.ScenesHandler.scenes[folderIndex].title);
+	noisy_log(`rename_scene_folder after`, window.ScenesHandler.scenes[folderIndex].title);
 	window.ScenesHandler.persist_scene(folderIndex);
 	item.name = newName; // not sure if this will work. Might need to redraw the list
 
@@ -3185,11 +3011,11 @@ function delete_folder_and_all_scenes_within_it(listItem) {
 
 	const scenesToDelete = find_descendants_of_scene_id(listItem.id);
 
-	console.debug("before deleting from scenes", window.ScenesHandler.scenes);
+	noisy_log("before deleting from scenes", window.ScenesHandler.scenes);
 	scenesToDelete.forEach(scene => {
 		window.ScenesHandler.delete_scene(scene.id, false);
 	});
-	console.debug("after deleting from scenes", window.ScenesHandler.scenes);
+	noisy_log("after deleting from scenes", window.ScenesHandler.scenes);
 	console.groupEnd();
 }
 
@@ -3250,12 +3076,28 @@ function load_sources_iframe_for_map_import(hidden = false) {
 			.ad-container,
 			.ddb-site-banner,
 			[href*='marketplace.dndbeyond.com'],
-			[src*='marketplace.dndbeyond.com']{
+			[src*='marketplace.dndbeyond.com'],
+			[class*='NavigationMenu_wrapper__']{
 				display:none !important;
 			}
 			.ddb-collapsible-filter{
 				top:0px;
 				position:sticky !important;
+			}
+			[class*="SourcesContents_contents"]>[class*="Header_header"]{
+				margin-top:20px;
+			}
+			.quick-menu-item-link.importer-back-button:before {
+				content: '';
+				border-width: 2px 0px 0px 2px;
+				transform: rotate(-45deg);
+				border-color: #000;
+				border-style: solid;
+				width: 8px;
+				height: 8px;
+				display: inline-block;
+				position: relative;
+				top: -2px;
 			}
 			</style>`);
 
@@ -3286,6 +3128,12 @@ function load_sources_iframe_for_map_import(hidden = false) {
 			event.preventDefault();
 		})
 		add_scene_importer_back_button(sourcesBody);
+		const observer = new MutationObserver((mutations) => {
+			if(sourcesBody.find('.quick-menu-item-link.importer-back-button').length>0)
+				return;			
+			add_scene_importer_back_button(sourcesBody);
+		})
+		observer.observe(sourcesBody.find('body')[0], { childList: true, subtree: true, attributes: false, characterData: false })
 	});
 
 	iframe.attr("src", `/en/library?ownership=owned-shared`);
@@ -3328,8 +3176,7 @@ function adjust_create_import_edit_container(content='', empty=true, title='', w
 				$('.iframeResizeCover').remove();
 			}
 		});
-		frame_z_index_when_click(mainContainer);
-		mainContainer.on('mousedown', function(){frame_z_index_when_click(mainContainer)})
+		frame_z_index_when_click(mainContainer, true);
 		$(document.body).append(mainContainer);
 	}
 	$(`#sources-import-main-container`).css({
@@ -3426,9 +3273,20 @@ async function create_scene_root_container(fullPath, parentId) {
 		"player_map": "",
 	}, `${window.EXTENSION_PATH}images/Dropbox_Icon.svg`, false);
 
-	const dropboxOptionsImport = dropBoxOptions(function(files){
-		create_scene_inside(parentId, fullPath, files[0].name, files[0].link);
-	});
+	const dropboxOptionsImport = dropBoxOptions(async function(files){
+		const sceneArray = [];
+		for(let i=0; i<files.length; i++){
+			await create_scene_inside(parentId, fullPath, files[i].name, files[i].link, sceneArray);
+		}
+		await AboveApi.migrateScenes(window.gameId, sceneArray);
+		if(sceneArray.length == 1){
+			const sceneIndex = window.ScenesHandler.scenes.findIndex((scene) => scene.id === sceneArray[0].id);
+			if (sceneIndex >= 0) {
+				edit_scene_dialog(sceneIndex, true);
+			}
+		}
+		did_update_scenes();
+	}, true);
 	dropboxImport.css("width", "25%");
 	sectionHtml.find("ul").append(dropboxImport);
 	dropboxImport.find(".listing-card__callout").hide();
@@ -3478,9 +3336,20 @@ async function create_scene_root_container(fullPath, parentId) {
 	onedriveImport.find("a.listing-card__link").click(function (e) {
 		e.stopPropagation();
 		e.preventDefault();
-    	launchPicker(e, function(files){
-			create_scene_inside(parentId, fullPath, files[0].name, files[0].link);
-		}, 'single', ['photo', '.webp']);
+    	launchPicker(e, async function(files){
+			const sceneArray = [];
+			for(let i=0; i<files.length; i++){
+				await create_scene_inside(parentId, fullPath, files[i].name, files[i].link, sceneArray);
+			}
+			await AboveApi.migrateScenes(window.gameId, sceneArray);
+			if(sceneArray.length == 1){
+				const sceneIndex = window.ScenesHandler.scenes.findIndex((scene) => scene.id === sceneArray[0].id);
+				if (sceneIndex >= 0) {
+					edit_scene_dialog(sceneIndex, true);
+				}
+			}
+			did_update_scenes();
+		}, 'multiple', ['photo', '.webp']);
 	});
 
 
@@ -3586,7 +3455,7 @@ function build_UVTT_import_container(){
 
 	const submitButton = $("<button type='button'>Save</button>");
 	submitButton.click(async function() {
-		console.log("Saving scene changes")
+		noisy_log("Saving scene changes")
 
 		const formData = await get_edit_form_data();
 		const folderPath = decode_full_path($(`#sources-import-main-container`).attr("data-folder-path")).replace(RootFolder.Scenes.path, "");
@@ -3694,13 +3563,11 @@ async function build_source_book_chapter_import_section(sceneSet) {
 				parentId: parentId,
 				...get_custom_scene_settings()
 			}
-			if(Array.isArray(sceneData[i].tokens)){
+			delete sceneData[i].map;
+			if(sceneData[i].tokens !== null && typeof sceneData[i].tokens === 'object'){
 				let tokensObject = {}
-				for(let token in sceneData[i].tokens){
-
-					let tokenId = sceneData[i].tokens[token].id;
-					let statBlockID = sceneData[i].tokens[token].statBlock
-					tokensObject[tokenId] = sceneData[i].tokens[token];		
+				for(let token of Object.values(sceneData[i].tokens)){
+					tokensObject[token.id] = token;		
 				}	
 				sceneData[i].tokens = tokensObject;
 			}
@@ -3718,6 +3585,7 @@ async function build_source_book_chapter_import_section(sceneSet) {
 						delete sceneData[i].notes;
 						
 					}
+					delete sceneData[i].map;
 				}
 				if(journalUpdated == true)
 					window.JOURNAL.persist();
@@ -3730,7 +3598,7 @@ async function build_source_book_chapter_import_section(sceneSet) {
 			})
 			.catch(error => {
 				$(`body>.import-loading-indicator`).remove();
-				showError(error, "Failed to import scene", importData);
+				showError(error, "Failed to import scene", sceneData);
 			});
 	})
 		
@@ -3756,15 +3624,17 @@ function add_scene_importer_back_button(container) {
 	});
 
 	backButton.css({
-		"height": "22px",
+		"height": "24px",
 		"font-size": "18px",
 		"margin-top": "auto",
 		"margin-bottom": "auto",
-		"background-image": "url(https://www.dndbeyond.com/file-attachments/0/737/chevron-left-green.svg)",
-		"background-repeat": "no-repeat",
-		"display": "inline",
-		"padding": "0px 20px 0px 20px",
-		"font-weight": "600"
+		"display": "block",
+		"padding": "0px 5px 0px 4px",
+		"font-weight": "600",
+		"border-radius": "5px",
+		"position": "relative",
+		"text-decoration": "none",
+		"color": "#000"
 	});
 }
 
@@ -3977,12 +3847,10 @@ function build_tutorial_import_list_item(scene, logo, allowMagnific = true) {
 			parentId: parentId,
 			...get_custom_scene_settings()
 		};
-		if(Array.isArray(importData.tokens)){
+		if(importData.tokens !== null && typeof importData.tokens === 'object'){
 			let tokensObject = {}
-			for(let token in importData.tokens){
-
-				let tokenId = importData.tokens[token].id;
-				tokensObject[tokenId] = importData.tokens[token];		
+			for(let token of Object.values(importData.tokens)){
+				tokensObject[token.id] = token;		
 			}	
 			importData.tokens = tokensObject;
 		}
@@ -4021,33 +3889,30 @@ function build_tutorial_import_list_item(scene, logo, allowMagnific = true) {
 function build_import_container() {
 	const container = $(`
 	<div class="container" style="height: 100%">
-  <div id="content" class="main content-container" style="height: 100%;overflow: auto">
-    <section class="primary-content" role="main">
+  		<div id="content" class="main content-container" style="height: 100%;overflow: auto">
+			<section class="primary-content" role="main">
 
 
-      <div class="static-container">
+				<div class="static-container">
 
-        <div class="ddb-collapsible-filter j-collapsible__search" style='display: flex;justify-content: space-between;'>
-          <div class="ddb-collapsible-filter__box">
-            <div class="ddb-collapsible-filter__search-icon"></div>
-            <input type="search" class="j-collapsible__search-input ddb-collapsible-filter__input" id="collapsible-search-input" placeholder="Search by Name or Source">
-            <div class="ddb-collapsible-filter__clear ddb-collapsible-filter__clear--hidden j-collapsible__search-clear">Clear X</div>
-          </div>
-        </div>
+					<div class="ddb-collapsible-filter j-collapsible__search" style='display: flex;justify-content: space-between;'>
+						<div class="ddb-collapsible-filter__box">
+							<div class="ddb-collapsible-filter__search-icon"></div>
+							<input type="search" class="j-collapsible__search-input ddb-collapsible-filter__input" id="collapsible-search-input" placeholder="Search by Name or Source">
+							<div class="ddb-collapsible-filter__clear ddb-collapsible-filter__clear--hidden j-collapsible__search-clear">Clear X</div>
+						</div>
+					</div>
 
-				<!--		build_import_collapsible_section objects go here		-->
-
-
-
-        <div class="ddb-collapsible-filter__no-results ddb-collapsible-filter__no-results--hidden no-results">
-          You Rolled a 1
-        </div>
-      </div>
+							<!--		build_import_collapsible_section objects go here		-->
+					<div class="ddb-collapsible-filter__no-results ddb-collapsible-filter__no-results--hidden no-results">
+						You Rolled a 1
+					</div>
+				</div>
 
 
-    </section>
-  </div>
-</div>
+			</section>
+		</div>
+	</div>
 	`);
 
 	container.find(".ddb-collapsible-filter__clear").click(function(e) {
@@ -4061,7 +3926,7 @@ function build_import_container() {
 			container.find("li.listing-card").each((idk, el) => {
 				const li = $(el);
 				const searchTerms = li.attr("data-collapsible-search").toLowerCase();
-				console.log(searchTerms, filterValue, searchTerms.includes(filterValue))
+				noisy_log(searchTerms, filterValue, searchTerms.includes(filterValue))
 				if(searchTerms.includes(filterValue)) {
 					li.removeClass("ddb-collapsible__item--hidden");
 				} else {
@@ -4157,7 +4022,7 @@ function build_import_collapsible_section(sectionLabel, logoUrl) {
 }
 
 function scene_importer_clicked_source(source, chapter, image, title) {
-	console.log(`scene_importer_clicked_source(${source}, ${chapter}, ${image}, ${title})`);
+	noisy_log(`scene_importer_clicked_source(${source}, ${chapter}, ${image}, ${title})`);
 	if (!window.recentlyVisitedSources) {
 		read_recently_visited_scene_importer_sources();
 	}

@@ -64,7 +64,7 @@ class TrackLibrary extends Library {
                     for(let i in window.SOUNDPADS[pad][folder]){
                         let t = window.SOUNDPADS[pad][folder][i];
                         const track = new Track(t.name, t.src);
-                        track.setTags = [folder];
+                        track.setTags([folder]);
                         const existingTrack = this.find(track.name, track.src);
                         if ( typeof existingTrack === 'undefined' ) {
                             newTracks.push(track);
@@ -74,11 +74,11 @@ class TrackLibrary extends Library {
                     }
                 }
             }
-            console.log('Importing new tracks')
+            noisy_log('Importing new tracks')
             console.table(newTracks)
             this.create(...newTracks);
 
-            console.log('Importing exiting tracks')
+            noisy_log('Importing exiting tracks')
             console.table(Object.fromEntries(updateTracks))
             this.batchUpdate(updateTracks);
             localStorage.removeItem("Soundpads");
@@ -193,7 +193,7 @@ class TrackLibrary extends Library {
 
         importList.forEach(t => {
             const track = new Track(t.name, t.src);
-            track.tags = t.tags.split("|");
+            track.tags = t.tags ? t.tags.split("|") : [];
             const existingTrack = this.find(track.name, track.src);
             if ( typeof existingTrack === 'undefined' ) {
                 newTracks.push(track);
@@ -202,11 +202,11 @@ class TrackLibrary extends Library {
             }
         });
 
-        console.log('Importing new tracks')
+        noisy_log('Importing new tracks')
         console.table(newTracks)
         this.create(...newTracks);
 
-        console.log('Importing exiting tracks')
+        noisy_log('Importing exiting tracks')
         console.table(Object.fromEntries(updateTacks))
         this.batchUpdate(updateTacks);
     }

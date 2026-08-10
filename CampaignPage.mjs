@@ -1,5 +1,5 @@
 /** CampaignPage.js - functions that only execute on the campaign page */
-
+import { init_audio_mixer } from './audio/index.mjs'
 $(function() {
   if (is_campaign_page()) {
     window.gameIndexedDb = undefined;
@@ -16,7 +16,7 @@ $(function() {
       .then(harvest_campaign_secret)  // find our join link
       .then(set_campaign_secret)      // set it to window.CAMPAIGN_SECRET
       .then(store_campaign_info)      // store gameId and campaign secret in localStorage for use on other pages   
-      .then(() => {window.CAMPAIGN_INFO = DDBApi.fetchCampaignInfo(window.gameId)})  
+      .then(async () => {window.CAMPAIGN_INFO = await DDBApi.fetchCampaignInfo(window.gameId)})
       .then(() => {
          openCampaignDB(async function() {
           if (is_gamelog_popout()) {
@@ -197,7 +197,7 @@ function inject_dm_join_button() {
   if ($(".ddb-campaigns-detail-body-dm-notes-private").length === 0) return; // The owner of the campaign (the DM) is the only one with private notes on the campaign page
   // The owner of the campaign (the DM) is the only one with private notes on the campaign page
   console.log("inject_dm_join_button");
-
+  
   $(".ddb-campaigns-invite-container").append(`
     <div class="above-vtt-warning-div" style="display: flex;flex-direction: column; align-items: center;justify-content: center; text-align: center;padding: 5px;border: 2px solid #c53131; border-radius: 4px;">
       <div class="above-vtt-warning-secondary-div">
@@ -231,21 +231,41 @@ function inject_dm_join_button() {
       }, 2000);
     }   
     catch(error) {
-      if (error.message && error.message.includes("EncounterLimitException")) {
-        showErrorMessage(
-          error,
-          "It looks like you have too many encounters. DndBeyond limits free accounts to 8 encounters, and AboveVTT requires 1 encounter to run. Try deleting a few encounters, and then try again.",
-          `<a href="https://www.dndbeyond.com/my-encounters" target="_blank">My Encounters</a>`
-        );
-      } else {
-        showError(error, "Failed to start AboveVTT from dm join button");
-      }
+      showError(error, "Failed to start AboveVTT from dm join button"); 
     }
       
       
     $(e.currentTarget).removeClass("button-loading");
   });
+  if(window.resetObserver)
+    window.resetObserver.disconnect();
+  window.resetObserver = new MutationObserver(async (mutationList, observer) => {
+     if($('.t-reset-campaign-modal').length>0 && $('.t-reset-campaign-modal #takeAbovevttExport').length == 0){
+        const avttExportContainer = $(`<div id="avttExportContainer" style="margin: 15px;
+              border: 1px solid #ddd;
+              display: flex;
+              flex-wrap: wrap;
+              max-width: 270px;
+              justify-content: center;
+              text-align: center;
+              padding: 5px;
+          ">
+          <span style="color:#F00; margin:3px;">WARNING: You will lose your AboveVTT cloud data if you continue without having an export.</span>
+          <button class='button' id='takeAbovevttExport'>Download AboveVTT Export</button>
+        </div>`);
 
+        avttExportContainer.find('button').on('click.takeExport', (e)=> {export_file('#avttExportContainer')});
+        $('.ddb-modal-reset-invite-code').before(avttExportContainer);
+        const aboveApi = await new AboveApi();
+        window.JOURNAL = await new JournalManager(window.gameId);
+        window.ScenesHandler = new ScenesHandler();
+        window.ScenesHandler.scenes = await AboveApi.getSceneList();
+        await init_audio_mixer();
+        fetch_token_customizations();
+      
+     }
+  })
+  resetObserver.observe(document.querySelector("body"), { childList: true, subtree: true });
 }
 
 function inject_player_join_buttons() {
@@ -253,6 +273,8 @@ function inject_player_join_buttons() {
   console.log("inject_campaign_page_buttons");
   $(".ddb-campaigns-character-card-footer-links").each(function() {
     const characterCard = $(this);
+    if(characterCard.closest('.ddb-campaigns-detail-body-listing-inactive').length>0)
+      return;
     if(characterCard.find(".ddb-campaigns-character-card-footer-links-item-edit").length > 0) {
       const characterPagePathname = characterCard.find(".ddb-campaigns-character-card-footer-links-item-view").attr('href');
       characterCard.prepend(`<a style='color:white;background: #1b9af0;padding: 2px;' href='https://www.dndbeyond.com${characterPagePathname}?abovevtt=true' target='_blank' class='button ddb-campaigns-character-card-footer-links-item'>JOIN AboveVTT</a>`);

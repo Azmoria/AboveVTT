@@ -2,12 +2,13 @@
  * This is not injected on the Character sheet unless abovevtt=true is in the query
  * So if you need anything to execute on the Character sheet when abovevtt is not running, do that in CharacterPage.js
  */
-import { init_audio_mixer } from './audio/index.js'
+import { init_audio_mixer } from './audio/index.mjs'
 
 /** The first time the window loads, start doing all the things */
 $(function() {
   if (is_abovevtt_page()) { // Only execute if the app is starting up
     console.log("startup calling init_splash");
+    showHardwareAccelWarning();
     init_my_dice_details();
     init_loading_overlay_beholder();
     addBeyond20EventListener("rendered-roll", (request) => {$('.avtt-sidebar-controls #switch_gamelog').click();});
@@ -24,10 +25,21 @@ $(function() {
       .then((databases)=> {
         window.gameIndexedDb = databases[0];
         window.globalIndexedDB = databases[1];
-        const campaignSettings = JSON.parse(localStorage.getItem(`ExperimentalSettings${window.gameId}`)) || {};
-        const globalSettings = JSON.parse(localStorage.getItem(`ExperimentalSettingsGlobal`)) || {}; ;
+        let campaignSettings = {};
+        try {
+          campaignSettings = JSON.parse(localStorage.getItem(`ExperimentalSettings${window.gameId}`)) || {};
+        } catch (e) {
+          console.warn(`Failed to parse campaign settings for game ${window.gameId}, using defaults`, e);
+          localStorage.removeItem(`ExperimentalSettings${window.gameId}`);
+        }
+        let globalSettings = {};
+        try {
+          globalSettings = JSON.parse(localStorage.getItem(`ExperimentalSettingsGlobal`)) || {};
+        } catch (e) {
+          console.warn(`Failed to parse global settings, using defaults`, e);
+          localStorage.removeItem(`ExperimentalSettingsGlobal`);
+        }       
         window.EXPERIMENTAL_SETTINGS = {...campaignSettings, ...globalSettings};
-        delete window.EXPERIMENTAL_SETTINGS.streamDiceRolls;
         if (is_release_build()) {
           // in case someone left this on during beta testing, we should not allow it here
           set_avtt_setting_value("aggressiveErrorMessages", false);
@@ -45,8 +57,34 @@ $(function() {
       .then(init_splash)              // show the splash screen; it reads from settings. That's why we show it here instead of earlier
       .then(harvest_campaign_secret)  // find our join link
       .then(set_campaign_secret)      // set it to window.CAMPAIGN_SECRET
+      .then(store_campaign_info)      // store gameId and campaign secret in localStorage for use on other pages
       .then(async () => {
-        window.CAMPAIGN_INFO = await DDBApi.fetchCampaignInfo(window.gameId)
+        startup_step("Building Spells Cache");
+        DDBApi.fetchSpellsJsonWithToken();
+        startup_step("Building Items Cache")
+        DDBApi.fetchItemsJsonWithToken().then((data)=>{
+          window.ITEMS_CACHE = data;
+        });
+        startup_step("Fetching Party Inventory")
+        DDBApi.debounceGetPartyInventory();
+        startup_step("Fetching Campaign Info")
+        const maxRetries = 5
+        const baseDelay = 500
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            window.CAMPAIGN_INFO = await DDBApi.fetchCampaignInfo(window.gameId)
+            break
+          } catch (error) {
+            if (attempt < maxRetries) {
+              const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 10000)
+              console.warn(`Failed to fetch campaign info (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`, error)
+              await new Promise(resolve => setTimeout(resolve, delay))
+            } else {
+              showError(error, `Failed to fetch campaign info after ${maxRetries} attempts. This is likely temporary — please refresh the page. If the issue persists, D&D Beyond may be experiencing outages.`)
+              throw new noLogError(error.message, error.options)
+            }
+          }
+        }
         window.AVTT_CAMPAIGN_INFO = await AboveApi.getCampaignData();
         return window.CAMPAIGN_INFO.dmId;
       })
@@ -84,12 +122,6 @@ $(function() {
         addExtensionPathStyles();
         $('body').append(`<script type="text/javascript" src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="h3iaoazdu0wqrfd"></script>`)
       }).then(() => {     
-        DDBApi.fetchItemsJsonWithToken().then(data => {
-          window.ITEMS_CACHE = data;
-        })
-       DDBApi.debounceGetPartyInventory()
-
-       
         const lastSendToDefault = localStorage.getItem(`${gameId}-sendToDefault`, gamelog_send_to_text()); 
 
         if(lastSendToDefault != null){
@@ -105,19 +137,21 @@ $(function() {
 
         window.STREAMPEERS = {};
         window.MYSTREAMID = uuid();
-        window.JOINTHEDICESTREAM = false; //window.EXPERIMENTAL_SETTINGS['streamDiceRolls'];
-        
-        const allDiceRegex = /\d+d(?:100|20|12|10|8|6|4)((?:kh|kl|ro(<|<=|>|>=|=)|min)\d+)*/gi; // ([numbers]d[diceTypes]kh[numbers] or [numbers]d[diceTypes]kl[numbers]) or [numbers]d[diceTypes]
-        const validExpressionRegex = /^[dkhlro<=>\s\d+\-\(\)]*$/gi; // any of these [d, kh, kl, spaces, numbers, +, -] // Should we support [*, /] ?
-        const validModifierSubstitutions = /(?<!\w)(str|dex|con|int|wis|cha|pb)(?!\w)/gi // case-insensitive shorthand for stat modifiers as long as there are no letters before or after the match. For example `int` and `STR` would match, but `mint` or `strong` would not match.
-        const diceRollCommandRegex = /^\/(r|roll|save|hit|dmg|skill|heal)\s/gi; // matches only the slash command. EG: `/r 1d20` would only match `/r`
-        const multiDiceRollCommandRegex = /\/(ir|r|roll|save|hit|dmg|skill|heal) [^\/]*/gi; // globally matches the full command. EG: `note: /r 1d20 /r2d4` would find ['/r 1d20', '/r2d4']
-        const allowedExpressionCharactersRegex = /^(d\d|\d+d\d+|kh\d+|kl\d+|ro(<|<=|>|>=|=)\d+|min\d+|\+|-|\d+|\s+|STR|DEX|CON|INT|WIS|CHA|PB)*/gi; // this is explicitly different from validExpressionRegex. This matches an expression at the beginning of a string while validExpressionRegex requires the entire string to match. It is also explicitly declaring the modifiers as case-sensitive because we can't search the entire thing as case-insensitive because the `d` in 1d20 needs to be lowercase.
+        window.JOINTHEDICESTREAM = window.EXPERIMENTAL_SETTINGS['streamDiceRolls'] == true;
+        enable_dice_streaming_feature(window.JOINTHEDICESTREAM);
 
-        if(window.EXPERIMENTAL_SETTINGS['streamDiceRolls']){
-          enable_dice_streaming_feature(window.JOINTHEDICESTREAM );
-        }
         tabCommunicationChannel.addEventListener ('message', (event) => {
+          if((event.data.msgType == 'addCondition' || event.data.msgType == 'removeCondition') && event.data.sendTo == window.PLAYER_ID){ // Sets a player token's condition on and off
+            const tokenId = Object.keys(window.all_token_objects).find(key => key.includes(event.data.characterId));
+            const pcToken = window.all_token_objects[tokenId];
+            if(!pcToken) return;
+            const condition = event.data.text;
+            const setOnOff = event.data.msgType;
+            
+            pcToken[setOnOff](condition);
+            pcToken.place_sync_persist();
+            return;
+          }
           if(event.data.msgType == 'CharacterData' && !find_pc_by_player_id(event.data.characterId, false))
             return;
           if(event.data.msgType == 'roll'){
@@ -133,8 +167,9 @@ $(function() {
                   event.data.msg.player,
                   event.data.msg.img,
                   "character",
-                  event.data.msg.playerId
-                ), event.data.multiroll, event.data.critRange, event.data.critType, event.data.msg.rollData.spellSave, event.data.msg.rollData.damageType);
+                  event.data.msg.playerId,
+                  event.data.msg.sendToOverride
+                ), event.data.multiroll, event.data.critRange, event.data.critType, event.data.msg.rollData.spellSave, event.data.msg.rollData.damageType, event.data.forceCritType);
               }
             }       
             return;
@@ -166,13 +201,8 @@ $(function() {
             if($(`.tokenselected:not([data-id*='profile'])`).length == 0){
               showTempMessage('No non-player tokens selected');
             }
-                
-            for(let i=0; i<window.CURRENTLY_SELECTED_TOKENS.length; i++){
-
-              let id = window.CURRENTLY_SELECTED_TOKENS[i];
-              let token = window.TOKEN_OBJECTS[id];
-              if(token.isPlayer() || token.isAoe())
-                continue;
+            forSelTokens((token, id) => {    
+              if(token.isPlayer() || token.isAoe()) return;
               let newHp = Math.max(0, parseInt(token.hp) - parseInt(event.data.damage));
 
               if(window.all_token_objects[id] != undefined){
@@ -183,7 +213,7 @@ $(function() {
                 token.place_sync_persist()
                 addFloatingCombatText(id, event.data.damage, event.data.damage<0);
               }   
-            }
+            })
           }
           if(event.data.msgType=='DMOpenAlready' && window.DM && window.location.href.includes(event.data.url)){  
             window.close();
@@ -219,7 +249,15 @@ $(function() {
             }
           }                 
           if(event.data.msgType=='placeAoe' && (event.data.sendTo == window.PLAYER_ID || (window.DM && event.data.sendTo == false)))  {
-              let options = build_aoe_token_options(event.data.data.color, event.data.data.shape, event.data.data.feet / window.CURRENT_SCENE_DATA.fpsq, event.data.data.name, event.data.data.lineWidth / window.CURRENT_SCENE_DATA.fpsq)
+              let shape = sanitize_aoe_shape(event.data.data.shape);
+              let feet = event.data.data.feet;
+              const circleIsSquare = window.top.get_avtt_setting_value('circleIsSquare');
+              if(circleIsSquare && shape == 'circle'){
+                shape = 'square';
+                feet *= 2;
+              }
+
+              let options = build_aoe_token_options(event.data.data.color, shape, feet / window.CURRENT_SCENE_DATA.fpsq, event.data.data.name, event.data.data.lineWidth / window.CURRENT_SCENE_DATA.fpsq)
               if(name == 'Darkness' || name == 'Maddening Darkness' ){
                 options = {
                   ...options,
@@ -245,7 +283,7 @@ $(function() {
               });
             }
             else if(event.data.msgType == 'projectionScroll' && event.data.sceneId == window.CURRENT_SCENE_DATA.id){
-              let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? 340 : 0);
+              let sidebarSize = ($('#hide_rightpanel.point-right').length>0 ? get_sidebar_width() : 0);
               let windowRatio = window.innerHeight / event.data.innerHeight;
 
               if(windowRatio == 1 && window.ZOOM == event.data.zoom){
@@ -291,6 +329,72 @@ $(function() {
         if (is_encounters_page()) {
           window.dispatchEvent(new Event('resize'));
         }
+      }).then(async ()=>{
+        if (navigator.brave && typeof navigator.brave.isBrave === 'function') {
+          if (localStorage.getItem("BraveShieldsWarningDismissed") === "true") {
+            return;
+          }
+          function isBraveFingerprintEnabled() {
+            try {
+              const canvas = document.createElement('canvas');
+              const size = 16;
+              canvas.width = size;
+              canvas.height = size;
+
+              const ctx = canvas.getContext('2d');
+              if (!ctx) return false;
+
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, size, size);
+
+              const imageData = ctx.getImageData(0, 0, size, size);
+              const data = imageData.data;
+
+              for (let i = 0; i < data.length; i += 4) {
+                if (data[i] !== 0 || data[i + 1] !== 0 || data[i + 2] !== 0) {
+                  return true;
+                }
+                if (data[i + 3] !== 255) {
+                  return true;
+                }
+              }
+
+              return false;
+            } catch (e) {
+              console.warn('Canvas fingerprint check failed', e);
+              return false;
+            }
+          }
+          function showBraveShieldsWarning() {
+            $("#above-vtt-error-message").remove();
+            const container = $(`
+              <div id="above-vtt-error-message">
+                <h2>Brave Shields is enabled</h2>
+                <div id="error-message-details">
+                  <p>Brave Shields blocks fingerprinting by adjusting canvas colors, which interferes with vision and elevation in AboveVTT.</p>
+                  <p>For full functionality, at minimum, block fingerprinting for canvas must be disabled in Brave Shields advanced settings. </p>
+                </div>
+                <label style="display:flex;align-items:center;margin-top:0.75rem;cursor:pointer;">
+                  <input id="brave-shields-warning-hide" type="checkbox" style="margin-right:0.5rem;">
+                  Do not show again
+                </label>
+                <div class="error-message-buttons">
+                  <button id="close-error-button">Close</button>
+                </div>
+              </div>
+            `);
+            $(document.body).append(container);
+            $("#close-error-button").on("click", () => {
+              if ($("#brave-shields-warning-hide").is(":checked")) {
+                localStorage.setItem("BraveShieldsWarningDismissed", "true");
+              }
+              removeError();
+            });
+          }
+          if(isBraveFingerprintEnabled()){
+            showBraveShieldsWarning();
+          }
+        }
       })
       .catch((error) => {
         showError(error, `Failed to start AboveVTT on ${window.location.href}`);
@@ -301,13 +405,13 @@ $(function() {
 
 
 const throttleProjectionScroll = throttle(async (f) => {
-    if(window.Projecting == undefined){
-      await f();
-      setTimeout(function(){
-        delete window.Projecting;
-      }, 1000/60)     
-    }
-}, 1000/60)
+    if(window.Projecting != undefined)
+      return;
+    await f();
+    setTimeout(function(){
+      delete window.Projecting;
+    }, 1000/60)     
+}, 1000/240)
 
 
 function addBeyond20EventListener(name, callback) {
@@ -327,7 +431,7 @@ function sendBeyond20Event(name, ...args) {
 function addExtensionPathStyles(){ // some above server images moved out of extension package
   let styles = `<style id='aboveExtensionPathStyles'>
     body{
-      --onedrive-svg: url('${window.EXTENSION_PATH}images/Onedrive_icon.svg');
+      --onedrive-svg: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgNS41IDMyIDIwLjUiPjx0aXRsZT5PZmZpY2VDb3JlMTBfMzJ4XzI0eF8yMHhfMTZ4XzAxLTIyLTIwMTk8L3RpdGxlPjxnIGlkPSJTVFlMRV9DT0xPUiI+PHBhdGggZD0iTTEyLjIwMjQ1LDExLjE5MjkybC4wMDAzMS0uMDAxMSw2LjcxNzY1LDQuMDIzNzksNC4wMDI5My0xLjY4NDUxLjAwMDE4LjAwMDY4QTYuNDc2OCw2LjQ3NjgsMCwwLDEsMjUuNSwxM2MuMTQ3NjQsMCwuMjkzNTguMDA2Ny40Mzg3OC4wMTYzOWExMC4wMDA3NSwxMC4wMDA3NSwwLDAsMC0xOC4wNDEtMy4wMTM4MUM3LjkzMiwxMC4wMDIxNSw3Ljk2NTcsMTAsOCwxMEE3Ljk2MDczLDcuOTYwNzMsMCwwLDEsMTIuMjAyNDUsMTEuMTkyOTJaIiBmaWxsPSIjMDM2NGI4Ii8+PHBhdGggZD0iTTEyLjIwMjc2LDExLjE5MTgybC0uMDAwMzEuMDAxMUE3Ljk2MDczLDcuOTYwNzMsMCwwLDAsOCwxMGMtLjAzNDMsMC0uMDY4MDUuMDAyMTUtLjEwMjIzLjAwMjU4QTcuOTk2NzYsNy45OTY3NiwwLDAsMCwxLjQzNzMyLDIyLjU3Mjc3bDUuOTI0LTIuNDkyOTIsMi42MzM0Mi0xLjEwODE5LDUuODYzNTMtMi40Njc0NiwzLjA2MjEzLTEuMjg4NTlaIiBmaWxsPSIjMDA3OGQ0Ii8+PHBhdGggZD0iTTI1LjkzODc4LDEzLjAxNjM5QzI1Ljc5MzU4LDEzLjAwNjcsMjUuNjQ3NjQsMTMsMjUuNSwxM2E2LjQ3NjgsNi40NzY4LDAsMCwwLTIuNTc2NDguNTMxNzhsLS4wMDAxOC0uMDAwNjgtNC4wMDI5MywxLjY4NDUxLDEuMTYwNzcuNjk1MjhMMjMuODg2MTEsMTguMTlsMS42NjAwOS45OTQzOCw1LjY3NjMzLDMuNDAwMDdhNi41MDAyLDYuNTAwMiwwLDAsMC01LjI4Mzc1LTkuNTY4MDVaIiBmaWxsPSIjMTQ5MGRmIi8+PHBhdGggZD0iTTI1LjU0NjIsMTkuMTg0MzcsMjMuODg2MTEsMTguMTlsLTMuODA0OTMtMi4yNzkxLTEuMTYwNzctLjY5NTI4TDE1Ljg1ODI4LDE2LjUwNDIsOS45OTQ3NSwxOC45NzE2Niw3LjM2MTMzLDIwLjA3OTg1bC01LjkyNCwyLjQ5MjkyQTcuOTg4ODksNy45ODg4OSwwLDAsMCw4LDI2SDI1LjVhNi40OTgzNyw2LjQ5ODM3LDAsMCwwLDUuNzIyNTMtMy40MTU1NloiIGZpbGw9IiMyOGE4ZWEiLz48L2c+PC9zdmc+');
       --onedrive-mask: url('${window.EXTENSION_PATH}images/Onedrive_icon.png');
       --avtt-mask: url('${window.EXTENSION_PATH}assets/avtt-logo.png');
     }
@@ -566,7 +670,6 @@ async function start_above_vtt_for_spectator() {
     window.startupSceneId = currentSceneData.playerscene;
     window.LOADING = true;
     const activeScene = await AboveApi.getScene(currentSceneData.playerscene);
-    console.log("attempting to handle scene", activeScene);
     startup_step("Loading Scene");
     window.MB.handleScene(activeScene);
     startup_step("Start up complete");
@@ -789,22 +892,22 @@ function inject_dm_roll_default_menu(){
       font-size:14px;
     }
     .mce-btn {
-      margin-right: 3px !important;
+      margin-right: 3px;
     }
     .mce-btn {
-        border: 1px solid #b1b1b1 !important;
-        border-color: rgba(0,0,0,0.1) rgba(0,0,0,0.1) rgba(0,0,0,0.25) rgba(0,0,0,0.25) !important;
-        position: relative !important;
-        text-shadow: 0 1px 1px rgba(255,255,255,0.75) !important;
-        display: inline-block !important;
-        *display: inline !important;
-        *zoom:1;-webkit-border-radius: 3px !important;
-        -moz-border-radius: 3px !important;
-        border-radius: 3px !important;
-        -webkit-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-        -moz-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-        background-color: #f0f0f0 !important;
+        border: 1px solid #b1b1b1;
+        border-color: rgba(0,0,0,0.1) rgba(0,0,0,0.1) rgba(0,0,0,0.25) rgba(0,0,0,0.25);
+        position: relative;
+        text-shadow: 0 1px 1px rgba(255,255,255,0.75);
+        display: inline-block;
+        *display: inline;
+        *zoom:1;-webkit-border-radius: 3px;
+        -moz-border-radius: 3px;
+        border-radius: 3px;
+        -webkit-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05);
+        -moz-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05);
+        background-color: #f0f0f0;
     }
 
     .mce-i-save:before {
@@ -1065,17 +1168,7 @@ async function start_above_vtt_for_players() {
     if(!window.CURRENT_SCENE_DATA.is_video || !window.CURRENT_SCENE_DATA.player_map.includes('youtu')){
       $("#youtube_controls_button").css('visibility', 'hidden');
     }
-    if ($('.stream-dice-button').length == 0){
-      $(".glc-game-log>[class*='Container-Flex']").append($(`<div id="stream_dice"><div class='stream-dice-button ${window.JOINTHEDICESTREAM ? `enabled` : ``}'>Dice Stream ${window.JOINTHEDICESTREAM ? `Enabled` : `Disabled`}</div></div>`));
-      $(".stream-dice-button").off().on("click", function () {
-        if (window.JOINTHEDICESTREAM) {
-          update_dice_streaming_feature(false);
-        }
-        else {
-          update_dice_streaming_feature(true);
-        }
-      })
-    }
+    add_dice_stream_gamelog_button()
      
   });
 
@@ -1094,7 +1187,6 @@ async function start_above_vtt_for_players() {
     window.startupSceneId = currentSceneData.playerscene;
     window.LOADING = true;
     const activeScene = await AboveApi.getScene(currentSceneData.playerscene);
-    console.log("attempting to handle scene", activeScene);
     startup_step("Loading Scene");
     window.MB.handleScene(activeScene);
     startup_step("Start up complete");
@@ -1102,7 +1194,7 @@ async function start_above_vtt_for_players() {
     console.error("There isn't a player map! we need to display something!");
     startup_step("Start up complete. Waiting for DM to send us a map");
   }
-  if($('.dice-rolling-panel').length == 0){
+  if($('.dice-rolling-panel, [data-floating-ui-portal]').length == 0){
     showDiceDisabledWarning();
   }
 }
@@ -1117,7 +1209,7 @@ async function lock_character_gamelog_open() {
   }
 
   // Open the gamelog, and lock it open
-  let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']");
+  let gameLogButton = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton'], div[class*='campaignButtonGroup'][aria-roledescription*='Game Log']");
   if(gameLogButton.length == 0){
     $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]'); // this is a fall back to look for the gamelog svg icon and look for it's button.
   }
@@ -1179,23 +1271,21 @@ async function fetch_sceneList_and_scenes() {
     window.PLAYER_SCENE_ID = currentSceneData.playerscene;
   } 
 
-  console.log("fetch_sceneList_and_scenes set window.PLAYER_SCENE_ID to", window.PLAYER_SCENE_ID);
+  noisy_log("fetch_sceneList_and_scenes set window.PLAYER_SCENE_ID to", window.PLAYER_SCENE_ID);
 
   let activeScene = undefined;
   if (currentSceneData.dmscene && window.ScenesHandler.scenes.find(s => s.id === currentSceneData.dmscene)) {
     window.LOADING = true;
     activeScene = await AboveApi.getScene(currentSceneData.dmscene);
-    console.log("attempting to handle scene", activeScene);
     // window.MB.handleScene(activeScene);
   } else if (window.ScenesHandler.scenes.length > 0) {
     window.LOADING = true;
     activeScene = await AboveApi.getScene(window.ScenesHandler.scenes[0].id);
-    console.log("attempting to handle scene", activeScene);
   }
   if(activeScene)
     window.MB.handleScene(activeScene);
   else
     delete window.LOADING
-  console.log("fetch_sceneList_and_scenes done");
+  noisy_log("fetch_sceneList_and_scenes done");
   return activeScene;
 }

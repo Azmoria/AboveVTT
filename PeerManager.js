@@ -14,6 +14,12 @@ class PeerManager {
   /** The id of the stale connection loop. We monitor for stale connections and try to clean them up. This tracks that loop */
   staleConnectionTimerId = undefined;
 
+  /** A short-lived cache of handled handshake events to prevent replay storms from repeated peerReady/peerConnect messages */
+  handshakeCache = new Map();
+
+  /** How long to suppress duplicate handshake handling for the same remote peer */
+  handshakeCooldownMs = 5000;
+
   /** a list of ids to avoid sending cursor events to */
   skipCursorEvents = [];
 
@@ -27,7 +33,7 @@ class PeerManager {
    * @param {string} playerId the DDB id of the player to stop sending cursor events to */
   addToSkipCursorEvents(playerId) {
     if (!window.PeerManager.skipCursorEvents.includes(playerId)) {
-      console.debug("PeerManager.addToSkipCursorEvents", playerId);
+      noisy_log("PeerManager.addToSkipCursorEvents", playerId);
       window.PeerManager.skipCursorEvents.push(playerId);
     }
   }
@@ -37,7 +43,7 @@ class PeerManager {
   removeFromSkipCursorEvents(playerId) {
     const index = window.PeerManager.skipCursorEvents.indexOf(playerId);
     if (index >= 0) {
-      console.debug("PeerManager.removeFromSkipCursorEvents", playerId);
+      noisy_log("PeerManager.removeFromSkipCursorEvents", playerId);
       window.PeerManager.skipCursorEvents.splice(index, 1);
     }
   }
@@ -46,7 +52,7 @@ class PeerManager {
    * @param {string} playerId the DDB id of the player to stop sending ruler events to */
   addToSkipRulerEvents(playerId) {
     if (!window.PeerManager.skipRulerEvents.includes(playerId)) {
-      console.debug("PeerManager.addToSkipRulerEvents", playerId);
+      noisy_log("PeerManager.addToSkipRulerEvents", playerId);
       window.PeerManager.skipRulerEvents.push(playerId);
     }
   }
@@ -56,7 +62,7 @@ class PeerManager {
   removeFromSkipRulerEvents(playerId) {
     const index = window.PeerManager.skipRulerEvents.indexOf(playerId);
     if (index >= 0) {
-      console.debug("PeerManager.removeFromSkipRulerEvents", playerId);
+      noisy_log("PeerManager.removeFromSkipRulerEvents", playerId);
       window.PeerManager.skipRulerEvents.splice(index, 1);
     }
   }
@@ -82,7 +88,7 @@ class PeerManager {
       });
       conn.on("error", (error) => {
         console.error("PeerManager connection error", error);
-        // should we call rebuild_peerManager() here?
+        window.PeerManager.disconnectFromPeer(conn.peer);
       });
     });
     this.peer.on('error', function (error) {
@@ -92,6 +98,8 @@ class PeerManager {
   }
 
   tearDown() {
+    clearInterval(this.staleConnectionTimerId);
+    this.staleConnectionTimerId = undefined;
     this.disconnectAllPeers();
     this.peer.disconnect();
     this.peer.destroy();
@@ -113,6 +121,37 @@ class PeerManager {
     }
   }
 
+  /** Returns true if the handshake for the given remote peer should still be processed. */
+  shouldProcessHandshake(msg, eventType) {
+    const remotePeerId = msg?.data?.peerId;
+    const remotePlayerId = msg?.data?.playerId;
+    const key = `${eventType}:${remotePeerId || ""}:${remotePlayerId || ""}`;
+    const now = Date.now();
+    const previous = this.handshakeCache.get(key);
+
+    if (previous && now - previous < this.handshakeCooldownMs) {
+      noisy_log("PeerManager skipping duplicate handshake", eventType, msg?.data);
+      return false;
+    }
+
+    this.handshakeCache.set(key, now);
+    return true;
+  }
+
+  /** Returns true if we already have a non-stale connection for the same remote peer/player. */
+  hasActiveConnection(remotePeerId, remotePlayerId) {
+    const playerId = `${remotePlayerId ?? ""}`;
+    return this.connections.some(pc => {
+      if (remotePeerId && pc.peerId === remotePeerId) {
+        return !pc.isStale;
+      }
+      if (playerId && pc.playerId === playerId) {
+        return !pc.isStale;
+      }
+      return false;
+    });
+  }
+
   /** Sends a peerReady event over the websocket.
    * Any connected players will respond with their connection details which will call {@link receivedPeerConnect} */
   readyToConnect() {
@@ -121,7 +160,7 @@ class PeerManager {
       return;
     }
     try {
-      console.debug("PeerManager.readyToConnect");
+      noisy_log("PeerManager.readyToConnect");
       const peerId = this.peer.id;
       const playerId = my_player_id();
       if (!peerId || !playerId) {
@@ -142,7 +181,14 @@ class PeerManager {
       return;
     }
     try {
-      console.debug("PeerManager.receivedPeerReady", msg);
+      noisy_log("PeerManager.receivedPeerReady", msg);
+      if (!this.shouldProcessHandshake(msg, "peerReady")) {
+        return;
+      }
+      if (this.hasActiveConnection(msg?.data?.peerId, msg?.data?.playerId)) {
+        noisy_log("PeerManager.receivedPeerReady skipping existing active connection", msg?.data);
+        return;
+      }
       // This user just joined. Initiate the connection.
       window.PeerManager.connectTo(msg.data.peerId, msg.data.playerId);
       // now let them know that how to connect to us
@@ -163,8 +209,15 @@ class PeerManager {
       return;
     }
     try {
-      console.debug("PeerManager.receivedPeerConnect", msg);
+      noisy_log("PeerManager.receivedPeerConnect", msg);
+      if (!this.shouldProcessHandshake(msg, "peerConnect")) {
+        return;
+      }
       if (msg.data.initiator === window.PeerManager.peer.id) { // make sure they're sending it to us
+        if (this.hasActiveConnection(msg?.data?.peerId, msg?.data?.playerId)) {
+          noisy_log("PeerManager.receivedPeerConnect skipping existing active connection", msg?.data);
+          return;
+        }
         window.PeerManager.connectTo(msg.data.peerId, msg.data.playerId);
       }
     } catch (error) {
@@ -178,7 +231,7 @@ class PeerManager {
    * @param {string} peerId - the id of the peerjs peer
    * @param {string} playerId - the DDB id of the player */
   connectTo(peerId, playerId) {
-    console.debug("PeerManager.connectTo", peerId, playerId);
+    noisy_log("PeerManager.connectTo", peerId, playerId);
     try {
       if (!peerId || !playerId) {
         console.warn("PeerManager.connectTo cannot connect with missing id", peerId, playerId);
@@ -200,11 +253,11 @@ class PeerManager {
       } else if (existingConnections.length === 1) {
         if (existingConnections[0].isStale) {
           // clean it up first
-          console.debug("PeerManager.connectTo found an existing connection that is stale", existingConnections[0]);
+          noisy_log("PeerManager.connectTo found an existing connection that is stale", existingConnections[0]);
           this.disconnectAndRemoveConnection(existingConnections[0]);
         } else {
           // we have an existing connection that isn't stale. No need to connect
-          console.debug("PeerManager.connectTo found an existing connection that isn't stale", existingConnections[0]);
+          noisy_log("PeerManager.connectTo found an existing connection that isn't stale", existingConnections[0]);
           return;
         }
       }
@@ -212,7 +265,7 @@ class PeerManager {
       console.log("PeerManager.connectTo is attempting to connect to", peerId, playerId);
       const connection = this.peer.connect(peerId);
       this.connections.push(new PeerConnection(peerId, playerId, connection));
-      console.debug("PeerManager.connectTo added connection", connection, this.connections);
+      noisy_log("PeerManager.connectTo added connection", connection, this.connections);
       this.startMonitoringStaleConnections();
     } catch (error) {
       console.error("PeerManager.connectTo failed to connect to", peerId, playerId, error);
@@ -222,7 +275,7 @@ class PeerManager {
   /** looks for any stale connections to the given peerjs peerId and attempts to disconnect them
    * @param {string} peerId the id of the peerjs peer */
   cleanUpStalePeerConnections(peerId) {
-    console.debug("PeerManager.cleanUpStalePeerConnections", peerId)
+    noisy_log("PeerManager.cleanUpStalePeerConnections", peerId)
     this.connections
       .filter(pc => pc.peerId === peerId)
       .forEach(pc => {
@@ -235,7 +288,7 @@ class PeerManager {
   /** looks for any stale connections to the given DDB playerId and attempts to disconnect them
    * @param {string} playerId the id of the DDB player */
   cleanUpStalePlayerConnections(playerId) {
-    console.debug("PeerManager.cleanUpStalePlayerConnections", playerId)
+    noisy_log("PeerManager.cleanUpStalePlayerConnections", playerId)
     this.connections
       .filter(pc => pc.playerId === playerId)
       .forEach(pc => {
@@ -247,7 +300,7 @@ class PeerManager {
 
   /** disconnects all peers */
   disconnectAllPeers() {
-    console.debug("PeerManager.disconnectAllPeers");
+    noisy_log("PeerManager.disconnectAllPeers");
     this.connections
       .map(pc => pc) // map to a new list to avoid removing items form the list while iterating over it
       .forEach(pc => this.disconnectAndRemoveConnection(pc));
@@ -256,14 +309,14 @@ class PeerManager {
   /** disconnects from the specified peerjs peer
    * @param {string} peerId the id of the peerjs peer */
   disconnectFromPeer(peerId) {
-    console.debug("PeerManager.disconnectFromPeer", peerId);
+    noisy_log("PeerManager.disconnectFromPeer", peerId);
     this.disconnectAndRemoveConnection(this.findConnectionByPeerId(peerId));
   }
 
   /** disconnects from the specified DDB player
    * @param {string} playerId the id of the DDB player */
   disconnectFromPlayer(playerId) {
-    console.debug("PeerManager.disconnectFromPlayer", playerId);
+    noisy_log("PeerManager.disconnectFromPlayer", playerId);
     this.disconnectAndRemoveConnection(this.findConnectionByPlayerId(playerId))
   }
 
@@ -274,7 +327,7 @@ class PeerManager {
       if (!peerConnection) {
         return;
       }
-      console.debug("PeerManager.disconnectAndRemoveConnection", peerConnection);
+      noisy_log("PeerManager.disconnectAndRemoveConnection", peerConnection);
       const index = this.connections.indexOf(peerConnection);
       this.connections.splice(index, 1);
       peerConnection.connection.close();
@@ -342,9 +395,9 @@ class PeerManager {
     try {
       const pc = this.findConnectionByPeerId(peerId);
       if (pc.isOpen) {
-        console.debug("PeerManager is sending to peer", pc, data);
+        noisy_log("PeerManager is sending to peer", pc, data);
       } else {
-        console.debug("PeerManager is not sending to a connection that is not open", pc.connection.open, pc);
+        noisy_log("PeerManager is not sending to a connection that is not open", pc.connection.open, pc);
       }
       pc.connection.send(data);
     } catch (error) {
@@ -362,7 +415,7 @@ class PeerManager {
       if (pc.isOpen) {
         pc.connection.send(data);
       } else {
-        console.debug("PeerManager is not sending to a connection that is not open", pc);
+        noisy_log("PeerManager is not sending to a connection that is not open", pc);
       }
     } catch (error) {
       console.warn("PeerManager failed to send data to player", playerId, data)
@@ -381,6 +434,7 @@ class PeerManager {
 
   /** Checks for and cleans up stale connections */
   checkForStaleConnections() {
+    if (!this.peer || this.peer.destroyed) return;
     try {
       let attemptReconnect = false;
       // first let's clean up everything that we actually know about
@@ -398,31 +452,31 @@ class PeerManager {
         connections.forEach(conn => {
           if (!conn.open) {
             try {
-              console.debug("PeerManager.checkForStaleConnections attempting to close an already closed connection");
+              noisy_log("PeerManager.checkForStaleConnections attempting to close an already closed connection");
               conn.close();
             } catch (error) {
-              console.debug("PeerManager.checkForStaleConnections failed to close an already closed connection", error);
+              noisy_log("PeerManager.checkForStaleConnections failed to close an already closed connection", error);
             }
             try {
-              console.debug("PeerManager.checkForStaleConnections attempting to destroy a closed connection");
+              noisy_log("PeerManager.checkForStaleConnections attempting to destroy a closed connection");
               conn.destroy();
             } catch (error) {
-              console.debug("PeerManager.checkForStaleConnections failed to destroy a closed connection", error);
+              noisy_log("PeerManager.checkForStaleConnections failed to destroy a closed connection", error);
             }
             attemptReconnect = true;
           } else if (!this.findConnectionByPeerId(peerId)) {
             // We have an abandoned connection. Close it, and try to reconnect
             try {
-              console.debug("PeerManager.checkForStaleConnections attempting to close an abandoned connection");
+              noisy_log("PeerManager.checkForStaleConnections attempting to close an abandoned connection");
               conn.close();
             } catch (error) {
-              console.debug("PeerManager.checkForStaleConnections failed to close an abandoned connection", error);
+              noisy_log("PeerManager.checkForStaleConnections failed to close an abandoned connection", error);
             }
             try {
-              console.debug("PeerManager.checkForStaleConnections attempting to destroy an abandoned connection");
+              noisy_log("PeerManager.checkForStaleConnections attempting to destroy an abandoned connection");
               conn.destroy();
             } catch (error) {
-              console.debug("PeerManager.checkForStaleConnections failed to destroy an abandoned connection", error);
+              noisy_log("PeerManager.checkForStaleConnections failed to destroy an abandoned connection", error);
             }
             attemptReconnect = true;
           }
