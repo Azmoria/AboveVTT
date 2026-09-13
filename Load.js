@@ -120,10 +120,11 @@
         "color-picker.min.css",
         "spectrum-2.0.8.min.css",
         "magnific-popup.css",
+        "RollBuffs.css",
         "DiceContextMenu/DiceContextMenu.css"
     ];
     const simpleAvttStyles = [
-        "DiceContextMenu/DiceContextMenu.css", "jquery.contextMenu.css"
+        "DiceContextMenu/DiceContextMenu.css", "jquery.contextMenu.css", "RollBuffs.css"
     ]
     
     function injectStyles(styles, where) {
@@ -207,7 +208,10 @@
               ] : [
                     ...avttScripts,
                     "Load.js",//load Loader on VTT full pages (for iframe inject - see below)
-                   (pgType.endsWith("-dm") ? "SceneData.js" : "CharactersPage.js"),
+                    // CharactersPage.js is loaded on the DM page too - it owns the roll buff data and UI
+                    // that token stat blocks need. Its page setup no-ops outside the character sheet.
+                    "CharactersPage.js",
+                    ...(pgType.endsWith("-dm") ? ["SceneData.js"] : []),
                   ];
         if(pgType.startsWith("vtt-")) scripts.push("Startup.mjs");        
         await injectScripts(scripts, where);

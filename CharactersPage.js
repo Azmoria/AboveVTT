@@ -1429,6 +1429,10 @@ function read_inspiration(container = $(document)) {
 // Good canidate for service worker
 async function init_characters_pages(container = $(document)) {
 
+  // The DM and spectator pages load this file only for the roll buff data/UI, so skip the
+  // character page setup (notably the location observer) when we aren't on a character page.
+  if (!window.location.pathname.match("/characters")) return;
+
   // this is injected on Main.js when avtt is running. Make sure we set it when avtt is not running
   if (typeof window.EXTENSION_PATH !== "string" || window.EXTENSION_PATH.length <= 1) {
     window.EXTENSION_PATH = container.find("#extensionpath").attr('data-path');
@@ -1774,12 +1778,12 @@ function register_buff_row_context_menu() {
               rollBuffFavorites.push(rowBuff)
             }
             localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-            rebuild_buffs();
+            rebuild_all_buff_dropdowns();
 
         }
       };
       menuItems["pin"] = {
-        name: rollBuffPins.includes(rowBuff) ? "Unpin from Sheet" : "Pin to Sheet",
+        name: rollBuffPins.includes(rowBuff) ? "Unpin" : "Pin",
         callback: function(itemKey, opt, originalEvent) {
             if(rollBuffPins.includes(rowBuff)){
               rollBuffPins = rollBuffPins.filter(d=> d != rowBuff)
@@ -1788,7 +1792,7 @@ function register_buff_row_context_menu() {
               rollBuffPins.push(rowBuff)
             }
             localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-            rebuild_buffs();
+            rebuild_all_buff_dropdowns();
 
         }
       };
@@ -1831,43 +1835,144 @@ function click_condition(conditionName, setToggle = true, callback, addtionalCSS
     $('#condition-click').remove();
   }, 40)	
 }
+/** Every buff dropdown currently in the DOM, so favorite/pin changes can refresh all of them. */
+window.avttBuffDropdowns = window.avttBuffDropdowns || [];
+
+function rebuild_all_buff_dropdowns(){
+  window.avttBuffDropdowns = window.avttBuffDropdowns.filter(entry => entry.element.closest("html").length > 0);
+  window.avttBuffDropdowns.forEach(entry => build_buff_dropdown(entry.scope, false));
+}
+
+function get_buff_token(tokenId){
+  return window.TOKEN_OBJECTS?.[tokenId] || window.all_token_objects?.[tokenId];
+}
+
+/** Token ids contain slashes, so they can't be used in an id attribute or selector as-is. */
+function buff_dropdown_element_id(scope){
+  if(scope?.type !== 'token') return 'avtt-buff-options';
+  return `avtt-buff-options-${`${scope.tokenId}`.replace(/[^a-z0-9_-]/gi, '_')}`;
+}
+
+/** Storage and condition plumbing, which differs between the character sheet and a token stat block. */
+function buff_scope_accessor(scope){
+  const elementId = buff_dropdown_element_id(scope);
+  if(scope?.type === 'token'){
+    const tokenId = scope.tokenId;
+    return {
+      elementId,
+      canEdit: function(){
+        const token = get_buff_token(tokenId);
+        return token != undefined && (window.DM == true || token.options.player_owned == true);
+      },
+      read: function(){
+        return [...(get_buff_token(tokenId)?.options?.rollbuffs || [])];
+      },
+      write: function(buffs){
+        if(window.all_token_objects?.[tokenId] != undefined){
+          window.all_token_objects[tokenId].options.rollbuffs = buffs;
+        }
+        const token = window.TOKEN_OBJECTS?.[tokenId];
+        if(token == undefined) return;
+        token.options.rollbuffs = buffs;
+        token.place_sync_persist();
+      },
+      setCondition: function(condition, value){
+        const token = window.TOKEN_OBJECTS?.[tokenId];
+        if(token == undefined) return;
+        token[(value !== false && value !== '0') ? 'addCondition' : 'removeCondition'](condition);
+        token.place_sync_persist();
+      }
+    };
+  }
+  return {
+    elementId,
+    canEdit: function(){ return true; },
+    read: function(){
+      return JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
+    },
+    write: function(buffs){
+      window.rollBuffs = buffs;
+      localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(buffs));
+    },
+    setCondition: function(condition, value, context = {}){
+      const turnOn = value !== false && value !== '0';
+      const additionalCSS = context.menuOpen ? `.dropdown-check-list .avttBuffItems {
+              display: block !important;
+              position: absolute !important;
+              background: var(--theme-background-solid) !important;
+              z-index: 200 !important;
+          }` : '';
+      if(STANDARD_CONDITIONS.includes(condition)){
+        click_condition(condition, value, context.menuOpen ? context.onDone : undefined, additionalCSS);
+      } else if (is_abovevtt_page()) {
+        const pc = find_pc_by_player_id(window.PLAYER_ID, false);
+        if (!pc) return;
+        const token = window.all_token_objects[pc.sheet];
+        if (!token) return;
+        token[turnOn ? 'addCondition' : 'removeCondition'](condition);
+        token.place_sync_persist();
+      } else {
+        tabCommunicationChannel.postMessage({
+          msgType: turnOn ? 'addCondition' : 'removeCondition',
+          characterId: window.PLAYER_ID,
+          text: condition,
+          sendTo: window.sendToTab
+        })
+      }
+    }
+  };
+}
+
 function rebuild_buffs(fullBuild = false){
-  window.rollBuffs = JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
-  const buffDebuffKeys=Object.keys(buffsDebuffs);
-  const originalLength = window.rollBuffs.length;
-  window.rollBuffs = window.rollBuffs.filter(buff =>
+  return build_buff_dropdown({ type: 'character' }, fullBuild);
+}
+
+/** @param scope {{type: 'character'}|{type: 'token', tokenId: string}} whose buffs this dropdown edits */
+function build_buff_dropdown(scope = { type: 'character' }, fullBuild = false){
+  const accessor = buff_scope_accessor(scope);
+  const isCharacterScope = scope?.type !== 'token';
+  const elementId = accessor.elementId;
+  const idPrefix = isCharacterScope ? '' : `${elementId}_`;
+  const editable = accessor.canEdit();
+
+  const buffDebuffKeys = Object.keys(buffsDebuffs);
+  let selectedBuffs = accessor.read();
+  const originalLength = selectedBuffs.length;
+  selectedBuffs = selectedBuffs.filter(buff =>
     Array.isArray(buff) ? buffDebuffKeys.includes(buff[0]) : buffDebuffKeys.includes(buff)
   );
-  if(window.rollBuffs.length !== originalLength)
-    localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
+  if(selectedBuffs.length !== originalLength && editable)
+    accessor.write(selectedBuffs);
+  if(isCharacterScope)
+    window.rollBuffs = selectedBuffs;
   rollBuffFavorites = JSON.parse(localStorage.getItem('rollFavoriteBuffs' + window.PLAYER_ID)) || [];
   rollBuffPins = JSON.parse(localStorage.getItem('rollBuffPins' + window.PLAYER_ID)) || [];
   let avttBuffSelect;
   const innerBuffHtml = `
-    <ul id='favoriteBuffs'><li>Favorite</li></ul>
-    <ul id='classBuffs'><li>Class</li>
-      <ul id='barbarianBuffs'><li>Barbarian</li></ul>
-      <ul id='bardBuffs'><li>Bard</li></ul>
-      <ul id='clericBuffs'><li>Cleric</li></ul>
-      <ul id='druidBuffs'><li>Druid</li></ul>
-      <ul id='fighterBuffs'><li>Fighter</li></ul>
-      <ul id='monkBuffs'><li>Monk</li></ul>
-      <ul id='paladinBuffs'><li>Paladin</li></ul>
-      <ul id='rangerBuffs'><li>Ranger</li></ul>
-      <ul id='rogueBuffs'><li>Rogue</li></ul>
-      <ul id='sorcererBuffs'><li>Sorcerer</li></ul>
-      <ul id='warlockBuffs'><li>Warlock</li></ul>
-      <ul id='wizardBuffs'><li>Wizard</li></ul>
+    <ul id='${idPrefix}favoriteBuffs' data-group='favorite'><li>Favorite</li></ul>
+    <ul data-group='class'><li>Class</li>
+      <ul data-group='barbarian'><li>Barbarian</li></ul>
+      <ul data-group='bard'><li>Bard</li></ul>
+      <ul data-group='cleric'><li>Cleric</li></ul>
+      <ul data-group='druid'><li>Druid</li></ul>
+      <ul data-group='fighter'><li>Fighter</li></ul>
+      <ul data-group='monk'><li>Monk</li></ul>
+      <ul data-group='paladin'><li>Paladin</li></ul>
+      <ul data-group='ranger'><li>Ranger</li></ul>
+      <ul data-group='rogue'><li>Rogue</li></ul>
+      <ul data-group='sorcerer'><li>Sorcerer</li></ul>
+      <ul data-group='warlock'><li>Warlock</li></ul>
+      <ul data-group='wizard'><li>Wizard</li></ul>
     </ul>
-    <ul id='speciesBuffs'><li>Species</li>
-      <ul id='halflingBuffs'><li>Halfling</li></ul>
+    <ul data-group='species'><li>Species</li>
+      <ul data-group='halfling'><li>Halfling</li></ul>
     </ul>      
-    <ul id='spellBuffs'><li>Spells</li></ul>
-    <ul id='featBuffs'><li>Feats</li></ul>
-    <ul id='2024conditionBuffs'><li>Conditions</li></ul>
+    <ul data-group='spell'><li>Spells</li></ul>
+    <ul data-group='feat'><li>Feats</li></ul>
+    <ul data-group='2024condition'><li>Conditions</li></ul>
   `
   if(fullBuild){
-    avttBuffSelect = $(`<div id="avtt-buff-options" class="dropdown-check-list">
+    avttBuffSelect = $(`<div id="${elementId}" class="dropdown-check-list${editable ? '' : ' readonly'}">
       <span class="clickHandle">Roll Buff/Debuffs</span>
       <ul class="avttBuffItems">
         ${innerBuffHtml}      
@@ -1875,7 +1980,11 @@ function rebuild_buffs(fullBuild = false){
     </div>`)
   }
   else{
-    avttBuffSelect = $(`#avtt-buff-options`);
+    // the registry keeps a handle on dropdowns living in popout documents, which $('#id') can't reach
+    const registered = window.avttBuffDropdowns.find(entry => entry.id === elementId);
+    avttBuffSelect = registered?.element?.closest('html').length > 0 ? registered.element : $(`#${elementId}`);
+    if(avttBuffSelect.length === 0) return undefined;
+    avttBuffSelect.toggleClass('readonly', !editable);
     avttBuffSelect.find('.avttBuffItems').html(innerBuffHtml)
   }
   const toggleBuffMenuVisiblity = function(){
@@ -1884,7 +1993,7 @@ function rebuild_buffs(fullBuild = false){
       //set a timeout here to allow other automated clicks such as clicking the gamelog after setting a condition to finish before adding the close event
       setTimeout(function(){
         $(document).on('click.blurHandle', function(e){
-          if($(e.target).closest('#avtt-buff-options, .context-menu-list').length == 0){
+          if($(e.target).closest(`#${elementId}, .context-menu-list`).length == 0){
             avttBuffSelect.toggleClass('visible', false)
             $(document).off('click.blurHandle');
           }
@@ -1901,6 +2010,17 @@ function rebuild_buffs(fullBuild = false){
     if($(e.target).is('li:first-of-type'))
       $(e.target).closest('ul').toggleClass('collapsed');
   })
+
+  /** Persists a buff selection and mirrors any condition the buff carries. */
+  const applyBuffChange = function(buffName, value, updatedBuffs){
+    accessor.write(updatedBuffs);
+    if(buffsDebuffs[buffName].condition == undefined) return;
+    accessor.setCondition(buffsDebuffs[buffName].condition, value, {
+      menuOpen: avttBuffSelect.hasClass('visible'),
+      onDone: toggleBuffMenuVisiblity
+    });
+  }
+
   const sortedBuffs = Object.keys(buffsDebuffs).sort().reduce(
     (obj, key) => { 
       obj[key] = buffsDebuffs[key]; 
@@ -1908,28 +2028,30 @@ function rebuild_buffs(fullBuild = false){
     }, 
     {}
   );
-  const pinWrapper = $(`<div id='avttBuffSheetPins'></div>`);
-  $('#avttBuffSheetPins').remove()
+  const pinWrapper = $(`<div id='${idPrefix}avttBuffSheetPins' class='avttBuffSheetPins'></div>`);
+  $(`#${idPrefix}avttBuffSheetPins`).remove()
  
   for(let i in sortedBuffs){
-    const headerRow = avttBuffItems.find(`ul#${buffsDebuffs[i].type == 'class' ? buffsDebuffs[i].class : buffsDebuffs[i].type == 'species' ? buffsDebuffs[i].species : buffsDebuffs[i].type}Buffs`);
+    const groupName = buffsDebuffs[i].type == 'class' ? buffsDebuffs[i].class : buffsDebuffs[i].type == 'species' ? buffsDebuffs[i].species : buffsDebuffs[i].type;
+    const headerRow = avttBuffItems.find(`ul[data-group='${groupName}']`);
     const replacedName = i.replace("'", '');
     const addToFavorite = rollBuffFavorites.includes(replacedName);
     const addToPins = rollBuffPins.includes(replacedName);
+    const pinnedId = `${idPrefix}pin_buff_${replacedName}`;
 
     if(buffsDebuffs[i]['multiOptions'] != undefined){
       const row = $(`<li>
-        <select id='buff_${replacedName}' data-buff='${replacedName}'/>
+        <select id='${idPrefix}buff_${replacedName}' data-buff='${replacedName}'/>
           <option value='0'></option>
         </select>
-        <label for='buff_${replacedName}'>${i}</label>
+        <label for='${idPrefix}buff_${replacedName}'>${i}</label>
         <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
+          <span title='Pin' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
           <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
         </div>
       </li>`)
       const select = row.find('select');
-      const currentSelected = window.rollBuffs.find(d => d.includes(i));
+      const currentSelected = selectedBuffs.find(d => d.includes(i));
 
       for(let j in buffsDebuffs[i]['multiOptions']){
         const option = $(`<option value='${j}'>${j}</option>`);
@@ -1938,51 +2060,16 @@ function rebuild_buffs(fullBuild = false){
       if(currentSelected != undefined){
         select.val(currentSelected[1])
       }
+      select.prop('disabled', !editable);
       row.find('select').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).val() != '0'){
-          window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-          window.rollBuffs.push([i, $(this).val()])
+        e.stopPropagation(); // the stat block window delegates input events for its own trackers
+        const value = $(this).val();
+        let updated = accessor.read().filter(d => !d.includes(i));
+        if(value != '0'){
+          updated.push([i, value])
         }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
         $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          const value = $(this).val();
-          if( value != '0'){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-              click_condition(condition, value, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          }
-          else if (is_abovevtt_page()) {        
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
+        applyBuffChange(i, value, updated);
       })
       row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
         e.preventDefault();
@@ -1994,7 +2081,7 @@ function rebuild_buffs(fullBuild = false){
           rollBuffFavorites.push(replacedName)
         }
         localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
+        rebuild_all_buff_dropdowns();
       })
       row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
         e.preventDefault();
@@ -2006,16 +2093,18 @@ function rebuild_buffs(fullBuild = false){
           rollBuffPins.push(replacedName)
         }
         localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
+        rebuild_all_buff_dropdowns();
       })
       if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);  
+        avttBuffItems.find(`ul[data-group='favorite']`).append(row);  
       else    
         headerRow.append(row);
 
       if(addToPins){
         const cloneRow = row.clone(true, true);
         const cloneSelect = cloneRow.find('select');
+        cloneSelect.attr('id', pinnedId);
+        cloneRow.find('label').attr('for', pinnedId);
         if(currentSelected != undefined){
           cloneSelect.val(currentSelected[1])
         }
@@ -2029,58 +2118,25 @@ function rebuild_buffs(fullBuild = false){
       }
     }else{
       const row = $(`<li>
-        <input type="checkbox" id='buff_${replacedName}' data-buff='${replacedName}'/>
-        <label for='buff_${replacedName}'>${i}</label>
+        <input type="checkbox" id='${idPrefix}buff_${replacedName}' data-buff='${replacedName}'/>
+        <label for='${idPrefix}buff_${replacedName}'>${i}</label>
         <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
+          <span title='Pin' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
           <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
         </div>
       </li>`)
-      if(window.rollBuffs.includes(i))
+      if(selectedBuffs.includes(i))
         row.find('input').prop('checked', true);
+      row.find('input').prop('disabled', !editable);
       row.find('input').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).is(':checked')){
-          window.rollBuffs.push(i)
+        e.stopPropagation(); // the stat block window delegates input events for its own trackers
+        const checked = $(this).is(':checked');
+        let updated = accessor.read().filter(d => d != i);
+        if(checked){
+          updated.push(i)
         }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => d != i); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
         $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          if($(this).is(':checked')){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-            click_condition(condition, setOnOff == 'addCondition' ? true : false, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          } else if (is_abovevtt_page()) {
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
+        applyBuffChange(i, checked, updated);
       })
       row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
         e.preventDefault();
@@ -2092,7 +2148,7 @@ function rebuild_buffs(fullBuild = false){
           rollBuffFavorites.push(replacedName)
         }
         localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
+        rebuild_all_buff_dropdowns();
       })
       row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
         e.preventDefault();
@@ -2104,15 +2160,17 @@ function rebuild_buffs(fullBuild = false){
           rollBuffPins.push(replacedName)
         }
         localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
+        rebuild_all_buff_dropdowns();
       })
       if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);
+        avttBuffItems.find(`ul[data-group='favorite']`).append(row);
       else   
         headerRow.append(row);
 
       if(addToPins){
         const cloneRow = row.clone(true, true);
+         cloneRow.find('input').attr('id', pinnedId);
+         cloneRow.find('label').attr('for', pinnedId);
          cloneRow.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
             row.find('input').prop('checked', $(this).is(':checked'));
          })
@@ -2129,12 +2187,21 @@ function rebuild_buffs(fullBuild = false){
       $(this).hide();
   })
 
-  if(fullBuild)
-    $('.ct-primary-box__tab--actions .ct-actions h2, .ct-actions-mobile .ct-actions h2, .ct-actions-tablet .ct-tablet-box__header').after(avttBuffSelect)
-  
-  const tabContent = $(`#avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_content'], #avtt-buff-options~.ct-tablet-box__content [class*='styles_tabFilter']>[class*='styles_content']`);
-  tabContent.prepend(pinWrapper);
+  if(fullBuild){
+    if(isCharacterScope)
+      $('.ct-primary-box__tab--actions .ct-actions h2, .ct-actions-mobile .ct-actions h2, .ct-actions-tablet .ct-tablet-box__header').after(avttBuffSelect)
+    window.avttBuffDropdowns = window.avttBuffDropdowns.filter(entry => entry.id !== elementId);
+    window.avttBuffDropdowns.push({ id: elementId, scope, element: avttBuffSelect });
+  }
+
+  if(isCharacterScope){
+    const tabContent = $(`#${elementId}~[class*='styles_tabFilter']>[class*='styles_content'], #${elementId}~.ct-tablet-box__content [class*='styles_tabFilter']>[class*='styles_content']`);
+    tabContent.prepend(pinWrapper);
+  } else {
+    avttBuffSelect.append(pinWrapper);
+  }
   register_buff_row_context_menu();
+  return avttBuffSelect;
 }
 
 /**
@@ -2847,12 +2914,6 @@ function observe_character_sheet_changes(documentToObserve) {
       if($(`style#advantageHover`).length == 0){
           $('body').append(`
             <style id='advantageHover'>
-              #avtt-buff-options span.material-symbols-outlined {
-                  opacity: 0.2;
-                  font-size:16px;
-                  margin-right: 2px;
-                  cursor: pointer;
-              }
               body {
                   --crit-success: #0a0;
                   --crit-fail: #a00;
@@ -2934,50 +2995,6 @@ function observe_character_sheet_changes(documentToObserve) {
               .roll-mod-container.hidden{
                   visibility:hidden;
               }
-              #avtt-buff-options span.material-symbols-outlined.enabled {
-                  opacity: 1;
-              }
-              .pinToSheet.material-symbols-outlined:before{
-                   content:"\\f3ab";
-              }
-              .favorite.material-symbols-outlined:before{
-                  content:"\\e8d0";
-              }
-              #avttBuffSheetPins div.iconButtons{
-                display:none;
-              }
-              #avtt-buff-options .iconButtons {
-                  position:absolute;
-                  display:flex;
-                  right:0px;
-              }
-              #avtt-buff-options .collapsed .iconButtons {
-                  display: none;
-              }
-              #avtt-buff-options li:has(label) {
-                  width:calc(100% - 30px);
-              }
-              #avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_buttons']{
-                margin-bottom:2px;
-              }
-              div#avttBuffSheetPins {
-                display: flex;
-                flex-wrap: wrap;
-                margin: 5px 0px;
-              }
-              div#avttBuffSheetPins li {
-                list-style: none; 
-                display: flex;
-                align-items: center;
-              }
-              div#avttBuffSheetPins li input {
-                margin-right: 5px;
-                width: 16px;
-                height: 16px;
-              }
-              div#avttBuffSheetPins li {
-                  margin-right: 20px;
-              }
               .avtt-ability-roll-button{
                   color: #b43c35;
                   border: 1px solid #b43c35;
@@ -2991,158 +3008,6 @@ function observe_character_sheet_changes(documentToObserve) {
                   letter-spacing: 1px;
                   padding: 1px 4px 0;
                   cursor: pointer;
-              }
-              ul.avttBuffItems select,
-              div#avttBuffSheetPins select {
-                -webkit-appearance: none;
-                -moz-appearance: none;
-                text-indent: 1px;
-                text-overflow: '';
-                margin-right: 5px;
-                border-color: #7d7d7d;
-                padding:0px;
-                width:16px;
-                height:16px;
-                border-radius:3px;
-                background: #fff;
-                color: var(--theme-contrast);
-                text-shadow: none !important;
-                font-weight: bold; 
-              }
-              .ct-character-sheet--dark-mode ul.avttBuffItems select,
-              .ct-character-sheet--dark-mode div#avttBuffSheetPins select {
-                background: #363636 !important;
-              }
-              div#avttBuffSheetPins select{
-                font-size: 10px;
-              }
-              .ct-character-sheet--dark-mode .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(3);
-              }
-              .dropdown-check-list {
-                display: inline-block;
-                position: absolute;
-                left: 130px;
-                font-size: 10px;
-                width: 250px;
-              }
-              .ct-tablet-box__header ~ .dropdown-check-list {
-                left: unset;
-              }
-              .dropdown-check-list .clickHandle {
-                position: relative;
-                cursor: pointer;
-                display: inline-block;
-                padding: 0px 50px 0px 10px;
-                border: 1px solid #ccc;
-                border-radius: 5px 5px 0px 0px;
-                width: 250px;
-              }
-
-              .dropdown-check-list .clickHandle:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 10px;
-                top: 0px;
-                -moz-transform: rotate(-135deg);
-                -ms-transform: rotate(-135deg);
-                -o-transform: rotate(-135deg);
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems {
-                padding: 2px;
-                display: none;
-                margin: 0;
-                border: 1px solid #ccc;
-                border-top: none;
-                border-radius: 0px 0px 5px 5px;
-                height: 300px;
-                overflow: auto;
-                scrollbar-width: thin;
-                width: 250px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed {
-                height: 22px;
-                overflow: hidden;
-                background: none;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li {  
-                list-style: none;
-                display: flex;
-                align-items: center;
-                justify-content: flex-start;
-                padding: 3px;
-                font-weight: normal;
-                margin-left:2px
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type {
-                font-size: 12px;
-                font-weight: bold;
-                position: relative;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type{
-                  font-size:10px;
-                  margin-left:5px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li{
-                  margin-left: 7px;
-              }
-              .dropdown-check-list.visible .clickHandle {
-                color: #0094ff;
-              }
-              .dropdown-check-list .avttBuffItems {
-                display: none;
-              }
-              .dropdown-check-list.visible .avttBuffItems {
-                display: block;
-                position: absolute;
-                background: var(--theme-background-solid);
-                z-index: 200;
-              }
-              .avttBuffItems li input{
-                margin-right: 4px;
-                width: 16px;
-                height: 16px;
-                min-width: 16px;
-                min-height: 16px;
-              }
-              .avttBuffItems li label{
-                font-size:12px;
-                padding: 3px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 3px;
-                top: 9px;
-                transform-origin:center;
-                -moz-transform: rotate(45deg);
-                -ms-transform: rotate(45deg);
-                -o-transform: rotate(45deg);
-                -webkit-transform: rotate(45deg);
-                transform: rotate(45deg);       
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed>li:first-of-type:after {
-                top: 5px;
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(0.9);
-                  border-radius:5px;
               }
               div#icon-roll-options input,
               div#icon-roll-options select{

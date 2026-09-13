@@ -3751,7 +3751,8 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     stop: function(event, ui) {
       $('.iframeResizeCover').remove();
     },
-    cancel: cancelClasses
+    // an empty cancel would drop jQuery UI's default, which is what keeps selects usable
+    cancel: cancelClasses ? `${cancelClasses}, select, .avtt-statblock-buffs` : 'input, textarea, button, select, option, .avtt-statblock-buffs'
   });
   if(alwaysDisplayTitle)
     titleBar.prepend(`<div class="title_bar_text">${titleBarText}</div>`);
