@@ -3809,6 +3809,1051 @@ function close_and_cleanup_generic_draggable_window(id) {
   container.find('.popout-button').off('click');
   container.remove();
 } 
+const buffsDebuffs = {
+  "Bane": {
+      "tohit": "-d4",
+      "dmg": "0",
+      "save": "-d4",
+      "check": "0",
+      "type": "spell",
+	  "condition": "Baned",
+  },
+  "Bless": {
+      "tohit": "+d4",
+      "dmg": "0",
+      "save": "+d4",
+      "check": "0",
+      "type": "spell",
+	  "condition": "Blessed",
+  },
+  
+  "Exhaustion": {
+    "condition": "Exhaustion",
+    "multiOptions": {
+      "-2": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-2',
+      },
+      "-4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-4',
+      },
+      "-6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-6',
+      },
+      "-8": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-8',
+      },
+      "-10": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "newRoll": '1d20-10',
+      }
+    },
+    "type": "2024condition",
+  },
+  "Blinded": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Blinded",
+  },
+  "Frightened": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Frightened",
+  },
+  "Invisible": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": ".ct-combat__summary-group--initiative button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Invisible"
+  },
+  "Poisoned": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "check": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Poisoned",
+  },
+  "Prone": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Prone",
+  },
+  "Restrained" :{
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "tohit": "button",
+      "save": '.ddbc-saving-throws-summary__ability--dex' 
+    },
+    "newRoll": '2d20kl1',
+    "type": "2024condition",
+	"condition": "Restrained",
+  },
+  "Rage": {
+    "multiOptions": {
+      "+2": {
+        "tohit": "0",
+        "dmg": "+2",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "replaceType": {
+          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
+          "save": '.ddbc-saving-throws-summary__ability--str' 
+        },
+        "newRoll": '2d20kh1',
+      },
+      "+3": {
+        "tohit": "0",
+        "dmg": "+3",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "replaceType": {
+          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
+          "save": '.ddbc-saving-throws-summary__ability--str' 
+        },
+        "newRoll": '2d20kh1',
+      },
+      "+4": {
+        "tohit": "0",
+        "dmg": "+4",
+        "save": "0",
+        "check": "0",
+        "replace": /^1d20/gi,
+        "replaceType": {
+          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
+          "save": '.ddbc-saving-throws-summary__ability--str' 
+        },
+        "newRoll": '2d20kh1',
+      },
+    },
+    "type": "class",
+    "class": "barbarian",
+    "condition": "Rage",
+  },
+  "Sneak Attack": {
+    "multiOptions": {
+      "+1d6": {
+        "tohit": "0",
+        "dmg": "+1d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+2d6": {
+        "tohit": "0",
+        "dmg": "+2d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+4d6": {
+        "tohit": "0",
+        "dmg": "+4d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+5d6": {
+        "tohit": "0",
+        "dmg": "+5d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+6d6": {
+        "tohit": "0",
+        "dmg": "+6d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+7d6": {
+        "tohit": "0",
+        "dmg": "+7d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+8d6": {
+        "tohit": "0",
+        "dmg": "+8d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+9d6": {
+        "tohit": "0",
+        "dmg": "+9d6",
+        "save": "0",
+        "check": "0",
+      },
+      "+10d6": {
+        "tohit": "0",
+        "dmg": "+10d6",
+        "save": "0",
+        "check": "0",
+      },
+    },
+    "type": "class",
+    "class": "rogue",
+    "condition": "Sneak Attack",
+  },
+  "Elemental Cleaver": {
+    "multiOptions": {
+      "1d6": {
+        "tohit": "0",
+        "dmg": "+d6",
+        "save": "0",
+        "check": "0"
+      },
+      "2d6": {
+        "tohit": "0",
+        "dmg": "+2d6",
+        "save": "0",
+        "check": "0"
+      },
+    },
+    "type": "class",
+    "class": "barbarian",
+  },
+  "Luck": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /1d20/gi,
+    "newRoll": '1d20ro=1',
+    "type": "species",
+    "species": "halfling",
+  },
+  "Great Weapon Master (2024)": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "type": "feat",
+    "replace": /(.)$/gi,//last character
+    "replaceType": {
+      "dmg": '[class*="styles_attack"]:has(.ddbc-note-components__component:contains("Heavy"))' //looks for Heavy trait in item note
+    },
+    "newRoll": '$1+PB', //add proficiency
+  },
+  "Reroll damage 1's": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /(\d+d\d+)/gi,
+    "replaceType": {
+      "dmg": 'button' 
+    },
+    "newRoll": '$1ro<2',//reroll 1
+    "type": "feat",
+  },
+  "Healer (2024) reroll 1's": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /(\d+d\d+)/gi,
+    "replaceType": {
+      "heal": 'button'
+    },
+    "newRoll": '$1ro<2',//reroll 1
+    "type": "feat",
+  },
+  "Triage Expert": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /(\d+)(d\d+)/i,
+    "replaceType": {
+      "heal": 'button'
+    },
+    "newRoll": function(m){
+      const match = m.match(/(\d+)(d\d+)/i)
+      return `${1+parseInt(match[1])}${match[2]}kh${parseInt(match[1])}`
+    },
+    "type": "feat",
+ 
+  },
+  "Call the Hunt": {
+    "tohit": "0",
+    "dmg": "+d6",
+    "save": "0",
+    "check": "0",
+    "type": "class",
+    "class": "barbarian",
+  },
+  "Cosmic Omen":{
+    "multiOptions": {
+      "Weal": {
+        "tohit": "+d6",
+        "dmg": "0",
+        "save": "+d6",
+        "check": "+d6"
+      },
+      "Woe": {
+        "tohit": "+d6",
+        "dmg": "0",
+        "save": "+d6",
+        "check": "+d6"
+      },
+    },
+    "type": "class",
+    "class": "druid",
+  },
+  "Giant’s Might": {
+    "multiOptions": {
+      "1d6": {
+        "tohit": "0",
+        "dmg": "+d6",
+        "save": "0",
+        "check": "0"
+      },
+      "1d8": {
+        "tohit": "0",
+        "dmg": "+d8",
+        "save": "0",
+        "check": "0"
+      },
+      "1d10": {
+        "tohit": "0",
+        "dmg": "+1d10",
+        "save": "0",
+        "check": "0"
+      },
+    },
+    "type": "class",
+    "class": "fighter",
+  },
+  "-5 to hit, +10 damage":  {
+    "tohit": "-5",
+    "dmg": "+10",
+    "save": "0",
+    "check": "0",
+    "type": "feat"
+  },
+  "Guidance": {
+      "tohit": "0",
+      "dmg": "0",
+      "save": "0",
+      "check": "+d4",
+      "type": "spell"
+  },
+  "Enlarge": {
+      "tohit": "0",
+      "dmg": "+d4",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Reduce": {
+      "tohit": "0",
+      "dmg": "-d4",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Magic Weapon": {
+    "multiOptions": {
+      "+1": {
+        "tohit": "+1",
+        "dmg": "+1",
+        "save": "0",
+        "check": "0"
+      },
+      "+2": {
+        "tohit": "+2",
+        "dmg": "+2",
+        "save": "0",
+        "check": "0"
+      },
+      "+3": {
+        "tohit": "+3",
+        "dmg": "+3",
+        "save": "0",
+        "check": "0"
+      },
+    },
+    "type": "spell"
+  },
+  "Hunter's Mark": {
+    "multiOptions": {
+	  "+6": {
+        "tohit": "0",
+        "dmg": "+d6",
+        "save": "0",
+        "check": "0"
+	  },
+	  "+10": {
+        "tohit": "0",
+        "dmg": "+d10",
+        "save": "0",
+        "check": "0"
+	  },
+	},
+    "type": "spell"
+  },
+  "Hex": {
+      "tohit": "0",
+      "dmg": "+d6",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Foresight": {
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "newRoll": '2d20kh1',
+    "type": "spell"
+  },
+  "Hexblade's Curse": {
+      "tohit": "0",
+      "dmg": "+PB",
+      "save": "0",
+      "check": "0",
+      "type": "class",
+      "class": "warlock"
+  },
+  "Symbiotic Entity": {
+      "tohit": "0",
+      "dmg": "+d6",
+      "save": "0",
+      "check": "0",
+      "type": "class",
+      "class": "druid"
+  },
+  "Strike of the Giants": {
+    "multiOptions": {
+      "Cloud": {
+        "tohit": "0",
+        "dmg": "+1d4",
+        "save": "0",
+        "check": "0"
+      },
+      "Fire": {
+        "tohit": "0",
+        "dmg": "+1d10",
+        "save": "0",
+        "check": "0"
+      },
+      "Other": {
+        "tohit": "0",
+        "dmg": "+1d6",
+        "save": "0",
+        "check": "0"
+      },
+    },
+    "type": "feat"
+  },
+  "Gift of the Chromatic Dragon": {
+    "tohit": "0",
+    "dmg": "+d4",
+    "save": "0",
+    "check": "0",
+    "type": "feat"
+  },
+  "Emboldening Bond": {
+    "tohit": "+d4",
+    "dmg": "0",
+    "save": "+d4",
+    "check": "+d4",
+    "type": "class",
+    "class": "cleric"
+  },
+  "Divine Strike": {
+    "multiOptions": {
+      "1d8": {
+        "tohit": "0",
+        "dmg": "+1d8",
+        "save": "0",
+        "check": "0"
+      },
+      "2d8": {
+        "tohit": "0",
+        "dmg": "+2d8",
+        "save": "0",
+        "check": "0"
+      },
+    },
+    "type": "class",
+    "class": "cleric"
+  },
+  "Divine Favor": {
+      "tohit": "0",
+      "dmg": "+d4",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Radiant Strikes (Improved Divine Smite)": {
+    "tohit": "0",
+    "dmg": "+d8",
+    "save": "0",
+    "check": "0",
+    "type": "class",
+    "class": "paladin"
+  },
+  "Crusader's Mantle": {
+      "tohit": "0",
+      "dmg": "+d4",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Holy Weapon": {
+      "tohit": "0",
+      "dmg": "+2d8",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Tenser's Transformation": {
+      "tohit": "0",
+      "dmg": "+2d12",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Fount of Moonlight": {
+      "tohit": "0",
+      "dmg": "+2d6",
+      "save": "0",
+      "check": "0",
+      "type": "spell"
+  },
+  "Spirit Shroud": {
+      "multiOptions": {
+		  "1d8": {
+			"tohit": "0",
+			"dmg": "+1d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "2d8": {
+			"tohit": "0",
+			"dmg": "+2d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "3d8": {
+			"tohit": "0",
+			"dmg": "+3d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "4d8": {
+			"tohit": "0",
+			"dmg": "+4d8",
+			"save": "0",
+			"check": "0",
+		  },
+  	  },
+      "type": "spell"
+  },
+  "Conjure Minor Elementals": {
+      "multiOptions": {
+		  "2d8": {
+			"tohit": "0",
+			"dmg": "+2d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "3d8": {
+			"tohit": "0",
+			"dmg": "+3d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "4d8": {
+			"tohit": "0",
+			"dmg": "+4d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "5d8": {
+			"tohit": "0",
+			"dmg": "+5d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "6d8": {
+			"tohit": "0",
+			"dmg": "+6d8",
+			"save": "0",
+			"check": "0",
+		  },
+		  "7d8": {
+			"tohit": "0",
+			"dmg": "+7d8",
+			"save": "0",
+			"check": "0",
+		  },
+  	  },
+      "type": "spell"
+  },
+  "Synaptic Static": {
+      "tohit": "-d6",
+      "dmg": "0",
+      "save": "0",
+      "check": "-d6",
+      "type": "spell"
+  },
+  "Trance of Order": {
+      "tohit": "0",
+      "dmg": "0",
+      "save": "0",
+      "check": "0",
+      "replace": /1d20/gi,
+      "newRoll": '1d20min10',
+      "type": "sorcerer"
+  },
+  "Reliable Talent": {
+      "tohit": "0",
+      "dmg": "0",
+      "save": "0",
+      "check": "0",
+      "replace": /1d20/gi,
+      "replaceType": {
+        "check": '.ct-skills__item:has(.ct-skills__col--proficiency>:is([aria-label="Expert"], [aria-label="Proficient"]))' //looks for proficient or expertise class before a check
+      },
+      "newRoll": '1d20min10',
+      "type": "class",
+      "class": "rogue",
+  },
+  "Pass Without a Trace":{
+    "tohit": "0",
+    "dmg": "0",
+    "save": "0",
+    "check": "0",
+    "replace": /^1d20/gi,
+    "replaceType": {
+      "check": '.ct-skills__item:contains("Stealth")' //looks for stealth
+    },
+    "newRoll": '1d20+10',
+    "type": "spell",
+  },
+  "Mark of Detection":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Finding":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Handling":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Healing":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Hospitality":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Making":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Passage":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Scribing":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Sentinel":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Shadow":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Storm":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Mark of Warding":{
+    "multiOptions": {
+      "d4": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")` 
+        },
+        "newRoll": '$1+1d4',
+      },
+      "d6": {
+        "tohit": "0",
+        "dmg": "0", 
+        "save": "0",
+        "check": "0",
+        "replace": /(.)$/gi,//last character
+        "replaceType": {
+          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")`
+        },
+        "newRoll": '$1+1d6',
+      }
+    },
+    "type": "feat",
+  },
+  "Great Weapon Fighting": {
+    "multiOptions": {
+      "2024": { 
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^(\d+d\d+)/gi,//find first roll
+        "replaceType": {
+          "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
+        },
+        "newRoll": '$1min3',//replace with original roll with minimum roll of 3
+      },
+      "Legacy": {
+        "tohit": "0",
+        "dmg": "0",
+        "save": "0",
+        "check": "0",
+        "replace": /^(\d+d\d+)/gi,//find first roll
+        "replaceType": {
+            "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
+        },
+        "newRoll": '$1ro<3',//reroll 1 & 2
+      },
+    },
+    "type": "feat",
+  },  
+}
+var rollBuffFavorites = [];
+var rollBuffContext = [];
+var rollBuffPins = [];
 
 function register_buff_row_context_menu() {
   $.contextMenu({
