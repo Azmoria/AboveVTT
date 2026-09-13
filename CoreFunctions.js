@@ -3751,7 +3751,8 @@ function find_or_create_generic_draggable_window(id, titleBarText, addLoadingInd
     stop: function(event, ui) {
       $('.iframeResizeCover').remove();
     },
-    cancel: cancelClasses
+    // an empty cancel would drop jQuery UI's default, which is what keeps selects usable
+    cancel: cancelClasses ? `${cancelClasses}, select, .avtt-statblock-buffs` : 'input, textarea, button, select, option, .avtt-statblock-buffs'
   });
   if(alwaysDisplayTitle)
     titleBar.prepend(`<div class="title_bar_text">${titleBarText}</div>`);
@@ -3808,3 +3809,430 @@ function close_and_cleanup_generic_draggable_window(id) {
   container.find('.popout-button').off('click');
   container.remove();
 } 
+
+function register_buff_row_context_menu() {
+  $.contextMenu({
+    selector: ".dropdown-check-list li",
+    build: function(element, e) {
+
+      let menuItems = {};
+
+      let rowHtml = $(element);
+      let rowBuff = rowHtml.find('[data-buff]').attr('data-buff');
+
+      menuItems["favorite"] = {
+        name: rollBuffFavorites.includes(rowBuff) ? "Remove From Favorites" : "Move to Favorites",
+        callback: function(itemKey, opt, originalEvent) {
+            if(rollBuffFavorites.includes(rowBuff)){
+              rollBuffFavorites = rollBuffFavorites.filter(d=> d != rowBuff)
+            }
+            else{
+              rollBuffFavorites.push(rowBuff)
+            }
+            localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
+            rebuild_all_buff_dropdowns();
+
+        }
+      };
+      menuItems["pin"] = {
+        name: rollBuffPins.includes(rowBuff) ? "Unpin" : "Pin",
+        callback: function(itemKey, opt, originalEvent) {
+            if(rollBuffPins.includes(rowBuff)){
+              rollBuffPins = rollBuffPins.filter(d=> d != rowBuff)
+            }
+            else{
+              rollBuffPins.push(rowBuff)
+            }
+            localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
+            rebuild_all_buff_dropdowns();
+
+        }
+      };
+      /**** To do: Allow select menus to be added to roll context menus for this to work. Checkbox inputs can just be added as list items ****/
+      /*
+      menuItems["addToContext"] = {
+        name: rollBuffContext.includes(rowBuff) ? "Remove from Roll Context Menu" : "Add to Roll Context Menu",
+        callback: function(itemKey, opt, originalEvent) {
+          if(rollBuffContext.includes(rowBuff)){
+            rollBuffContext = rollBuffContext.filter(d=> d != rowBuff)
+          }
+          else{
+            rollBuffContext.push(rowBuff)
+          }
+          rebuild_buffs();
+        }
+      };
+      */
+      return { items: menuItems };
+    }
+
+  })
+}
+/** Every buff dropdown currently in the DOM, so favorite/pin changes can refresh all of them. */
+window.avttBuffDropdowns = window.avttBuffDropdowns || [];
+
+function rebuild_all_buff_dropdowns(){
+  window.avttBuffDropdowns = window.avttBuffDropdowns.filter(entry => entry.element.closest("html").length > 0);
+  window.avttBuffDropdowns.forEach(entry => build_buff_dropdown(entry.scope, false));
+}
+
+function get_buff_token(tokenId){
+  return window.TOKEN_OBJECTS?.[tokenId] || window.all_token_objects?.[tokenId];
+}
+
+/** Token ids contain slashes, so they can't be used in an id attribute or selector as-is. */
+function buff_dropdown_element_id(scope){
+  if(scope?.type !== 'token') return 'avtt-buff-options';
+  return `avtt-buff-options-${`${scope.tokenId}`.replace(/[^a-z0-9_-]/gi, '_')}`;
+}
+
+/** Storage and condition plumbing, which differs between the character sheet and a token stat block. */
+function buff_scope_accessor(scope){
+  const elementId = buff_dropdown_element_id(scope);
+  if(scope?.type === 'token'){
+    const tokenId = scope.tokenId;
+    return {
+      elementId,
+      canEdit: function(){
+        const token = get_buff_token(tokenId);
+        return token != undefined && (window.DM == true || token.options.player_owned == true);
+      },
+      read: function(){
+        return [...(get_buff_token(tokenId)?.options?.rollbuffs || [])];
+      },
+      write: function(buffs){
+        if(window.all_token_objects?.[tokenId] != undefined){
+          window.all_token_objects[tokenId].options.rollbuffs = buffs;
+        }
+        const token = window.TOKEN_OBJECTS?.[tokenId];
+        if(token == undefined) return;
+        token.options.rollbuffs = buffs;
+        token.place_sync_persist();
+      },
+      setCondition: function(condition, value){
+        const token = window.TOKEN_OBJECTS?.[tokenId];
+        if(token == undefined) return;
+        token[(value !== false && value !== '0') ? 'addCondition' : 'removeCondition'](condition);
+        token.place_sync_persist();
+      }
+    };
+  }
+  return {
+    elementId,
+    canEdit: function(){ return true; },
+    read: function(){
+      return JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
+    },
+    write: function(buffs){
+      window.rollBuffs = buffs;
+      localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(buffs));
+    },
+    setCondition: function(condition, value, context = {}){
+      const turnOn = value !== false && value !== '0';
+      const additionalCSS = context.menuOpen ? `.dropdown-check-list .avttBuffItems {
+              display: block !important;
+              position: absolute !important;
+              background: var(--theme-background-solid) !important;
+              z-index: 200 !important;
+          }` : '';
+      if(STANDARD_CONDITIONS.includes(condition)){
+        click_condition(condition, value, context.menuOpen ? context.onDone : undefined, additionalCSS);
+      } else if (is_abovevtt_page()) {
+        const pc = find_pc_by_player_id(window.PLAYER_ID, false);
+        if (!pc) return;
+        const token = window.all_token_objects[pc.sheet];
+        if (!token) return;
+        token[turnOn ? 'addCondition' : 'removeCondition'](condition);
+        token.place_sync_persist();
+      } else {
+        tabCommunicationChannel.postMessage({
+          msgType: turnOn ? 'addCondition' : 'removeCondition',
+          characterId: window.PLAYER_ID,
+          text: condition,
+          sendTo: window.sendToTab
+        })
+      }
+    }
+  };
+}
+
+function rebuild_buffs(fullBuild = false){
+  return build_buff_dropdown({ type: 'character' }, fullBuild);
+}
+
+/** @param scope {{type: 'character'}|{type: 'token', tokenId: string}} whose buffs this dropdown edits */
+function build_buff_dropdown(scope = { type: 'character' }, fullBuild = false){
+  const accessor = buff_scope_accessor(scope);
+  const isCharacterScope = scope?.type !== 'token';
+  const elementId = accessor.elementId;
+  const idPrefix = isCharacterScope ? '' : `${elementId}_`;
+  const editable = accessor.canEdit();
+
+  const buffDebuffKeys = Object.keys(buffsDebuffs);
+  let selectedBuffs = accessor.read();
+  const originalLength = selectedBuffs.length;
+  selectedBuffs = selectedBuffs.filter(buff =>
+    Array.isArray(buff) ? buffDebuffKeys.includes(buff[0]) : buffDebuffKeys.includes(buff)
+  );
+  if(selectedBuffs.length !== originalLength && editable)
+    accessor.write(selectedBuffs);
+  if(isCharacterScope)
+    window.rollBuffs = selectedBuffs;
+  rollBuffFavorites = JSON.parse(localStorage.getItem('rollFavoriteBuffs' + window.PLAYER_ID)) || [];
+  rollBuffPins = JSON.parse(localStorage.getItem('rollBuffPins' + window.PLAYER_ID)) || [];
+  let avttBuffSelect;
+  const innerBuffHtml = `
+    <ul id='${idPrefix}favoriteBuffs' data-group='favorite'><li>Favorite</li></ul>
+    <ul data-group='class'><li>Class</li>
+      <ul data-group='barbarian'><li>Barbarian</li></ul>
+      <ul data-group='bard'><li>Bard</li></ul>
+      <ul data-group='cleric'><li>Cleric</li></ul>
+      <ul data-group='druid'><li>Druid</li></ul>
+      <ul data-group='fighter'><li>Fighter</li></ul>
+      <ul data-group='monk'><li>Monk</li></ul>
+      <ul data-group='paladin'><li>Paladin</li></ul>
+      <ul data-group='ranger'><li>Ranger</li></ul>
+      <ul data-group='rogue'><li>Rogue</li></ul>
+      <ul data-group='sorcerer'><li>Sorcerer</li></ul>
+      <ul data-group='warlock'><li>Warlock</li></ul>
+      <ul data-group='wizard'><li>Wizard</li></ul>
+    </ul>
+    <ul data-group='species'><li>Species</li>
+      <ul data-group='halfling'><li>Halfling</li></ul>
+    </ul>      
+    <ul data-group='spell'><li>Spells</li></ul>
+    <ul data-group='feat'><li>Feats</li></ul>
+    <ul data-group='2024condition'><li>Conditions</li></ul>
+  `
+  if(fullBuild){
+    avttBuffSelect = $(`<div id="${elementId}" class="dropdown-check-list${editable ? '' : ' readonly'}">
+      <span class="clickHandle">Roll Buff/Debuffs</span>
+      <ul class="avttBuffItems">
+        ${innerBuffHtml}      
+      </ul>
+    </div>`)
+  }
+  else{
+    // the registry keeps a handle on dropdowns living in popout documents, which $('#id') can't reach
+    const registered = window.avttBuffDropdowns.find(entry => entry.id === elementId);
+    avttBuffSelect = registered?.element?.closest('html').length > 0 ? registered.element : $(`#${elementId}`);
+    if(avttBuffSelect.length === 0) return undefined;
+    avttBuffSelect.toggleClass('readonly', !editable);
+    avttBuffSelect.find('.avttBuffItems').html(innerBuffHtml)
+  }
+  const toggleBuffMenuVisiblity = function(){
+    avttBuffSelect.toggleClass('visible')
+    if(avttBuffSelect.hasClass('visible')){
+      //set a timeout here to allow other automated clicks such as clicking the gamelog after setting a condition to finish before adding the close event
+      setTimeout(function(){
+        $(document).on('click.blurHandle', function(e){
+          if($(e.target).closest(`#${elementId}, .context-menu-list`).length == 0){
+            avttBuffSelect.toggleClass('visible', false)
+            $(document).off('click.blurHandle');
+          }
+        })
+      }, 250)
+    }
+  }
+  const avttBuffItems = avttBuffSelect.find('.avttBuffItems')
+  avttBuffSelect.off('click.clickHandle').on('click.clickHandle', '.clickHandle', function(){
+    toggleBuffMenuVisiblity();
+  })
+  avttBuffSelect.off('click.headers').on('click.headers', 'ul>ul', function(e){
+    e.stopPropagation();
+    if($(e.target).is('li:first-of-type'))
+      $(e.target).closest('ul').toggleClass('collapsed');
+  })
+
+  /** Persists a buff selection and mirrors any condition the buff carries. */
+  const applyBuffChange = function(buffName, value, updatedBuffs){
+    accessor.write(updatedBuffs);
+    if(buffsDebuffs[buffName].condition == undefined) return;
+    accessor.setCondition(buffsDebuffs[buffName].condition, value, {
+      menuOpen: avttBuffSelect.hasClass('visible'),
+      onDone: toggleBuffMenuVisiblity
+    });
+  }
+
+  const sortedBuffs = Object.keys(buffsDebuffs).sort().reduce(
+    (obj, key) => { 
+      obj[key] = buffsDebuffs[key]; 
+      return obj;
+    }, 
+    {}
+  );
+  const pinWrapper = $(`<div id='${idPrefix}avttBuffSheetPins' class='avttBuffSheetPins'></div>`);
+  $(`#${idPrefix}avttBuffSheetPins`).remove()
+ 
+  for(let i in sortedBuffs){
+    const groupName = buffsDebuffs[i].type == 'class' ? buffsDebuffs[i].class : buffsDebuffs[i].type == 'species' ? buffsDebuffs[i].species : buffsDebuffs[i].type;
+    const headerRow = avttBuffItems.find(`ul[data-group='${groupName}']`);
+    const replacedName = i.replace("'", '');
+    const addToFavorite = rollBuffFavorites.includes(replacedName);
+    const addToPins = rollBuffPins.includes(replacedName);
+    const pinnedId = `${idPrefix}pin_buff_${replacedName}`;
+
+    if(buffsDebuffs[i]['multiOptions'] != undefined){
+      const row = $(`<li>
+        <select id='${idPrefix}buff_${replacedName}' data-buff='${replacedName}'/>
+          <option value='0'></option>
+        </select>
+        <label for='${idPrefix}buff_${replacedName}'>${i}</label>
+        <div class='iconButtons'>
+          <span title='Pin' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
+          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
+        </div>
+      </li>`)
+      const select = row.find('select');
+      const currentSelected = selectedBuffs.find(d => d.includes(i));
+
+      for(let j in buffsDebuffs[i]['multiOptions']){
+        const option = $(`<option value='${j}'>${j}</option>`);
+        select.append(option)
+      }
+      if(currentSelected != undefined){
+        select.val(currentSelected[1])
+      }
+      select.prop('disabled', !editable);
+      row.find('select').off('change.setRollBuff').on('change.setRollBuff', function(e){
+        e.stopPropagation(); // the stat block window delegates input events for its own trackers
+        const value = $(this).val();
+        let updated = accessor.read().filter(d => !d.includes(i));
+        if(value != '0'){
+          updated.push([i, value])
+        }
+        $(this).blur();
+        applyBuffChange(i, value, updated);
+      })
+      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(rollBuffFavorites.includes(replacedName)){
+          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
+        }
+        else{
+          rollBuffFavorites.push(replacedName)
+        }
+        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
+        rebuild_all_buff_dropdowns();
+      })
+      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(rollBuffPins.includes(replacedName)){
+          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
+        }
+        else{
+          rollBuffPins.push(replacedName)
+        }
+        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
+        rebuild_all_buff_dropdowns();
+      })
+      if(addToFavorite)
+        avttBuffItems.find(`ul[data-group='favorite']`).append(row);  
+      else    
+        headerRow.append(row);
+
+      if(addToPins){
+        const cloneRow = row.clone(true, true);
+        const cloneSelect = cloneRow.find('select');
+        cloneSelect.attr('id', pinnedId);
+        cloneRow.find('label').attr('for', pinnedId);
+        if(currentSelected != undefined){
+          cloneSelect.val(currentSelected[1])
+        }
+        cloneSelect.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
+          row.find('select').val($(this).val())
+        })
+        select.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
+          cloneRow.find('select').val($(this).val());
+        })
+        pinWrapper.append(cloneRow);
+      }
+    }else{
+      const row = $(`<li>
+        <input type="checkbox" id='${idPrefix}buff_${replacedName}' data-buff='${replacedName}'/>
+        <label for='${idPrefix}buff_${replacedName}'>${i}</label>
+        <div class='iconButtons'>
+          <span title='Pin' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
+          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
+        </div>
+      </li>`)
+      if(selectedBuffs.includes(i))
+        row.find('input').prop('checked', true);
+      row.find('input').prop('disabled', !editable);
+      row.find('input').off('change.setRollBuff').on('change.setRollBuff', function(e){
+        e.stopPropagation(); // the stat block window delegates input events for its own trackers
+        const checked = $(this).is(':checked');
+        let updated = accessor.read().filter(d => d != i);
+        if(checked){
+          updated.push(i)
+        }
+        $(this).blur();
+        applyBuffChange(i, checked, updated);
+      })
+      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(rollBuffFavorites.includes(replacedName)){
+          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
+        }
+        else{
+          rollBuffFavorites.push(replacedName)
+        }
+        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
+        rebuild_all_buff_dropdowns();
+      })
+      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if(rollBuffPins.includes(replacedName)){
+          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
+        }
+        else{
+          rollBuffPins.push(replacedName)
+        }
+        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
+        rebuild_all_buff_dropdowns();
+      })
+      if(addToFavorite)
+        avttBuffItems.find(`ul[data-group='favorite']`).append(row);
+      else   
+        headerRow.append(row);
+
+      if(addToPins){
+        const cloneRow = row.clone(true, true);
+         cloneRow.find('input').attr('id', pinnedId);
+         cloneRow.find('label').attr('for', pinnedId);
+         cloneRow.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
+            row.find('input').prop('checked', $(this).is(':checked'));
+         })
+         row.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
+            cloneRow.find('input').prop('checked', $(this).is(':checked'));
+         })
+        pinWrapper.append(cloneRow);
+      }
+    }
+
+  }
+  avttBuffItems.find(`ul>ul`).each(function(){
+    if($(this).find('li').length < 2)
+      $(this).hide();
+  })
+
+  if(fullBuild){
+    if(isCharacterScope)
+      $('.ct-primary-box__tab--actions .ct-actions h2, .ct-actions-mobile .ct-actions h2, .ct-actions-tablet .ct-tablet-box__header').after(avttBuffSelect)
+    window.avttBuffDropdowns = window.avttBuffDropdowns.filter(entry => entry.id !== elementId);
+    window.avttBuffDropdowns.push({ id: elementId, scope, element: avttBuffSelect });
+  }
+
+  if(isCharacterScope){
+    const tabContent = $(`#${elementId}~[class*='styles_tabFilter']>[class*='styles_content'], #${elementId}~.ct-tablet-box__content [class*='styles_tabFilter']>[class*='styles_content']`);
+    tabContent.prepend(pinWrapper);
+  } else {
+    avttBuffSelect.append(pinWrapper);
+  }
+  register_buff_row_context_menu();
+  return avttBuffSelect;
+}

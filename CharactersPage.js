@@ -1754,64 +1754,7 @@ function inject_dice_roll(element, clear=true) {
       }
   })
 }
-function register_buff_row_context_menu() {
-  $.contextMenu({
-    selector: ".dropdown-check-list li",
-    build: function(element, e) {
 
-      let menuItems = {};
-
-      let rowHtml = $(element);
-      let rowBuff = rowHtml.find('[data-buff]').attr('data-buff');
-
-      menuItems["favorite"] = {
-        name: rollBuffFavorites.includes(rowBuff) ? "Remove From Favorites" : "Move to Favorites",
-        callback: function(itemKey, opt, originalEvent) {
-            if(rollBuffFavorites.includes(rowBuff)){
-              rollBuffFavorites = rollBuffFavorites.filter(d=> d != rowBuff)
-            }
-            else{
-              rollBuffFavorites.push(rowBuff)
-            }
-            localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-            rebuild_buffs();
-
-        }
-      };
-      menuItems["pin"] = {
-        name: rollBuffPins.includes(rowBuff) ? "Unpin from Sheet" : "Pin to Sheet",
-        callback: function(itemKey, opt, originalEvent) {
-            if(rollBuffPins.includes(rowBuff)){
-              rollBuffPins = rollBuffPins.filter(d=> d != rowBuff)
-            }
-            else{
-              rollBuffPins.push(rowBuff)
-            }
-            localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-            rebuild_buffs();
-
-        }
-      };
-      /**** To do: Allow select menus to be added to roll context menus for this to work. Checkbox inputs can just be added as list items ****/
-      /*
-      menuItems["addToContext"] = {
-        name: rollBuffContext.includes(rowBuff) ? "Remove from Roll Context Menu" : "Add to Roll Context Menu",
-        callback: function(itemKey, opt, originalEvent) {
-          if(rollBuffContext.includes(rowBuff)){
-            rollBuffContext = rollBuffContext.filter(d=> d != rowBuff)
-          }
-          else{
-            rollBuffContext.push(rowBuff)
-          }
-          rebuild_buffs();
-        }
-      };
-      */
-      return { items: menuItems };
-    }
-
-  })
-}
 function click_condition(conditionName, setToggle = true, callback, addtionalCSS = ''){
   $('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}${addtionalCSS}</style>`);
   $('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
@@ -1831,311 +1774,7 @@ function click_condition(conditionName, setToggle = true, callback, addtionalCSS
     $('#condition-click').remove();
   }, 40)	
 }
-function rebuild_buffs(fullBuild = false){
-  window.rollBuffs = JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
-  const buffDebuffKeys=Object.keys(buffsDebuffs);
-  const originalLength = window.rollBuffs.length;
-  window.rollBuffs = window.rollBuffs.filter(buff =>
-    Array.isArray(buff) ? buffDebuffKeys.includes(buff[0]) : buffDebuffKeys.includes(buff)
-  );
-  if(window.rollBuffs.length !== originalLength)
-    localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-  rollBuffFavorites = JSON.parse(localStorage.getItem('rollFavoriteBuffs' + window.PLAYER_ID)) || [];
-  rollBuffPins = JSON.parse(localStorage.getItem('rollBuffPins' + window.PLAYER_ID)) || [];
-  let avttBuffSelect;
-  const innerBuffHtml = `
-    <ul id='favoriteBuffs'><li>Favorite</li></ul>
-    <ul id='classBuffs'><li>Class</li>
-      <ul id='barbarianBuffs'><li>Barbarian</li></ul>
-      <ul id='bardBuffs'><li>Bard</li></ul>
-      <ul id='clericBuffs'><li>Cleric</li></ul>
-      <ul id='druidBuffs'><li>Druid</li></ul>
-      <ul id='fighterBuffs'><li>Fighter</li></ul>
-      <ul id='monkBuffs'><li>Monk</li></ul>
-      <ul id='paladinBuffs'><li>Paladin</li></ul>
-      <ul id='rangerBuffs'><li>Ranger</li></ul>
-      <ul id='rogueBuffs'><li>Rogue</li></ul>
-      <ul id='sorcererBuffs'><li>Sorcerer</li></ul>
-      <ul id='warlockBuffs'><li>Warlock</li></ul>
-      <ul id='wizardBuffs'><li>Wizard</li></ul>
-    </ul>
-    <ul id='speciesBuffs'><li>Species</li>
-      <ul id='halflingBuffs'><li>Halfling</li></ul>
-    </ul>      
-    <ul id='spellBuffs'><li>Spells</li></ul>
-    <ul id='featBuffs'><li>Feats</li></ul>
-    <ul id='2024conditionBuffs'><li>Conditions</li></ul>
-  `
-  if(fullBuild){
-    avttBuffSelect = $(`<div id="avtt-buff-options" class="dropdown-check-list">
-      <span class="clickHandle">Roll Buff/Debuffs</span>
-      <ul class="avttBuffItems">
-        ${innerBuffHtml}      
-      </ul>
-    </div>`)
-  }
-  else{
-    avttBuffSelect = $(`#avtt-buff-options`);
-    avttBuffSelect.find('.avttBuffItems').html(innerBuffHtml)
-  }
-  const toggleBuffMenuVisiblity = function(){
-    avttBuffSelect.toggleClass('visible')
-    if(avttBuffSelect.hasClass('visible')){
-      //set a timeout here to allow other automated clicks such as clicking the gamelog after setting a condition to finish before adding the close event
-      setTimeout(function(){
-        $(document).on('click.blurHandle', function(e){
-          if($(e.target).closest('#avtt-buff-options, .context-menu-list').length == 0){
-            avttBuffSelect.toggleClass('visible', false)
-            $(document).off('click.blurHandle');
-          }
-        })
-      }, 250)
-    }
-  }
-  const avttBuffItems = avttBuffSelect.find('.avttBuffItems')
-  avttBuffSelect.off('click.clickHandle').on('click.clickHandle', '.clickHandle', function(){
-    toggleBuffMenuVisiblity();
-  })
-  avttBuffSelect.off('click.headers').on('click.headers', 'ul>ul', function(e){
-    e.stopPropagation();
-    if($(e.target).is('li:first-of-type'))
-      $(e.target).closest('ul').toggleClass('collapsed');
-  })
-  const sortedBuffs = Object.keys(buffsDebuffs).sort().reduce(
-    (obj, key) => { 
-      obj[key] = buffsDebuffs[key]; 
-      return obj;
-    }, 
-    {}
-  );
-  const pinWrapper = $(`<div id='avttBuffSheetPins'></div>`);
-  $('#avttBuffSheetPins').remove()
- 
-  for(let i in sortedBuffs){
-    const headerRow = avttBuffItems.find(`ul#${buffsDebuffs[i].type == 'class' ? buffsDebuffs[i].class : buffsDebuffs[i].type == 'species' ? buffsDebuffs[i].species : buffsDebuffs[i].type}Buffs`);
-    const replacedName = i.replace("'", '');
-    const addToFavorite = rollBuffFavorites.includes(replacedName);
-    const addToPins = rollBuffPins.includes(replacedName);
 
-    if(buffsDebuffs[i]['multiOptions'] != undefined){
-      const row = $(`<li>
-        <select id='buff_${replacedName}' data-buff='${replacedName}'/>
-          <option value='0'></option>
-        </select>
-        <label for='buff_${replacedName}'>${i}</label>
-        <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
-          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
-        </div>
-      </li>`)
-      const select = row.find('select');
-      const currentSelected = window.rollBuffs.find(d => d.includes(i));
-
-      for(let j in buffsDebuffs[i]['multiOptions']){
-        const option = $(`<option value='${j}'>${j}</option>`);
-        select.append(option)
-      }
-      if(currentSelected != undefined){
-        select.val(currentSelected[1])
-      }
-      row.find('select').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).val() != '0'){
-          window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-          window.rollBuffs.push([i, $(this).val()])
-        }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-        $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          const value = $(this).val();
-          if( value != '0'){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-              click_condition(condition, value, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          }
-          else if (is_abovevtt_page()) {        
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
-      })
-      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffFavorites.includes(replacedName)){
-          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffFavorites.push(replacedName)
-        }
-        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
-      })
-      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffPins.includes(replacedName)){
-          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffPins.push(replacedName)
-        }
-        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
-      })
-      if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);  
-      else    
-        headerRow.append(row);
-
-      if(addToPins){
-        const cloneRow = row.clone(true, true);
-        const cloneSelect = cloneRow.find('select');
-        if(currentSelected != undefined){
-          cloneSelect.val(currentSelected[1])
-        }
-        cloneSelect.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-          row.find('select').val($(this).val())
-        })
-        select.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-          cloneRow.find('select').val($(this).val());
-        })
-        pinWrapper.append(cloneRow);
-      }
-    }else{
-      const row = $(`<li>
-        <input type="checkbox" id='buff_${replacedName}' data-buff='${replacedName}'/>
-        <label for='buff_${replacedName}'>${i}</label>
-        <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
-          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
-        </div>
-      </li>`)
-      if(window.rollBuffs.includes(i))
-        row.find('input').prop('checked', true);
-      row.find('input').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).is(':checked')){
-          window.rollBuffs.push(i)
-        }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => d != i); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-        $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          if($(this).is(':checked')){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-            click_condition(condition, setOnOff == 'addCondition' ? true : false, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          } else if (is_abovevtt_page()) {
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
-      })
-      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffFavorites.includes(replacedName)){
-          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffFavorites.push(replacedName)
-        }
-        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
-      })
-      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffPins.includes(replacedName)){
-          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffPins.push(replacedName)
-        }
-        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
-      })
-      if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);
-      else   
-        headerRow.append(row);
-
-      if(addToPins){
-        const cloneRow = row.clone(true, true);
-         cloneRow.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-            row.find('input').prop('checked', $(this).is(':checked'));
-         })
-         row.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-            cloneRow.find('input').prop('checked', $(this).is(':checked'));
-         })
-        pinWrapper.append(cloneRow);
-      }
-    }
-
-  }
-  avttBuffItems.find(`ul>ul`).each(function(){
-    if($(this).find('li').length < 2)
-      $(this).hide();
-  })
-
-  if(fullBuild)
-    $('.ct-primary-box__tab--actions .ct-actions h2, .ct-actions-mobile .ct-actions h2, .ct-actions-tablet .ct-tablet-box__header').after(avttBuffSelect)
-  
-  const tabContent = $(`#avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_content'], #avtt-buff-options~.ct-tablet-box__content [class*='styles_tabFilter']>[class*='styles_content']`);
-  tabContent.prepend(pinWrapper);
-  register_buff_row_context_menu();
-}
 
 /**
  * Observes character sheet changes and:
@@ -2847,12 +2486,6 @@ function observe_character_sheet_changes(documentToObserve) {
       if($(`style#advantageHover`).length == 0){
           $('body').append(`
             <style id='advantageHover'>
-              #avtt-buff-options span.material-symbols-outlined {
-                  opacity: 0.2;
-                  font-size:16px;
-                  margin-right: 2px;
-                  cursor: pointer;
-              }
               body {
                   --crit-success: #0a0;
                   --crit-fail: #a00;
@@ -2861,6 +2494,289 @@ function observe_character_sheet_changes(documentToObserve) {
 
               body.color-blind-avtt {
                   --crit-success: #ffff00;
+              }
+              .dropdown-check-list {
+                display: inline-block;
+                position: absolute;
+                left: 130px;
+                font-size: 10px;
+                width: 250px;
+              }
+
+              .ct-tablet-box__header ~ .dropdown-check-list {
+                left: unset;
+              }
+
+              .dropdown-check-list .clickHandle {
+                position: relative;
+                cursor: pointer;
+                display: inline-block;
+                padding: 0px 50px 0px 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px 5px 0px 0px;
+                width: 250px;
+              }
+
+              .dropdown-check-list .clickHandle:after {
+                position: absolute;
+                content: "";
+                border-left: 2px solid var(--theme-contrast, #242528);
+                border-top: 2px solid var(--theme-contrast, #242528);
+                padding: 3px;
+                right: 10px;
+                top: 0px;
+                -moz-transform: rotate(-135deg);
+                -ms-transform: rotate(-135deg);
+                -o-transform: rotate(-135deg);
+                -webkit-transform: rotate(-135deg);
+                transform: rotate(-135deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems {
+                padding: 2px;
+                display: none;
+                margin: 0;
+                border: 1px solid #ccc;
+                border-top: none;
+                border-radius: 0px 0px 5px 5px;
+                height: 300px;
+                overflow: auto;
+                scrollbar-width: thin;
+                width: 250px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul.collapsed,
+              .dropdown-check-list ul.avttBuffItems > ul > ul.collapsed {
+                height: 22px;
+                overflow: hidden;
+                background: none;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li {
+                list-style: none;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                padding: 3px;
+                font-weight: normal;
+                margin-left: 2px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type {
+                font-size: 12px;
+                font-weight: bold;
+                position: relative;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type {
+                font-size: 10px;
+                margin-left: 5px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li {
+                margin-left: 7px;
+              }
+
+              .dropdown-check-list.visible .clickHandle {
+                color: #0094ff;
+              }
+
+              .dropdown-check-list .avttBuffItems {
+                display: none;
+              }
+
+              .dropdown-check-list.visible .avttBuffItems {
+                display: block;
+                position: absolute;
+                background: var(--theme-background-solid, #fff);
+                z-index: 200;
+              }
+
+              .avttBuffItems li input {
+                margin-right: 4px;
+                width: 16px;
+                height: 16px;
+                min-width: 16px;
+                min-height: 16px;
+              }
+
+              .avttBuffItems li label {
+                font-size: 12px;
+                padding: 3px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:after,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type:after {
+                position: absolute;
+                content: "";
+                border-left: 2px solid var(--theme-contrast, #242528);
+                border-top: 2px solid var(--theme-contrast, #242528);
+                padding: 3px;
+                right: 3px;
+                top: 9px;
+                transform-origin: center;
+                -moz-transform: rotate(45deg);
+                -ms-transform: rotate(45deg);
+                -o-transform: rotate(45deg);
+                -webkit-transform: rotate(45deg);
+                transform: rotate(45deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul.collapsed > li:first-of-type:after,
+              .dropdown-check-list ul.avttBuffItems > ul > ul.collapsed > li:first-of-type:after {
+                top: 5px;
+                -webkit-transform: rotate(-135deg);
+                transform: rotate(-135deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:hover,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type:hover {
+                backdrop-filter: brightness(0.9);
+                border-radius: 5px;
+              }
+
+              .ct-character-sheet--dark-mode .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:hover {
+                backdrop-filter: brightness(3);
+              }
+
+              ul.avttBuffItems select,
+              .avttBuffSheetPins select {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+                text-indent: 1px;
+                text-overflow: '';
+                margin-right: 5px;
+                border-color: #7d7d7d;
+                padding: 0px;
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                background: #fff;
+                color: var(--theme-contrast, #242528);
+                text-shadow: none !important;
+                font-weight: bold;
+              }
+
+              .ct-character-sheet--dark-mode ul.avttBuffItems select,
+              .ct-character-sheet--dark-mode .avttBuffSheetPins select {
+                background: #363636 !important;
+              }
+
+              .avttBuffSheetPins select {
+                font-size: 10px;
+              }
+
+              .dropdown-check-list span.material-symbols-outlined {
+                opacity: 0.2;
+                font-size: 16px;
+                margin-right: 2px;
+                cursor: pointer;
+              }
+
+              .dropdown-check-list span.material-symbols-outlined.enabled {
+                opacity: 1;
+              }
+
+              .pinToSheet.material-symbols-outlined:before {
+                content: "\\f3ab";
+              }
+
+              .favorite.material-symbols-outlined:before {
+                content: "\\e8d0";
+              }
+
+              .avttBuffSheetPins div.iconButtons {
+                display: none;
+              }
+
+              .dropdown-check-list .iconButtons {
+                position: absolute;
+                display: flex;
+                right: 0px;
+              }
+
+              .dropdown-check-list .collapsed .iconButtons {
+                display: none;
+              }
+
+              .dropdown-check-list li:has(label) {
+                width: calc(100% - 30px);
+              }
+
+              #avtt-buff-options ~ [class*='styles_tabFilter'] > [class*='styles_buttons'] {
+                margin-bottom: 2px;
+              }
+
+              .avttBuffSheetPins {
+                display: flex;
+                flex-wrap: wrap;
+                margin: 5px 0px;
+              }
+
+              .avttBuffSheetPins li {
+                list-style: none;
+                display: flex;
+                align-items: center;
+                margin-right: 20px;
+              }
+
+              .avttBuffSheetPins li input {
+                margin-right: 5px;
+                width: 16px;
+                height: 16px;
+              }
+
+              /* Stat block variant: sits at the top of the block. Sticky so it stays reachable while the
+                block scrolls. */
+              .avtt-statblock-buffs {
+                position: sticky;
+                top: 0;
+                z-index: 5;
+                padding: 2px 6px;
+                background: var(--theme-background-solid, #fff);
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list {
+                position: relative;
+                left: unset;
+                width: 100%;
+                color: var(--theme-contrast, #242528);
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list .clickHandle {
+                line-height: 16px;
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list .clickHandle,
+              .avtt-statblock-buffs .dropdown-check-list ul.avttBuffItems {
+                width: 100%;
+                box-sizing: border-box;
+                background: var(--theme-background-solid, #fff);
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list.readonly .clickHandle {
+                opacity: 0.6;
+                cursor: not-allowed;
+              }
+
+              /* Pins sit directly under the handle. The open menu is absolutely positioned, so it
+                overlays them rather than pushing them down. */
+              .avtt-statblock-buffs .avttBuffSheetPins {
+                margin: 3px 0px 0px 0px;
+                font-size: 10px;
+                row-gap: 2px;
+              }
+
+              .avtt-statblock-buffs .avttBuffSheetPins li {
+                margin-right: 10px;
+              }
+
+              .avtt-statblock-buffs .avttBuffSheetPins label {
+                font-size: 11px;
+                padding: 0px;
               }
 
                 [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
@@ -2934,50 +2850,6 @@ function observe_character_sheet_changes(documentToObserve) {
               .roll-mod-container.hidden{
                   visibility:hidden;
               }
-              #avtt-buff-options span.material-symbols-outlined.enabled {
-                  opacity: 1;
-              }
-              .pinToSheet.material-symbols-outlined:before{
-                   content:"\\f3ab";
-              }
-              .favorite.material-symbols-outlined:before{
-                  content:"\\e8d0";
-              }
-              #avttBuffSheetPins div.iconButtons{
-                display:none;
-              }
-              #avtt-buff-options .iconButtons {
-                  position:absolute;
-                  display:flex;
-                  right:0px;
-              }
-              #avtt-buff-options .collapsed .iconButtons {
-                  display: none;
-              }
-              #avtt-buff-options li:has(label) {
-                  width:calc(100% - 30px);
-              }
-              #avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_buttons']{
-                margin-bottom:2px;
-              }
-              div#avttBuffSheetPins {
-                display: flex;
-                flex-wrap: wrap;
-                margin: 5px 0px;
-              }
-              div#avttBuffSheetPins li {
-                list-style: none; 
-                display: flex;
-                align-items: center;
-              }
-              div#avttBuffSheetPins li input {
-                margin-right: 5px;
-                width: 16px;
-                height: 16px;
-              }
-              div#avttBuffSheetPins li {
-                  margin-right: 20px;
-              }
               .avtt-ability-roll-button{
                   color: #b43c35;
                   border: 1px solid #b43c35;
@@ -2991,158 +2863,6 @@ function observe_character_sheet_changes(documentToObserve) {
                   letter-spacing: 1px;
                   padding: 1px 4px 0;
                   cursor: pointer;
-              }
-              ul.avttBuffItems select,
-              div#avttBuffSheetPins select {
-                -webkit-appearance: none;
-                -moz-appearance: none;
-                text-indent: 1px;
-                text-overflow: '';
-                margin-right: 5px;
-                border-color: #7d7d7d;
-                padding:0px;
-                width:16px;
-                height:16px;
-                border-radius:3px;
-                background: #fff;
-                color: var(--theme-contrast);
-                text-shadow: none !important;
-                font-weight: bold; 
-              }
-              .ct-character-sheet--dark-mode ul.avttBuffItems select,
-              .ct-character-sheet--dark-mode div#avttBuffSheetPins select {
-                background: #363636 !important;
-              }
-              div#avttBuffSheetPins select{
-                font-size: 10px;
-              }
-              .ct-character-sheet--dark-mode .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(3);
-              }
-              .dropdown-check-list {
-                display: inline-block;
-                position: absolute;
-                left: 130px;
-                font-size: 10px;
-                width: 250px;
-              }
-              .ct-tablet-box__header ~ .dropdown-check-list {
-                left: unset;
-              }
-              .dropdown-check-list .clickHandle {
-                position: relative;
-                cursor: pointer;
-                display: inline-block;
-                padding: 0px 50px 0px 10px;
-                border: 1px solid #ccc;
-                border-radius: 5px 5px 0px 0px;
-                width: 250px;
-              }
-
-              .dropdown-check-list .clickHandle:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 10px;
-                top: 0px;
-                -moz-transform: rotate(-135deg);
-                -ms-transform: rotate(-135deg);
-                -o-transform: rotate(-135deg);
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems {
-                padding: 2px;
-                display: none;
-                margin: 0;
-                border: 1px solid #ccc;
-                border-top: none;
-                border-radius: 0px 0px 5px 5px;
-                height: 300px;
-                overflow: auto;
-                scrollbar-width: thin;
-                width: 250px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed {
-                height: 22px;
-                overflow: hidden;
-                background: none;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li {  
-                list-style: none;
-                display: flex;
-                align-items: center;
-                justify-content: flex-start;
-                padding: 3px;
-                font-weight: normal;
-                margin-left:2px
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type {
-                font-size: 12px;
-                font-weight: bold;
-                position: relative;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type{
-                  font-size:10px;
-                  margin-left:5px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li{
-                  margin-left: 7px;
-              }
-              .dropdown-check-list.visible .clickHandle {
-                color: #0094ff;
-              }
-              .dropdown-check-list .avttBuffItems {
-                display: none;
-              }
-              .dropdown-check-list.visible .avttBuffItems {
-                display: block;
-                position: absolute;
-                background: var(--theme-background-solid);
-                z-index: 200;
-              }
-              .avttBuffItems li input{
-                margin-right: 4px;
-                width: 16px;
-                height: 16px;
-                min-width: 16px;
-                min-height: 16px;
-              }
-              .avttBuffItems li label{
-                font-size:12px;
-                padding: 3px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 3px;
-                top: 9px;
-                transform-origin:center;
-                -moz-transform: rotate(45deg);
-                -ms-transform: rotate(45deg);
-                -o-transform: rotate(45deg);
-                -webkit-transform: rotate(45deg);
-                transform: rotate(45deg);       
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed>li:first-of-type:after {
-                top: 5px;
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(0.9);
-                  border-radius:5px;
               }
               div#icon-roll-options input,
               div#icon-roll-options select{
