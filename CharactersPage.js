@@ -1429,6 +1429,10 @@ function read_inspiration(container = $(document)) {
 // Good canidate for service worker
 async function init_characters_pages(container = $(document)) {
 
+  // The DM and spectator pages load this file only for the roll buff data/UI, so skip the
+  // character page setup (notably the location observer) when we aren't on a character page.
+  if (!window.location.pathname.match("/characters")) return;
+
   // this is injected on Main.js when avtt is running. Make sure we set it when avtt is not running
   if (typeof window.EXTENSION_PATH !== "string" || window.EXTENSION_PATH.length <= 1) {
     window.EXTENSION_PATH = container.find("#extensionpath").attr('data-path');
@@ -1774,7 +1778,6 @@ function click_condition(conditionName, setToggle = true, callback, addtionalCSS
     $('#condition-click').remove();
   }, 40)	
 }
-
 
 /**
  * Observes character sheet changes and:
