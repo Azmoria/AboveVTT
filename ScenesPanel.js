@@ -1,7 +1,7 @@
 
 function consider_upscaling(target){
 	const targetScale = Math.max(Math.ceil(60 / target.hpps), Math.ceil(60 / target.vpps));
-	target.scale_factor = clamp(targetScale, 1, 6);	
+	target.scale_factor = clamp(targetScale, 1, 20);	
 }
 
 function handle_basic_form_toggle_click(event){
@@ -37,9 +37,11 @@ async function get_edit_form_data(){
 
 			if ( ((inputName === 'player_map') || (inputName==='dm_map')) ) {
 				inputValue = await parse_img(inputValue);
-			}
-			else if ($(this).is("button")){
+			} else if ($(this).is("button")){
 				inputValue = $(this).hasClass("rc-switch-checked") ? "1" : "0"
+			} else if($(this).is("input.spectrum")){
+				const rgbData = $(this).spectrum("get").toRgb();
+				inputValue = `rgba(${rgbData.r}, ${rgbData.g}, ${rgbData.b}, ${rgbData.a})`;
 			}
 			
 			data[inputName] = await inputValue;
@@ -1434,7 +1436,7 @@ Tbh I feel like these overcomplicate things
 		if (window.CURRENT_SCENE_DATA.id == scene.id) {
 			window.CURRENT_SCENE_DATA.weather = selectedWeather;
 			window.CURRENT_SCENE_DATA.weatherIntensity = intensitySlider.val();
-			set_weather();
+			set_weather_size(window.CURRENT_SCENE_DATA.width ?? 0, window.CURRENT_SCENE_DATA.height ?? 0);
 		}
 	});
 
@@ -1645,6 +1647,12 @@ function display_chapters(selectedChapter, notOwned = false) {
 	const chapterSelectMenu = ddb_style_chapter_select(source_name, window.ScenesHandler.sources[source_name].chapters);
 	$("#importer_toggles").append(chapterSelectMenu);
 	$("#chapter_select").hide();
+	if (notOwned) {
+		const area = $("#importer_area");
+		area.empty();
+		area.append($(`<div>Source not available. You may not own this book or it is not shared with you.</div>`));
+		return;
+	}
 	if (selectedChapter) {
 		$(".quick-menu-item-link").each((idx, el) => {
 			const chapterLink = $(el);
@@ -1663,20 +1671,12 @@ function display_chapters(selectedChapter, notOwned = false) {
 	}
 }
 
-function display_scenes(notOwned = false) {
+function display_scenes() {
 
 
 
 	let source_name = $("#source_select").val();
 	let chapter_name = $("#chapter_select").val();
-	if(notOwned){
-		let area = $("#importer_area");
-		area.empty();
-		area.css("opacity", "0");
-		area.animate({ opacity: "1" }, 300);
-		area.append($(`<div>Chapter not available. You may not own it or it is not fully released yet. You can check if you have access to the chapter here here: <a target="_blank" id='check_chapter_access' href='/sources/dnd/${source_name}/${chapter_name}'>https://www.dndbeyond.com/sources/dnd/${source_name}/${chapter_name}</a></div> `)) 
-		return;
-	}
 	fill_importer(window.ScenesHandler.sources[source_name].chapters[chapter_name].scenes, 0);
 	noisy_log(window.ScenesHandler.sources[source_name].chapters[chapter_name].scenes);
 	noisy_log("mostrati...");
@@ -1762,8 +1762,8 @@ function init_ddb_importer(target, selectedSource, selectedChapter) {
 		$("#scenes_select").empty();
 		$("#import_button").attr('disabled', 'disabled');
 		let source_name = $("#source_select").val()
-		window.ScenesHandler.build_chapters(source_name, function () {
-			display_chapters(selectedChapter);
+		window.ScenesHandler.build_chapters(source_name, function (notOwned = false) {
+			display_chapters(selectedChapter, notOwned);
 			$('#sources-import-content-container').find(".sidebar-panel-loading-indicator").remove();
 		});
 	});
@@ -1938,6 +1938,18 @@ function init_scenes_panel() {
 
 	scenesPanel.updateHeader("Scenes");
 	add_expand_collapse_buttons_to_header(scenesPanel);
+	let favoriteButton = $(`<button class="token-row-button favorites-button ${window.FAVORITE_SCENE_FILTER == 1 ? 'active' : ''}" title="Display Favorites"><span class="material-icons"><span class="material-symbols-outlined">star</span></span></button>`);
+	favoriteButton.on("click", function (clickEvent) {
+		favoriteButton.toggleClass("active");
+		if (favoriteButton.hasClass("active")) {
+			window.FAVORITE_SCENE_FILTER = 1;
+		} else {
+			window.FAVORITE_SCENE_FILTER = 0;
+		}
+		scenesPanel.body.find(".sidebar-list-item-row:not(.favorite):not(:has(.favorite))").css("display", window.FAVORITE_SCENE_FILTER == 1 ? "none" : "");
+		scenesPanel.body.find(".sidebar-list-item-row.favorite.folder .sidebar-list-item-row").css("display", "");
+	});
+	scenesPanel.header.find('.expand-collapse-wrapper').prepend(favoriteButton);
 	let hideMapFromPlayers = $(`<button class="token-row-button hide-button ${window.AVTT_CAMPAIGN_INFO?.hidePlayersScene == 1 ? 'active' : ''}" title="Hide Scene from Players"><span class="material-icons"><span class="material-symbols-outlined">group_off</span></span></button>`);
 	hideMapFromPlayers.on("click", function (clickEvent) {
 		const data = { ...window.AVTT_CAMPAIGN_INFO };
@@ -2323,6 +2335,10 @@ async function redraw_scene_list(searchTerm) {
 	}
 	if($('.scenes-panel-add-buttons-wrapper button.reorder-button.active').length>0)
        enable_draggable_change_folder(ItemType.Scene)
+
+	scenesPanel.body.find(".sidebar-list-item-row:not(.favorite):not(:has(.favorite))").css("display", window.FAVORITE_SCENE_FILTER == 1 ? "none" : "");
+	scenesPanel.body.find(".sidebar-list-item-row.favorite.folder > .sidebar-list-item-row").css("display", "");
+	
 }
 
 async function create_scene_inside(parentId, fullPath = RootFolder.Scenes.path, sceneName = "New Scene", mapUrl = "", sceneArray = undefined) {
@@ -2716,7 +2732,17 @@ function rename_scene_folder(item, newName, alertUser) {
 	// return undefined;
 	return folder_path_of_scene(window.ScenesHandler.scenes[folderIndex]);
 }
-
+function favorite_scene(item, value) {
+	noisy_log(`favorite_scene`, item);
+	const sceneIndex = window.ScenesHandler.scenes.findIndex(s => s.id === item.id);
+	if (sceneIndex < 0) {
+		const warningMessage = `Could not find a scene with id: ${item.id}`
+		console.warn('favorite_scene', warningMessage, item);
+		return;
+	}
+	window.ScenesHandler.scenes[sceneIndex].favorite = value ?? !window.ScenesHandler.scenes[sceneIndex].favorite;
+	window.ScenesHandler.persist_scene(sceneIndex);
+}
 function register_scene_row_context_menu() {
 	$.contextMenu({
 		selector: "#scenes-panel .sidebar-list-item-row",
@@ -2747,6 +2773,30 @@ function register_scene_row_context_menu() {
 					}
 				};
 			}
+			
+			const scene = window.ScenesHandler.scenes.find(s => s.id === rowItem.id);
+			menuItems["favorite"] = {
+				name: scene?.favorite == 1 ? "Unfavorite" : "Favorite",
+				callback: async function(itemKey, opt, originalEvent) {
+					const selectedItems = $('#scenes-panel .selected');
+					if (!selectedItems.length) {
+						build_import_loading_indicator('Updating Scene');
+						let itemToEdit = find_sidebar_list_item(opt.$trigger);
+						favorite_scene(itemToEdit);
+					} else {
+						build_import_loading_indicator('Updating Scenes');
+						let favorite = scene?.favorite == 1 ? 0 : 1;
+						for (let i = 0; i < selectedItems.length; i++) {
+							let selectedRow = $(selectedItems[i]);
+							let selectedItem = find_sidebar_list_item(selectedRow);
+							favorite_scene(selectedItem, favorite);
+						}
+					}
+					did_update_scenes();
+					$(".import-loading-indicator").remove();
+				}
+			}
+			
 			if (rowItem.isTypeScene()){
 				menuItems["duplicate"] = {
 					name: "Duplicate",
@@ -2834,6 +2884,8 @@ function register_scene_row_context_menu() {
 						}
 					}
 				};
+				
+
 				if (!selectedClicked && window.JOURNAL.notes[rowItem.id]) {
 					menuItems["openSceneNote"] = {
 						name: "Open Scene Note",

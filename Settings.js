@@ -12,8 +12,8 @@ function token_setting_options() {
 				{ value: "noConstraint", label: "No Constraint", description: `The token will show up as it is naturally largest side being equal to token size, we set "Ignore Aspect Ratio" to false and "Square to true. Borders and Health Aura are drawn as a drop shadow to fit the shape of the token.` },
 				{ value: "definitelyNotAToken", label: "Definitely Not a Token", description: `This token will have the shape of no contraints and be made to appear as a object tile` },
 				{ value: "labelToken", label: "Map Pin Token", description: `This token will have the settings of Definitely Not a Token and have it's name always displayed` },
-				{ value: "inPersonMini", dmOnly: true, label: "TV Table Mini - Hidden from Players", description: `This token will not be displayed to players on the scene but they will still see it in the combat tracker.` }
-				
+				{ value: "inPersonMini", dmOnly: true, label: "TV Table Mini - Hidden from Players", description: `This token will not be displayed to players on the scene but they will still see it in the combat tracker.` },
+				{ value: "roof", label: "Roof", description: `This token represents a roof and will be hidden when a token with vision is underneath it or the selected area.` }
 			],
 			defaultValue: "circle",
 			menuPosition: '1',
@@ -45,7 +45,7 @@ function token_setting_options() {
 				{ value: "aura-bloodied-50", label: "Aura Bloodied 50", description: "Tokens will have a red aura when bloodied" },			
 				{ value: "condition-bloodied-50", label: "Condition Bloodied 50", description: "Tokens will have the bloodied condition automatically applied." },	
 				{ value: "bar", label: "HP Meter", description: "How this meter is displayed depends on token type. Color blind alternative to auras." },
-				
+				{ value: "boss", label: "Boss Meter", description: "A large HP meter is displayed at the" },
 				{ value: "none", label: "None", description: "Tokens will not have a health visual" }
 			],
 			defaultValue: "aura",
@@ -338,14 +338,14 @@ function token_setting_options() {
 
 function avtt_settings(campaignSettings = false) {
 	let settings = [
-
+		
 		{
 			name: "iconUi",
 			label: "Mobile/Icon UI",
 			type: "toggle",
 			options: [
-				{ value: true, label: "Enable", description: `` },
-				{ value: false, label: "Disable", description: `` }
+				{ value: true, label: "Enable", description: `Adjusts the ui to be text based along the top, or icon based on the left side` },
+				{ value: false, label: "Disable", description: `Adjusts the ui to be text based along the top, or icon based on the left side` }
 			],
 			defaultValue: true,
 			class: 'ui',
@@ -384,19 +384,7 @@ function avtt_settings(campaignSettings = false) {
 				{ value: false, label: "Disable", description: `While enabled 2014 spell tooltips will be updated to 2024` }
 			],
 			defaultValue: false,
-			class: 'ui',
-			global: 1
-		},
-		{
-			name: 'streamDiceRolls',
-			label: 'Stream Dice Rolls',
-			type: 'toggle',
-			options: [
-				{ value: true, label: "Streaming", description: `When you roll DDB dice (to Everyone), all players who also enable this feature will see your rolls and you will see theirs. Disclaimer: the dice will start small then grow to normal size after a few rolls. They will be contained to the smaller of your window or the sending screen size.` },
-				{ value: false, label: "Not Streaming", description: `When you enable this, DDB dice rolls will be visible to you and all other players who also enable this. Disclaimer: the dice will start small then grow to normal size after a few rolls. They will be contained to the smaller of your window or the sending screen size.` }
-			],
-			defaultValue: false,
-			class: 'stream'
+			class: 'ui'
 		},
 		{
 			name: 'iframeStatBlocks',
@@ -408,17 +396,6 @@ function avtt_settings(campaignSettings = false) {
 			],
 			defaultValue: false,
 			class: 'debug',
-		},
-		{
-			name: "peerStreaming",
-			label: "Allow Streaming Cursor/Ruler",
-			type: "toggle",
-			options: [
-				{ value: true, label: "Allow", description: `If you are experiencing performance issues or if you have slow internet, you may want to disable this.` },
-				{ value: false, label: "Never", description: `If you are experiencing performance issues or if you have slow internet, you may want to disable this.` }
-			],
-			defaultValue: false,
-			class: 'stream'
 		},
 		{
 			name: 'alwaysShowSplash',
@@ -445,6 +422,31 @@ function avtt_settings(campaignSettings = false) {
 			global: 1
 		}
 	];
+
+	if((window.DM && !campaignSettings) || is_spectator_page()){
+		settings.push({
+			name: 'streamDiceRolls',
+			label: 'Stream Dice Rolls',
+			type: 'toggle',
+			options: [
+				{ value: true, label: "Streaming", description: `You will see DDB dice rolls from all players with this enabled. Note players can see your rolls if not rolling to self regardless.` },
+				{ value: false, label: "Not Streaming", description: `You will not see DDB dice rolls from other players. Note players can still see your rolls if not rolling to self.` }
+			],
+			defaultValue: false,
+			class: 'stream'
+		});
+	}
+	settings.push({
+			name: "peerStreaming",
+			label: "Allow Streaming Cursor/Ruler",
+			type: "toggle",
+			options: [
+				{ value: true, label: "Allow", description: `If you are experiencing performance issues or if you have slow internet, you may want to disable this.` },
+				{ value: false, label: "Never", description: `If you are experiencing performance issues or if you have slow internet, you may want to disable this.` }
+			],
+			defaultValue: false,
+			class: 'stream'
+	})
 	if(!campaignSettings){
 		settings.push({	
 			name: "gridZoomConversion",
@@ -468,8 +470,7 @@ function avtt_settings(campaignSettings = false) {
 	}
 
 	if (window.DM && !campaignSettings) {
-		// Remove the `dm` an option for the DM and tweak the descriptions to remove references to the DM.
-		
+		// DM only settings - does not show up in suggsted settings for players
 			settings.push(
 			{
 				name: "disableCombatText",
@@ -523,6 +524,7 @@ function avtt_settings(campaignSettings = false) {
 				label: "Token Settings Defaults",
 				buttonText: "Edit",
 				type: "customButton",
+				description: "Set settings used when tokens are placed on a scene. Will be overridden by folder/token specific defaults.",
 				customFunction: function (clickEvent, body) {
 					build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
 						let optionsContainer = build_sidebar_token_options_flyout(token_setting_options(), window.TOKEN_SETTINGS, function (name, value) {
@@ -571,6 +573,7 @@ function avtt_settings(campaignSettings = false) {
 				label: "Scene Settings Defaults",
 				buttonText: "Edit",
 				type: "customButton",
+				description: "Set new scene default settings.",
 				customFunction: function (clickEvent, body) {
 					const self=this;
 					build_and_display_sidebar_flyout(clickEvent.clientY, function (flyout) {
@@ -750,6 +753,7 @@ function avtt_settings(campaignSettings = false) {
 		name: 'quickToggleDefaults',
 		label: 'Quick Toggle Defaults on Load',
 		type: 'flyoutButton',
+		description: "Set initial states for right side quick toggle buttons.",
 		options: [
 			{ name: "selectedTokenVision", label: "Selected Token Vision", defaultValue: false, dmOnly: false, type: 'toggle',options: [
 				{ value: true, label: "Enabled", description: `` },
@@ -792,6 +796,7 @@ function avtt_settings(campaignSettings = false) {
 	settings.push({
 		name: 'quickRoll',
 		label: 'Numkey Quick Roll options',
+		description: 'Edit the quick roll formulas for number keys',
 		type: 'flyoutButton',
 		options: [
 			{
@@ -893,6 +898,7 @@ function avtt_settings(campaignSettings = false) {
 			name: 'campaignDefaults',
 			label: 'Campagn Suggested Defaults',
 			type: 'flyoutButton',
+			description: "Edit suggested defaults for player settings. You and players can then match these settings with 'Match DM Suggested Settings' below.",
 			sortCategory: true,
 			options: avtt_settings(true),
 			defaultValue: {},
@@ -904,7 +910,7 @@ function avtt_settings(campaignSettings = false) {
 		settings.push({	
 			name: "matchCampaignSettings",
 			label: "Match DM Suggested Settings",
-			description: "<p>If the DM has suggested settings for this campaign force your settings to match.</p>",
+			description: "If the DM has suggested settings for this campaign match those settings here.",
 			buttonText: ["Set"],
 			type: "customButton",
 			customFunction: [
@@ -1086,17 +1092,6 @@ function set_avtt_setting_value(name, newValue) {
 				use_iframes_for_monsters();
 			} else {
 				stop_using_iframes_for_monsters();
-			}
-			break;
-		case "streamDiceRolls":
-			// TODO: change this to use window.EXPERIMENTAL_SETTINGS[name] instead of using special logic
-			if (newValue === true || newValue === false) {
-				window.JOINTHEDICESTREAM = newValue;
-				enable_dice_streaming_feature(newValue)
-			} else {
-				const defaultValue = get_avtt_setting_default_value(name);
-				window.JOINTHEDICESTREAM = defaultValue;
-				enable_dice_streaming_feature(defaultValue);
 			}
 			break;
 		case "peerStreaming":
@@ -1779,23 +1774,7 @@ function update_token_base_visibility(container) {
 	}
 }
 
-function enable_dice_streaming_feature(enabled){
-	if(enabled)
-	{
-		window.JOINTHEDICESTREAM = true;
-		add_dice_stream_gamelog_button();
-		update_dice_streaming_feature(window.JOINTHEDICESTREAM);
-	}
-	else{
-		$(".stream-dice-button").remove();
-		window.JOINTHEDICESTREAM = false;
-		$("[id^='streamer-']").remove();
-		for (let peer in window.STREAMPEERS) {
-			window.STREAMPEERS[peer].close();
-			delete window.STREAMPEERS[peer]
-		}
-	}
-}
+
 
 function update_dice_streaming_feature(enabled, sendToText=gamelog_send_to_text()) {
 

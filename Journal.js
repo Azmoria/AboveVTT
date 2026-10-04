@@ -440,11 +440,28 @@ class JournalManager{
 		
 
 	}
+	isInvalidChapterParent(chapterId, targetId) {
+		if (!chapterId || !targetId || chapterId === targetId) {
+			return true;
+		}
+
+		let current = this.chapters.find(chapter => chapter.id === targetId);
+		const visited = new Set();
+		while (current?.parentID && !visited.has(current.id)) {
+			if (current.parentID === chapterId) {
+				return true;
+			}
+			visited.add(current.id);
+			current = this.chapters.find(chapter => chapter.id === current.parentID);
+		}
+
+		return false;
+	}
 	show_rename_input(note_id, searchText=''){	
 		const self = this;
 				
 		const input_note_title=$(`
-			<input type='text' class='input-add-chapter' value='${self.notes[note_id].title}'>
+			<input type='text' class='input-add-chapter' value='${self.notes[note_id].title?.replace(/'/g, '&#39;').replace(/"/g, '&quot;') || ""}'>
 		`);
 		const rename_btn = $(`.sidebar-list-item-row[data-id='${note_id}'] button.save-rename`);
 		const edit_btn = $(`.sidebar-list-item-row[data-id='${note_id}'] button.edit-note`);
@@ -569,9 +586,64 @@ class JournalManager{
 		
 		// Create a chapter list that sorts journal-chapters with drag and drop
 		const chapter_list=$(`<ul class='folder-item-list'></ul>`);
+		let draggedFolderId;
+		let folderDropHandled = false;
+		let journalTreeDropActive = false;
+		let journalRebuildPending = false;
+		let journalRebuildScheduled = false;
+
+		const promoteChapterToRoot = (chapter, cursorY) => {
+			if(!chapter)
+				return;
+			if(chapter.parentID !== undefined)
+				delete chapter.parentID;
+			const chapterIndex = self.chapters.indexOf(chapter);
+			if(chapterIndex < 0)
+				return;
+			self.chapters.splice(chapterIndex, 1);
+			const rootFolders = Array.from(document.querySelectorAll(
+				'#journal-panel .folder-item-list > .folder'
+			)).filter(folder => folder.getAttribute('data-id') !== chapter.id);
+			let insertionIndex = self.chapters.length;
+			for(const rootFolder of rootFolders){
+				const rootChapterIndex = self.chapters.findIndex(currentChapter =>
+					currentChapter.id === rootFolder.getAttribute('data-id')
+				);
+				if(rootChapterIndex < 0)
+					continue;
+				const rect = rootFolder.getBoundingClientRect();
+				if(cursorY !== undefined && cursorY < rect.top + rect.height / 2){
+					insertionIndex = rootChapterIndex;
+					break;
+				}
+				insertionIndex = rootChapterIndex + 1;
+			}
+			self.chapters.splice(insertionIndex, 0, chapter);
+		};
+		const promoteDraggedFolderToRoot = (item, cursorY) => {
+			if(window.avttJournalFolderDropHandled){
+				folderDropHandled = true;
+				window.avttJournalFolderDropHandled = false;
+			}
+			if(!item?.hasClass('folder') || folderDropHandled || item.attr('data-id') !== draggedFolderId)
+				return false;
+			const chapter = self.chapters.find(currentChapter => currentChapter.id === draggedFolderId);
+			if(chapter?.parentID === undefined)
+				return false;
+			promoteChapterToRoot(chapter, cursorY);
+			self.build_journal(searchText);
+			return true;
+		};
 		chapter_list.sortable({
-			items: '.folder',
+			items: '> .folder',
 			refreshPositions: true,
+			start: function(event, ui) {
+				draggedFolderId = ui.item.hasClass('folder') ? ui.item.attr('data-id') : undefined;
+				folderDropHandled = false;
+				journalTreeDropActive = false;
+				window.avttJournalFolderDropHandled = false;
+				showJournalRootDropTarget();
+			},
 			update: function(event, ui) {
 				
 
@@ -589,14 +661,32 @@ class JournalManager{
 					chapters: self.chapters
 				});
 				self.build_journal(searchText);
+			},
+			beforeStop: function(event, ui) {
+				if(promoteDraggedFolderToRoot(ui.item, event?.clientY))
+					this._noFinalSort = true;
+			},
+			stop: function(event, ui) {
+				promoteDraggedFolderToRoot(ui.item, event?.clientY);
+				hideJournalRootDropTarget();
+				self.build_journal(searchText);
 			}
 		});
 
 		chapter_list.droppable({
-		    accept: '#journal-panel .folder>.folder',
+		    accept: function(draggable) {
+				return draggable.is('#journal-panel .folder>.folder');
+			},
 		    greedy: true,
 			tolerance: 'pointer',
+			over: function() {
+				journalTreeDropActive = true;
+			},
+			out: function() {
+				journalTreeDropActive = false;
+			},
 		    drop: function(e,ui) {
+				folderDropHandled = true;
 		    	let folderIndex = ui.draggable.attr('data-index');
 		    	if(self.chapters[folderIndex].parentID){
 		    		delete self.chapters[folderIndex].parentID;
@@ -615,6 +705,75 @@ class JournalManager{
 
 		    }
 		});
+		const journalRootDropOptions = {
+			accept: '#journal-panel .folder',
+			greedy: true,
+			tolerance: 'pointer',
+			drop: function(e, ui) {
+				const draggedId = ui.draggable.attr('data-id');
+				const chapter = self.chapters.find(currentChapter => currentChapter.id === draggedId);
+				if(!chapter)
+					return;
+				folderDropHandled = true;
+				promoteChapterToRoot(chapter, e?.clientY);
+				self.persist();
+				window.MB.sendMessage('custom/myVTT/JournalChapters', {
+					chapters: self.chapters
+				});
+				self.build_journal(searchText);
+			}
+		};
+		if(journalPanel.body.data('ui-droppable'))
+			journalPanel.body.droppable('option', journalRootDropOptions);
+		else
+			journalPanel.body.droppable(journalRootDropOptions);
+		let journalRootDropTarget = $('#avtt-journal-root-drop-target');
+		const journalPanelElement = $('#journal-panel');
+		const createJournalRootDropTarget = () => {
+			if(journalRootDropTarget.length > 0)
+				return journalRootDropTarget;
+			journalRootDropTarget = $('<div id="avtt-journal-root-drop-target" aria-hidden="true"></div>').appendTo('body');
+			journalRootDropTarget.css({
+				position: 'fixed',
+				top: 0,
+				left: 0,
+				width: '100vw',
+				height: '100vh',
+				display: 'block',
+				'z-index': 1000000,
+				'background-color': 'transparent',
+				'pointer-events': 'none'
+			});
+			journalRootDropTarget.droppable({
+				accept: '#journal-panel .folder',
+				tolerance: 'pointer',
+				drop: function(e, ui) {
+					if(journalTreeDropActive)
+						return;
+					const draggedId = ui.draggable.attr('data-id');
+					const chapter = self.chapters.find(currentChapter => currentChapter.id === draggedId);
+					if(!chapter)
+						return;
+					window.avttJournalFolderDropHandled = true;
+					promoteChapterToRoot(chapter, e?.clientY);
+					self.persist();
+					window.MB.sendMessage('custom/myVTT/JournalChapters', {
+						chapters: self.chapters
+					});
+					self.build_journal(searchText);
+				}
+			});
+			return journalRootDropTarget;
+		};
+		const showJournalRootDropTarget = () => {
+			const rootDropTarget = createJournalRootDropTarget();
+			rootDropTarget.show();
+		};
+		const hideJournalRootDropTarget = () => {
+			if(journalRootDropTarget.length === 0)
+				return;
+			journalRootDropTarget.hide();
+		};
 
 
 
@@ -715,16 +874,28 @@ class JournalManager{
 				// Create a sortale list of notes
 				const note_list=$("<ul class='note-list'></ul>");
 				section_chapter.droppable({
-					accept: '#journal-panel .folder',
+					accept: function(draggable) {
+						const draggedId = draggable.attr('data-id');
+						const targetId = section_chapter.attr('data-id');
+						return draggedId && !self.isInvalidChapterParent(draggedId, targetId);
+					},
 					greedy: true,
 					tolerance: 'pointer',
+					over: function() {
+						journalTreeDropActive = true;
+					},
+					out: function() {
+						journalTreeDropActive = false;
+					},
 					drop: function(e,ui) {
-						let targetID = $(this).attr('data-id');
-						let targetIndex = $(this).attr('data-index');
-						let folderIndex = ui.draggable.attr('data-index');
-						if(self.chapters[folderIndex].id == targetID)
+						folderDropHandled = true;
+						const targetID = $(this).attr('data-id');
+						const targetIndex = Number($(this).attr('data-index'));
+						const folderIndex = Number(ui.draggable.attr('data-index'));
+						const draggedChapter = self.chapters[folderIndex];
+						if(!draggedChapter || self.isInvalidChapterParent(draggedChapter.id, targetID))
 							return;
-						self.chapters[folderIndex].parentID = targetID;
+						draggedChapter.parentID = targetID;
 						const new_index = targetIndex+1;
 						// Move the dragged element to the new index
 						self.chapters.splice(new_index, 0, self.chapters.splice(folderIndex, 1)[0]);
@@ -742,7 +913,14 @@ class JournalManager{
 				section_chapter.sortable({
 					refreshPositions: true,
 					connectWith: "#journal-panel .folder",
-					items: '.sidebar-list-item-row',
+					items: '> .folder, > .note-list > .sidebar-list-item-row',
+					start: function(event, ui) {
+						draggedFolderId = ui.item.hasClass('folder') ? ui.item.attr('data-id') : undefined;
+						folderDropHandled = false;
+						journalTreeDropActive = false;
+						window.avttJournalFolderDropHandled = false;
+						showJournalRootDropTarget();
+					},
 					receive: function(event, ui) {
 						// Called only in case B (with !!sender == true)
 						sender = ui.sender;
@@ -790,9 +968,24 @@ class JournalManager{
 							self.build_journal(searchText);
 						}
 
+					},
+						beforeStop: function(event, ui) {
+							if(promoteDraggedFolderToRoot(ui.item, event?.clientY))
+								this._noFinalSort = true;
+						},
+					stop: function(event, ui) {
+						promoteDraggedFolderToRoot(ui.item, event?.clientY);
+						hideJournalRootDropTarget();
+						self.build_journal(searchText);
 					}
 				});
-				let folderIcon = $(`<div class="sidebar-list-item-row-img"><img src="${window.EXTENSION_PATH}assets/folder.svg" class="token-image"></div>`)
+				let folderIcon = $(`<div class="sidebar-list-item-row-img"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" x="0px" y="0px" viewBox="0 0 309.267 309.267" style="enable-background:new 0 0 309.267 309.267;" src="${window.EXTENSION_PATH}assets/folder.svg" xml:space="preserve">
+						<g>
+						<path style="fill:#F4B459;" d="M260.944,43.491H125.64c0,0-18.324-28.994-28.994-28.994H48.323c-10.67,0-19.329,8.65-19.329,19.329   v222.286c0,10.67,8.659,19.329,19.329,19.329h212.621c10.67,0,19.329-8.659,19.329-19.329V62.82   C280.273,52.15,271.614,43.491,260.944,43.491z"/>
+						<path style="fill:#E4E7E7;" d="M28.994,72.484h251.279v77.317H28.994V72.484z"/>
+						<path style="fill:#F4B459;" d="M19.329,91.814h270.609c10.67,0,19.329,8.65,19.329,19.329l-19.329,164.298   c0,10.67-8.659,19.329-19.329,19.329H38.658c-10.67,0-19.329-8.659-19.329-19.329L0,111.143C0,100.463,8.659,91.814,19.329,91.814z   "/>
+						</g>
+					</svg></div>`)
 					
 				let row_chapter_title=$("<div class='row-chapter'></div>");
 				
@@ -1356,7 +1549,7 @@ class JournalManager{
 		            menuItems["rename"] = {
 		                name: "Rename",
 		                callback: function(itemKey, opt, originalEvent) {
-		                    let input_chapter_title=$(`<input type='text' class='input-add-chapter' value='${currChapter.title}'>`);
+		                    let input_chapter_title=$(`<input type='text' class='input-add-chapter' value='${currChapter.title?.replace(/'/g, '&#39;').replace(/"/g, '&quot;') || ""}'>`);
 	
 							input_chapter_title.keypress(function(e){
 								
@@ -1605,7 +1798,7 @@ class JournalManager{
 	addTrackedInputs(target, id = {noteId: undefined, token: undefined}){
 		let numberFound = target.attr('data-number');
 		let spellName = target.attr('data-spell').trim();
-		const remainingText = target.hasClass('each') ? '' : `${spellName} slots remaining`
+		const remainingText = target.hasClass('perday') ? 'uses remaining' : target.hasClass('each') ? '' : `${spellName} slots remaining`
 		const {noteId, token} = id;
 
 
@@ -1627,7 +1820,7 @@ class JournalManager{
 		else {
 			window.JOURNAL.track_ability(spellName, numberFound, noteId);
 		}
-
+		
 		const trackerTarget = token || window.JOURNAL.notes[noteId];
 		const trackFunction = noteId && !token ? window.JOURNAL.track_ability : undefined;
 		const playerDisabled = target.hasClass('player-disabled');
@@ -1767,7 +1960,13 @@ class JournalManager{
 		const avttImages = closestNote.find('img[data-src*="above-bucket-not-a-url"]');
 		avttImages.attr('src', '');
 		avttImages.attr('href', '');
-		closestNote.find('a:empty, button:empty, .add-table-row, .table-row-drag-handle, .header-spacer, .injected-input, .added-input-desc, .spell-tooltip>svg.ritual-icon-svg').remove();
+		closestNote.find('a:empty, button:empty, .add-table-row, .table-row-drag-handle, .header-spacer, .avtt-equipment-weight-total, .dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button, .dnd-sheet-block-drag-handle, .injected-input, .added-input-desc, .avtt-statblock-buffs, .avtt-note-roll-buff-pins, .spell-tooltip>svg.ritual-icon-svg').remove();
+		closestNote.find('.avtt-dnd-sheet-block').removeClass('avtt-dnd-sheet-block');
+		closestNote.find('[data-avtt-block-positioned]').each(function(){
+			this.style.removeProperty('position');
+			this.removeAttribute('data-avtt-block-positioned');
+		});
+		closestNote.find('.dnd-sheet [contenteditable] div:not([class]):not([id]):empty').remove();
 		const noteButtons = closestNote.find('button');
 		noteButtons.replaceWith((i, innerHTML)=>{
 			const command = noteButtons[i].getAttribute('data-slash-command');
@@ -1779,31 +1978,65 @@ class JournalManager{
 		closestNote.find('.abovevtt-slash-command-journal').replaceWith((i, innerHTML) =>{
 			return innerHTML;
 		})
-		if(closestNote[0] == undefined){
-			debugger;
-		}
-		const sanitizedHTML = basic_sanitize_html(closestNote[0].innerHTML).replaceAll(/\[(\/)?spell\]/gi, `[$1spell]`).replaceAll(/\[(\/)?magicitem\]/gi, `[$1magicItem]`).replaceAll(/\[(\/)?item\]/gi, `[$1item]`);
-		const changes = forceSave || $(sanitizedHTML).text().replace(/[\s\n\r]/gi, '') != this.notes[id].plain.replace(/[\s\n\r]/gi, '');
+		closestNote.find('.dnd-sheet [contenteditable="true"]').each(function(){
+			if(this.childNodes.length === 1 && this.firstElementChild?.nodeName === 'BR'){
+				this.replaceChildren(this.ownerDocument.createTextNode('\u200B'));
+			}
+		});
+		const customTrackers = closestNote.find('.avtt-custom-tracker');
+		customTrackers.replaceWith((i, innerHTML) =>{
+			const trackerVal = customTrackers[i].getAttribute('data-number');
+			const trackerId = customTrackers[i].getAttribute('data-spell');
+			const previousSpan = $(customTrackers[i]).prev('span');
+			let text;
+			if(previousSpan.text() == trackerId){
+				previousSpan.remove();
+				text = trackerId;
+			}
+			innerHTML = `[track${text ? '' : ` id=${trackerId}`}]${`${text ?? ''}${trackerVal}`.trim()}[/track]`;
+			return innerHTML;
+		});
+		closestNote.find('.image').remove();
+		closestNote.find('[style=""]').removeAttr('style');
+  		closestNote.find('[class=""]').removeAttr('class');
+		closestNote.find('[data-avtt-suggestion-type]').removeAttr('data-avtt-suggestion-type');
+		closestNote.find('[data-avtt-block-sort-group]').removeAttr('data-avtt-block-sort-group');
+		closestNote.find('[data-avtt-equipment-sort-group]').removeAttr('data-avtt-equipment-sort-group');
+		let sanitizedHTML = basic_sanitize_html(closestNote[0].innerHTML).replaceAll(/\[(\/)?spell\]/gi, `[$1spell]`).replaceAll(/\[(\/)?magicitem\]/gi, `[$1magicItem]`)
+		const changes = forceSave || $(sanitizedHTML).text().replace(/[\s\n\r]/gi, '') != $(this.notes[id].text).text().replace(/[\s\n\r]/gi, '');
 		if(changes){
+			if(tokenId){		
+				if(window.TOKEN_OBJECTS[tokenId]){
+					setPcTemplateStats(closestNote.find('.dnd-sheet'), window.TOKEN_OBJECTS[tokenId].options);
+					window.TOKEN_OBJECTS[tokenId].place();
+				}
+				if(window.all_token_objects[tokenId]){
+					setPcTemplateStats(closestNote.find('.dnd-sheet'), window.all_token_objects[tokenId].options);
+				    window.all_token_objects[tokenId].sync();
+				}
+			}
 			this.notes[id].text = sanitizedHTML;
-			this.notes[id].plain = $(sanitizedHTML).text();
+			this.notes[id].plain = '';
 			window.JOURNAL.setPersistTimeout();
-			debounceSendNote(id, this.notes[id], tokenId);
+			debounceSendNote(id, this.notes[id], tokenId, note_container);
 			if(rescanStatBlock){
 				debounceRescanStatBlock(note_container, id, tokenId);
 			}
 		}
 	};
-	/**Downloads and PC template statblock as an offline sheet that can be reuploaded with changes later.
+	/**Downloads PC template statblock as an offline sheet that can be reuploaded with changes later.
 	 * @param {string} id is the note id we want to download */
-	downloadStatBlock = (id) => {
+	downloadStatBlock = (id, token) => {
 		build_import_loading_indicator('Preparing Export File');
 
 		const currentdate = new Date(); 
 		const datetime = `${currentdate.getFullYear()}-${(currentdate.getMonth()+1)}-${currentdate.getDate()}`
 		const santizedHtml = basic_sanitize_html(window.JOURNAL.notes[id].text);
 		let html = $(`${santizedHtml}`);
-		html.find('.injected-input, .added-input-desc').remove();
+		if(token){
+			sync_pc_template(token, html);
+		}
+		html.find('.injected-input, .added-input-desc, .avtt-equipment-weight-total').remove();
 		html.find('.add-input:not(.avtt-custom-tracker)').replaceWith((i, innerHtml) => {
 			return innerHtml;
 		})
@@ -1843,12 +2076,121 @@ class JournalManager{
 			</script>
 			${html[0].outerHTML}			
 			<script>
+				let draggedTableRow = null;
+				let draggedTable = null;
+				let draggedEquipmentField = null;
+				function setupTemplateBlocks(){
+					let draggedBlock = null;
+					const iconSvg = {
+						drag: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>',
+						copy: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
+						delete: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z"/></svg>'
+					};
+					const controlStyle = 'display:none !important;position:absolute !important;top:3px;z-index:10;width:20px;height:20px;box-sizing:border-box;overflow:hidden;padding:1px;border:1px solid #ddd;border-radius:3px;background:#222;color:#fff;line-height:16px;';
+					const setup = () => {
+						document.querySelectorAll('.dnd-sheet .section-title').forEach(title => {
+							title.contentEditable = 'true';
+							title.parentElement.classList.add('avtt-dnd-sheet-block');
+						});
+						document.querySelectorAll('.dnd-sheet .hp-box').forEach(block => block.classList.add('avtt-dnd-sheet-block'));
+						const columns = [...new Set(Array.from(document.querySelectorAll('.dnd-sheet .avtt-dnd-sheet-block')).map(block => block.parentElement))];
+						columns.forEach(column => {
+							Array.from(column.children).filter(block => block.matches('.avtt-dnd-sheet-block')).forEach(block => {
+								block.style.position = 'relative';
+								if (!block.dataset.avttBlockControlsBound) {
+									block.dataset.avttBlockControlsBound = 'true';
+									block.addEventListener('mouseenter', () => block.querySelectorAll(':scope > .dnd-sheet-block-drag-handle, :scope > .dnd-sheet-block-copy-button, :scope > .dnd-sheet-block-delete-button').forEach(control => control.style.setProperty('display', 'inline-flex', 'important')));
+									block.addEventListener('mouseleave', () => block.querySelectorAll(':scope > .dnd-sheet-block-drag-handle, :scope > .dnd-sheet-block-copy-button, :scope > .dnd-sheet-block-delete-button').forEach(control => control.style.setProperty('display', 'none', 'important')));
+								}
+								if (!block.querySelector(':scope > .dnd-sheet-block-drag-handle')) {
+									const dragHandle = document.createElement('button');
+									dragHandle.type = 'button';
+									dragHandle.className = 'dnd-sheet-block-drag-handle';
+									dragHandle.contentEditable = 'false';
+									dragHandle.draggable = true;
+									dragHandle.title = 'Drag block';
+									dragHandle.setAttribute('aria-label', 'Drag block');
+									dragHandle.style.cssText = controlStyle + 'right:52px;cursor:grab;';
+									dragHandle.innerHTML = iconSvg.drag;
+									block.append(dragHandle);
+								}
+								if (!block.querySelector(':scope > .dnd-sheet-block-copy-button')) {
+									const copyButton = document.createElement('button');
+									copyButton.type = 'button';
+									copyButton.className = 'dnd-sheet-block-copy-button';
+									copyButton.contentEditable = 'false';
+									copyButton.title = 'Copy block';
+									copyButton.setAttribute('aria-label', 'Copy block');
+									copyButton.style.cssText = controlStyle + 'right:28px;';
+									copyButton.innerHTML = iconSvg.copy;
+									copyButton.addEventListener('click', () => {
+										const copy = block.cloneNode(true);
+									copy.querySelector(':scope > .dnd-sheet-block-copy-button')?.remove();
+									copy.querySelector(':scope > .dnd-sheet-block-delete-button')?.remove();
+									copy.querySelector(':scope > .dnd-sheet-block-drag-handle')?.remove();
+									[copy, ...copy.querySelectorAll('[data-avtt-block-controls-bound], [data-avtt-block-drop-bound], [data-avtt-row-handle-bound], [data-avtt-row-drag-bound], [data-avtt-row-drop-bound]')].forEach(element => {
+										element.removeAttribute('data-avtt-block-controls-bound');
+										element.removeAttribute('data-avtt-block-drop-bound');
+										element.removeAttribute('data-avtt-row-handle-bound');
+										element.removeAttribute('data-avtt-row-drag-bound');
+										element.removeAttribute('data-avtt-row-drop-bound');
+									});
+									block.after(copy);
+									setup();
+									document.querySelectorAll('.dnd-sheet .equipment-field table').forEach(setupDraggableTableRows);
+									});
+									block.append(copyButton);
+								}
+								if (!block.querySelector(':scope > .dnd-sheet-block-delete-button')) {
+									const deleteButton = document.createElement('button');
+									deleteButton.type = 'button';
+									deleteButton.className = 'dnd-sheet-block-delete-button';
+									deleteButton.contentEditable = 'false';
+									deleteButton.title = 'Delete block';
+									deleteButton.setAttribute('aria-label', 'Delete block');
+									deleteButton.style.cssText = controlStyle + 'right:4px;';
+									deleteButton.innerHTML = iconSvg.delete;
+									deleteButton.addEventListener('click', () => {
+										if (window.confirm('Delete this block?')) block.remove();
+									});
+									block.append(deleteButton);
+								}
+							});
+							if (!column.dataset.avttBlockDropBound) {
+								column.dataset.avttBlockDropBound = 'true';
+								column.addEventListener('dragover', event => {
+									if (!draggedBlock) return;
+									event.preventDefault();
+									const sibling = Array.from(column.children).filter(block => block.matches('.avtt-dnd-sheet-block') && block !== draggedBlock)
+										.find(block => event.clientY < block.getBoundingClientRect().top + block.offsetHeight / 2);
+									column.insertBefore(draggedBlock, sibling || null);
+								});
+							}
+						});
+					};
+					document.addEventListener('dragstart', event => {
+						const handle = event.target.closest?.('.dnd-sheet-block-drag-handle');
+						const block = handle?.parentElement;
+						if (!block?.matches('.avtt-dnd-sheet-block')) return;
+						draggedBlock = block;
+						block.classList.add('dnd-sheet-block-dragging');
+						event.dataTransfer.effectAllowed = 'move';
+					});
+					document.addEventListener('dragend', () => {
+						draggedBlock?.classList.remove('dnd-sheet-block-dragging');
+						draggedBlock = null;
+					});
+					setup();
+				}
+				setupTemplateBlocks();
 				function setupDraggableTableRows(table){
 					const tbody = table.querySelector('tbody');
 					const rowsContainer = tbody ? tbody : table;
 					const directRows = rowsContainer.querySelectorAll(':scope > tr');
+					const equipmentField = table.closest('.equipment-field');
+					const isEquipmentTable = equipmentField !== null;
 
-					if (directRows.length > 1) {
+					if (directRows.length > 1 || isEquipmentTable) {
 						directRows.forEach(row => {
 							if (!row.querySelector(':scope > .table-row-drag-handle')) {
 								const handleCell = document.createElement('td');
@@ -1871,13 +2213,12 @@ class JournalManager{
 								}
 							});
 						}
-						let draggedRow = null;
-
 						rowsContainer.querySelectorAll(':scope > tr').forEach(row => {
 							row.setAttribute('draggable', 'false');
 
 							const handle = row.querySelector(':scope > .table-row-drag-handle');
-							if (handle) {
+							if (handle && !handle.dataset.avttRowHandleBound) {
+								handle.dataset.avttRowHandleBound = 'true';
 							handle.style.cursor = 'grab';
 							
 							handle.addEventListener('mousedown', () => {
@@ -1889,35 +2230,71 @@ class JournalManager{
 							});
 							}
 
+							if (row.dataset.avttRowDragBound) return;
+							row.dataset.avttRowDragBound = 'true';
 							row.addEventListener('dragstart', (e) => {
-							draggedRow = row;
+							draggedTableRow = row;
+							draggedTable = table;
+							draggedEquipmentField = equipmentField;
 							e.dataTransfer.effectAllowed = 'move';
 							});
 
 							row.addEventListener('dragend', () => {
 							row.setAttribute('draggable', 'false');
-							rowsContainer.querySelectorAll(':scope > tr').forEach(r => r.style.borderTop = '');
-							draggedRow = null;
-							});
-
-							row.addEventListener('dragover', (e) => {
-							e.preventDefault();
-							e.dataTransfer.dropEffect = 'move';
-							if (!draggedRow || draggedRow === row) return;
-
-							const rect = row.getBoundingClientRect();
-							const midpoint = rect.top + rect.height / 2;
-
-							if (e.clientY < midpoint) {
-								rowsContainer.insertBefore(draggedRow, row);
-							} else {
-								rowsContainer.insertBefore(draggedRow, row.nextSibling);
-							}
+							draggedTableRow = null;
+							draggedTable = null;
+							draggedEquipmentField = null;
 							});
 						});
+						if (!rowsContainer.dataset.avttRowDropBound) {
+							rowsContainer.dataset.avttRowDropBound = 'true';
+							rowsContainer.addEventListener('dragover', (e) => {
+								if (!draggedTableRow) return;
+								if (draggedEquipmentField ? !isEquipmentTable : draggedTable !== table) return;
+								e.preventDefault();
+								e.dataTransfer.dropEffect = 'move';
+								const targetRow = e.target.closest('tr');
+								if (!targetRow || targetRow.parentElement !== rowsContainer || draggedTableRow === targetRow) {
+									if (!targetRow) rowsContainer.appendChild(draggedTableRow);
+									return;
+								}
+								const rect = targetRow.getBoundingClientRect();
+								rowsContainer.insertBefore(draggedTableRow, e.clientY < rect.top + rect.height / 2 ? targetRow : targetRow.nextSibling);
+							});
+						}
 					}
 				}			
+				document.addEventListener('paste', (e) => {
+					if (!e.target?.closest?.('[contenteditable="true"]')) return;
+					e.preventDefault();
+					const text = (e.originalEvent?.clipboardData || e.clipboardData || window.clipboardData).getData('text/plain');
+					document.execCommand('insertText', false, text);
+				});
+				document.querySelectorAll('input').forEach((el) => {
+					el.addEventListener('input change', (e) => {
+						e.target.style.width = (e.target.value.length + 4) + 'ch';
+					});
+				});
+				document.addEventListener('keydown', (e) => {
+					if (e.key !== 'Enter' || e.defaultPrevented) return;
+					if (!e.target?.closest?.('[contenteditable="true"]')) return;
+					const selection = window.getSelection();
+					if (!selection || selection.rangeCount === 0) return;
+					// left to the browser this wraps the rest of the field in new divs, which rewrites the sheet's structure
+					e.preventDefault();
+					const range = selection.getRangeAt(0);
+					range.deleteContents();
+					const lineBreak = document.createElement('br');
+					const caretAnchor = document.createTextNode('\u200B');
+					range.insertNode(lineBreak);
+					lineBreak.parentNode.insertBefore(caretAnchor, lineBreak.nextSibling);
+					range.setStart(caretAnchor, caretAnchor.nodeValue.length);
+					range.collapse(true);
+					selection.removeAllRanges();
+					selection.addRange(range);
+				});
 				document.querySelectorAll('table').forEach((table) => {
+					
 					if (table.nextElementSibling?.classList.contains('add-table-row')) return;
 
 					const addTableRowButton = document.createElement('button');
@@ -1926,6 +2303,32 @@ class JournalManager{
 					addTableRowButton.textContent = '+';
 					table.insertAdjacentElement('afterend', addTableRowButton);
 					setupDraggableTableRows(table);	
+				});
+
+				function updateEquipmentWeightTotals(){
+					document.querySelectorAll('.equipment-field table').forEach((table) => {
+						const headers = Array.from(table.querySelectorAll('thead th')).filter((th) => !th.classList.contains('header-spacer'));
+						const weightIndex = headers.findIndex((th) => th.textContent.trim().toLowerCase().startsWith('weight'));
+						if (weightIndex === -1) return;
+						let total = 0;
+						table.querySelectorAll('tbody tr').forEach((row) => {
+							const cells = Array.from(row.children).filter((cell) => cell.tagName === 'TD' && !cell.classList.contains('table-row-drag-handle'));
+							const weight = parseFloat((cells[weightIndex]?.textContent || '').replace(/[^0-9.\-]/g, ''));
+							if (!isNaN(weight)) total += weight;
+						});
+						const header = headers[weightIndex];
+						header.querySelector('.avtt-equipment-weight-total')?.remove();
+						const totalSpan = document.createElement('span');
+						totalSpan.className = 'avtt-equipment-weight-total';
+						totalSpan.contentEditable = 'false';
+						totalSpan.textContent = ' ' + (Math.round(total * 100) / 100) + ' lb';
+						header.append(totalSpan);
+					});
+				}
+				updateEquipmentWeightTotals();
+				document.addEventListener('input', (e) => {
+					if (!e.target?.closest?.('.equipment-field')) return;
+					updateEquipmentWeightTotals();
 				});
 
 				document.addEventListener('click', (e) => {
@@ -1960,18 +2363,1635 @@ class JournalManager{
 						profCheck.dataset.state = newState;
 					}
 				});
+
+				
+				function pcTemplateFocusTarget(sheetEl){
+					const targets = [];
+					sheetEl.querySelectorAll('td, th, [contenteditable]:not(a)').forEach((el) => {
+						if (el.classList.contains('table-row-drag-handle') || el.classList.contains('header-spacer') || el.classList.contains('add-table-row')) {
+							return;
+						}
+						if (el.offsetParent === null) {
+							return; // hidden
+						}
+						if (!el.isContentEditable) {
+							return;
+						}
+						if (el.matches('td, th')) {
+							targets.push(el);
+						} else {
+							if (el.closest('td, th')) {
+								return; 
+							}
+							targets.push(el);
+						}
+					});
+					return targets;
+				}
+
+				function placeCaretAtStart(el){
+					if (typeof el.focus === 'function') {
+						el.focus();
+					}
+					const range = document.createRange();
+					range.setStart(el, 0);
+					range.collapse(true);
+					const selection = window.getSelection();
+					selection.removeAllRanges();
+					selection.addRange(range);
+				}
+
+				document.addEventListener('keydown', (e) => {
+					if (e.key !== 'Tab') return;
+					const selection = window.getSelection();
+					if (!selection || selection.rangeCount === 0) return;
+					let anchorEl = selection.anchorNode;
+					if (anchorEl && anchorEl.nodeType === Node.TEXT_NODE) {
+						anchorEl = anchorEl.parentElement;
+					}
+					if (!anchorEl) return;
+					const sheet = anchorEl.closest('.dnd-sheet');
+					if (!sheet) return; 
+					const current = anchorEl.closest('td, th') || anchorEl.closest('[contenteditable]:not(a)');
+					if (!current) return;
+					const targets = pcTemplateFocusTarget(sheet);
+					const currentIndex = targets.indexOf(current);
+					if (currentIndex === -1) return;
+					const nextIndex = (currentIndex + (e.shiftKey ? -1 : 1) + targets.length) % targets.length;
+					e.preventDefault();
+					placeCaretAtStart(targets[nextIndex]);
+				});
 			</script>`;
 			download(html,`${window.CAMPAIGN_INFO.name}-${datetime}-pctemplate.html`,"text/html");
 				
 			$(".import-loading-indicator").remove();        
 		})
 	}
-	display_note(id, statBlock = false, scrollTop=0){
+	getNotePopoutName(id){
+		return this.notes[id].title.replace(/(\r\n|\n|\r)/gm, "").trim();
+	}
+	getDisplayedNoteText(noteContainer, noteText){
+		const currentNoteText = $(noteContainer).find('.avtt-stat-block-container, .note-text').first();
+		return currentNoteText.length > 0 ? currentNoteText : $(noteText);
+	}
+	bindDisplayedNoteEvents(id, note, note_text, note_container){
+		const self = this;
+		note.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function (event) {
+			event.preventDefault();
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+			render_source_chapter_in_iframe(event.target.href);
+		});
+		self.bindDndSheetTemplateEvents(id, note_text, note_container);
+	}
+	getDndSheetCellSuggestionItems(suggestionType, searchText){
+		const normalize = (value) => `${value ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+		const removeSpecial = (value) => normalize(value).replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+		const normalizedSearch = normalize(searchText);
+		const normalizedSearchAlphanumeric = removeSpecial(searchText);
+		const searchHasSpecialChars = normalizedSearch !== normalizedSearchAlphanumeric;
+		const normalizedSearchCondensed = normalizedSearchAlphanumeric.replace(/\s+/g, '');
+		if(normalizedSearch.length < 2)
+			return [];
+		const isLegacy = !get_avtt_setting_value('2024Tooltips');
+		let suggestions = [];
+		if(window.ITEMS_CACHE != undefined && suggestionType != 'spellcasting'){
+			suggestions = suggestions.concat(window.ITEMS_CACHE
+				.filter(item => (isLegacy || item.isLegacy == isLegacy) || item.isHomebrew)
+				.map(item => ({
+					rarity: item.rarity,
+					name: item.name,
+					type: item.magic ? 'Magic Item' : item.filterType || 'Item',
+					color: item.magic ? 'var(--compendium-magic-item-tooltip,#0f5cbc)' : 'var(--compendium-item-tooltip,#774521)',
+					match: normalize(item.name),
+					matchAlphanumeric: removeSpecial(item.name),
+					matchCondensed: removeSpecial(item.name).replace(/\s+/g, ''),
+					isLegacy: item.isLegacy,
+					raw: item
+				})));
+		}
+		if((suggestionType == 'attack' || suggestionType == 'spellcasting') && window.SPELLS_CACHE != undefined){
+			suggestions = suggestions.concat(window.SPELLS_CACHE
+				.filter(spell => (isLegacy || spell.definition?.isLegacy == isLegacy))
+				.map(spell => ({
+					name: spell.definition.name,
+					type: 'Spell',
+					color: 'var(--compendium-spell-tooltip,#704cd9)',
+					match: normalize(spell.definition.name),
+					matchAlphanumeric: removeSpecial(spell.definition.name),
+					matchCondensed: removeSpecial(spell.definition.name).replace(/\s+/g, ''),
+					isLegacy: spell.definition.isLegacy,
+					raw: spell.definition
+				})));
+		}
+		const seen = new Set();
+		const searchWords = normalizedSearchAlphanumeric.split(/\s+/).filter(w => w.length > 0);
+		
+		return suggestions
+			.filter(suggestion => {
+				if(!suggestion.name) return false;
+				
+				const allWordsMatch = searchWords.every(word => 
+					suggestion.matchAlphanumeric.includes(word)
+				);
+				
+				if(allWordsMatch) return true;
+				
+				return suggestion.matchAlphanumeric.includes(normalizedSearchAlphanumeric) ||
+					   (searchHasSpecialChars && suggestion.match.includes(normalizedSearch)) ||
+					   (normalizedSearchCondensed.length >= 2 && suggestion.matchCondensed.includes(normalizedSearchCondensed));
+			})
+			.sort((a, b) => {
+				const aConsecutiveStart = a.matchAlphanumeric.startsWith(normalizedSearchAlphanumeric);
+				const bConsecutiveStart = b.matchAlphanumeric.startsWith(normalizedSearchAlphanumeric);
+				
+				if(aConsecutiveStart != bConsecutiveStart)
+					return aConsecutiveStart ? -1 : 1;
+				
+				if(!aConsecutiveStart) {
+					const aWordsInOrder = searchWords.filter((word, idx) => {
+						const prevWord = idx === 0 ? '' : searchWords[idx - 1];
+						const prevIdx = a.matchAlphanumeric.indexOf(prevWord);
+						const currentIdx = a.matchAlphanumeric.indexOf(word, prevIdx + prevWord.length);
+						return currentIdx !== -1;
+					}).length;
+					const bWordsInOrder = searchWords.filter((word, idx) => {
+						const prevWord = idx === 0 ? '' : searchWords[idx - 1];
+						const prevIdx = b.matchAlphanumeric.indexOf(prevWord);
+						const currentIdx = b.matchAlphanumeric.indexOf(word, prevIdx + prevWord.length);
+						return currentIdx !== -1;
+					}).length;
+					
+					if(aWordsInOrder != bWordsInOrder)
+						return bWordsInOrder - aWordsInOrder;
+				}
+				
+				if(aConsecutiveStart && bConsecutiveStart) {
+					const aMatchQuality = normalizedSearchAlphanumeric.length / a.matchAlphanumeric.length;
+					const bMatchQuality = normalizedSearchAlphanumeric.length / b.matchAlphanumeric.length;
+					if(Math.abs(aMatchQuality - bMatchQuality) > 0.01)
+						return bMatchQuality - aMatchQuality;
+				}
+				
+				return a.name.localeCompare(b.name);
+			})
+			.filter(suggestion => {
+				const key = `${suggestion.type}:${suggestion.name}:${suggestion.isLegacy}`.toLowerCase();
+				if(seen.has(key))
+					return false;
+				seen.add(key);
+				return true;
+			})
+			.slice(0, 8);
+	}
+
+	getRandomItemSuggestions(rarity, itemType){
+		if(window.ITEMS_CACHE == undefined)
+			return [];
+		const isLegacy = !get_avtt_setting_value('2024Tooltips');
+		const normalizedRarity = rarity ? rarity.toLowerCase().trim() : undefined;
+		const normalizedItemType = itemType ? itemType.toLowerCase().trim() : undefined;
+		const pool = window.ITEMS_CACHE.filter(item => ((isLegacy || item.isLegacy == isLegacy) || item.isHomebrew)
+			&& (!normalizedRarity || item.rarity?.toLowerCase().trim() == normalizedRarity)
+			&& (!normalizedItemType || (item.filterType || '').toLowerCase().trim() == normalizedItemType));
+		const shuffled = [...pool];
+		for(let i=shuffled.length-1; i>0; i--){
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+		}
+		return shuffled.slice(0, 8).map(item => ({
+			rarity: item.rarity,
+			name: item.name,
+			type: item.magic ? 'Magic Item' : item.filterType || 'Item',
+			color: item.magic ? 'var(--compendium-magic-item-tooltip,#0f5cbc)' : 'var(--compendium-item-tooltip,#774521)',
+			isLegacy: item.isLegacy,
+			raw: item
+		}));
+	}
+	/**
+	 * Builds the HTML for a tooltip link for the given item.
+	 * @param {Object} item - The item for which to build the tooltip link. From window.ITEMS_CACHE or window.SPELLS_CACHE.
+	 * @returns {string} The HTML string for the tooltip link.
+	 */
+	buildTooltipLinkHtml(item){
+		if(!item)
+			return '';
+
+		const rawItem = item.raw || item;
+		const text = rawItem.name;
+		const itemId = `${rawItem.id}-${text.replace(/[\s\/\\]/g, '-')}`;
+		const filterType = (rawItem.filterType || '').toLowerCase();
+		const path = item.type == 'Spell' ? 'spells' : rawItem.magic ? 'magic-items' : filterType == 'armor' ? 'armor' : filterType == 'weapon' ? 'weapons' : 'equipment';
+		const href = `https://www.dndbeyond.com/${path}/${itemId}`;
+		return `<a class="tooltip-hover no-border ignore-abovevtt-formating ${item.type == 'Spell' ? 'spell' : rawItem.magic  ? 'magic-item' : 'item'}-tooltip" href="${href}">${text}</a>`;
+	}
+	populateDndSheetSuggestionDetails(cell, suggestion){
+		const rawItem = suggestion.raw || suggestion;
+		const row = $(cell).closest('tr');
+		if(row.length === 0)
+			return;
+
+		const isSpell = suggestion.type == 'Spell';
+		const isEquipment = $(cell).closest('.equipment-block').length > 0;
+		const isAttack = $(cell).closest('.attacks-field').length > 0;
+		const isEmpty = targetCell => targetCell.text().replace(/[\u200B-\u200D\uFEFF]/g, '').trim() == '';
+		if(isEquipment && !isSpell){
+			const weightCell = $(cell).next('td');
+			const quantityCell = weightCell.next('td');
+			const costCell = quantityCell.next('td');
+			const noteCell = costCell.next('td');
+			if(isEmpty(weightCell) && rawItem.weight != undefined)
+				weightCell.text(`${rawItem.weight} lb`);
+			if(isEmpty(quantityCell) && rawItem.bundleSize != undefined)
+				quantityCell.text(`${rawItem.bundleSize}`);
+			if(isEmpty(costCell) && rawItem.cost != undefined)
+				costCell.text(`${rawItem.cost}`);
+			this.populateDndSheetItemNotes(noteCell, rawItem);
+		} else if(isAttack){
+			this.populateDndSheetItemNotes(row.find('td:last-of-type'), rawItem, isSpell);
+		}
+	}
+	populateDndSheetItemNotes(noteCell, rawItem, isSpell = false){
+		const noteText = noteCell.text().replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+		if(noteCell.length === 0 || noteText != '')
+			return;
+		const rawProperties = rawItem.properties ?? rawItem.weaponProperties ?? rawItem.definition?.properties;
+		if(!isSpell && rawProperties != undefined){
+			const properties = Array.isArray(rawProperties) ? rawProperties : `${rawProperties}`.split(',').map(name => ({name: name.trim()}));
+			const propertyNames = properties.map(property => {
+				const propertyName = typeof property === 'string' ? property : property.name ?? property.definition?.name;
+				if(!propertyName)
+					return '';
+				const propertyUrl = propertyName.replace(/\s/g, '-');
+				const propertyLink = `<a class="tooltip-hover wprop-tooltip" href="https://www.dndbeyond.com/weapon-properties/${propertyUrl}" aria-haspopup="true" target="_blank">${propertyName}</a>`;
+				return `${propertyLink}${propertyName.toLowerCase() == 'thrown' || propertyName.toLowerCase() == 'range' ? ` (${rawItem.range}${rawItem.longRange ? `/${rawItem.longRange}` : ''})` : ''}`;
+			}).filter(Boolean).join(', ');
+			if(propertyNames)
+				noteCell.html(propertyNames);
+		} else if(isSpell && (rawItem.range ?? rawItem.rangeDescription) != undefined){
+			const range = rawItem.range ?? rawItem.rangeDescription;
+			if(typeof range === 'string'){
+				noteCell.text(`Range ${range}`);
+				return;
+			}
+			const aoeText = range.aoeValue && range.aoeType ? `${range.aoeValue}-foot${range.aoeType == 'Sphere' ? '-radius' : ''} ${range.aoeType}` : '';
+			noteCell.text(`Range ${range.rangeValue > 0 ? `${range.rangeValue} ft.` : `${range.origin}`}${aoeText != '' ? `, ${aoeText}` : ''}`);
+		}
+	}
+	removeDndSheetCellSuggestions(ownerDocument = document){
+		$('.dnd-sheet-cell-suggestions', ownerDocument).remove();
+	}
+	getDndSheetCellSuggestionOptions(ownerDocument = document){
+		return $('.dnd-sheet-cell-suggestions .dnd-sheet-cell-suggestion', ownerDocument);
+	}
+	setActiveDndSheetCellSuggestion(ownerDocument = document, activeIndex = 0){
+		const options = this.getDndSheetCellSuggestionOptions(ownerDocument);
+		if(options.length === 0)
+			return undefined;
+		const normalizedIndex = ((activeIndex % options.length) + options.length) % options.length;
+		options.removeClass('is-active').attr('aria-selected', 'false');
+		const activeOption = options.eq(normalizedIndex);
+		activeOption.addClass('is-active').attr('aria-selected', 'true');
+		const suggestionBox = activeOption.closest('.dnd-sheet-cell-suggestions')[0];
+		if(suggestionBox){
+			const optionElement = activeOption[0];
+			const optionTop = optionElement.offsetTop;
+			const optionBottom = optionTop + optionElement.offsetHeight;
+			const boxTop = suggestionBox.scrollTop;
+			const boxBottom = boxTop + suggestionBox.clientHeight;
+			if(optionTop < boxTop){
+				suggestionBox.scrollTop = optionTop;
+			} else if(optionBottom > boxBottom){
+				suggestionBox.scrollTop = optionBottom - suggestionBox.clientHeight;
+			}
+		}
+		return activeOption;
+	}
+	moveActiveDndSheetCellSuggestion(ownerDocument = document, delta = 1){
+		const options = this.getDndSheetCellSuggestionOptions(ownerDocument);
+		if(options.length === 0)
+			return undefined;
+		const activeIndex = options.index(options.filter('.is-active').first());
+		const baseIndex = activeIndex >= 0 ? activeIndex : (delta < 0 ? 0 : -1);
+		return this.setActiveDndSheetCellSuggestion(ownerDocument, baseIndex + delta);
+	}
+
+	getDndSheetSuggestionCellFromEvent(event){
+		const ownerDocument = event.target?.ownerDocument || document;
+		const selection = ownerDocument.getSelection?.();
+		let anchor = selection && selection.rangeCount > 0 ? selection.anchorNode : event.target;
+		if(anchor && anchor.nodeType === Node.TEXT_NODE){
+			anchor = anchor.parentElement;
+		}
+		const editableCell = $(anchor || event.target).closest('[contenteditable="true"]')[0];
+		if(editableCell && this.getDndSheetSuggestionCommaSegment(editableCell).isSpellListLine)
+			return editableCell;
+		const directTarget = $(event.target).closest('[data-avtt-suggestion-type]');
+		if(directTarget.length > 0)
+			return directTarget[0];
+		const selectionTarget = $(anchor).closest('[data-avtt-suggestion-type]');
+		return selectionTarget.length > 0 ? selectionTarget[0] : undefined;
+	}
+	getDndSheetCellTextModel(cell){
+		const ownerDocument = cell.ownerDocument || document;
+		const selection = (ownerDocument.defaultView || window).getSelection?.();
+		const focusNode = selection && selection.rangeCount > 0 ? selection.focusNode : undefined;
+		const focusOffset = selection && selection.rangeCount > 0 ? selection.focusOffset : undefined;
+		let text = '';
+		let caretOffset = undefined;
+		const runs = [];
+		const visit = (node) => {
+			if(node.nodeType === Node.TEXT_NODE){
+				if(node === focusNode && caretOffset === undefined)
+					caretOffset = text.length + focusOffset;
+				runs.push({ node, start: text.length, end: text.length + node.nodeValue.length });
+				text += node.nodeValue;
+				return;
+			}
+			if(node.nodeName === 'BR'){
+				if(node === focusNode && caretOffset === undefined)
+					caretOffset = text.length;
+				text += '\n';
+				return;
+			}
+			const children = node.childNodes ? Array.from(node.childNodes) : [];
+			children.forEach((child, index) => {
+				if(node === focusNode && index === focusOffset && caretOffset === undefined)
+					caretOffset = text.length;
+				visit(child);
+			});
+			if(node === focusNode && focusOffset === children.length && caretOffset === undefined)
+				caretOffset = text.length;
+		};
+		visit(cell);
+		if(caretOffset === undefined || !focusNode || !cell.contains(focusNode))
+			caretOffset = text.length;
+		return { text, runs, caretOffset };
+	}
+	getDndSheetSuggestionCommaSegment(cell){
+		const ownerDocument = cell.ownerDocument || document;
+		const selection = (ownerDocument.defaultView || window).getSelection?.();
+		let focusNode = selection && selection.rangeCount > 0 ? selection.focusNode : undefined;
+		if(focusNode && focusNode.nodeType === Node.TEXT_NODE)
+			focusNode = focusNode.parentElement;
+		const wrappedLevel = focusNode ? $(focusNode).closest('.add-input', cell)[0] : undefined;
+		const model = this.getDndSheetCellTextModel(wrappedLevel || cell);
+		const { text, caretOffset } = model;
+		let lineStart, lineEnd;
+		if(wrappedLevel){
+			lineStart = 0;
+			lineEnd = text.length;
+		} else {
+			lineStart = text.lastIndexOf('\n', Math.max(caretOffset - 1, 0)) + 1;
+			lineEnd = text.indexOf('\n', caretOffset);
+			if(lineEnd === -1)
+				lineEnd = text.length;
+		}
+		const lineText = text.slice(lineStart, lineEnd);
+		const labelMatch = /At will:|Cantrips \(at will\):|(\d+\/day( each)?|\d+\w+ level \(\d+ slots?\)):/gi.exec(lineText);
+		const isSpellListLine = wrappedLevel != undefined || labelMatch != null;
+		if(!isSpellListLine)
+			return { model, segments: [], index: -1, isSpellListLine: false };
+		const labelEnd = labelMatch ? labelMatch.index + labelMatch[0].length : 0;
+		const segments = [];
+		let cursor = 0;
+		lineText.split(',').forEach((part, partIndex) => {
+			const start = lineStart + cursor;
+			const end = start + part.length;
+			if(partIndex === 0 && labelEnd > 0){
+				const trimLength = Math.min(labelEnd, part.length);
+				segments.push({ text: part.slice(trimLength), start: start + trimLength, end });
+			} else {
+				segments.push({ text: part, start, end });
+			}
+			cursor += part.length + 1; // +1 accounts for the comma removed by split
+		});
+		let index = segments.length - 1;
+		for(let i=0; i<segments.length; i++){
+			if(caretOffset <= segments[i].end || i === segments.length - 1){
+				index = i;
+				break;
+			}
+		}
+		return { model, segments, index, isSpellListLine: true };
+	}
+	// detects a `[random]` or `[random <rarity>]` bracket on the current line
+	getDndSheetRandomBracketMatch(cell){
+		const model = this.getDndSheetCellTextModel(cell);
+		const { text, caretOffset } = model;
+		const lineStart = text.lastIndexOf('\n', Math.max(caretOffset - 1, 0)) + 1;
+		let lineEnd = text.indexOf('\n', caretOffset);
+		if(lineEnd === -1)
+			lineEnd = text.length;
+		const lineText = text.slice(lineStart, lineEnd);
+		const itemTypes = ["potion", "wondrous item", "wondrous", "weapon", "armor", "ring", "wand", "rod", "staff", "scroll", "other gear", "other"];
+		const rarityOptions = ["common", "uncommon", "rare", "very rare", "legendary", "artifact"];
+        const combinedOptions = [...rarityOptions, ...itemTypes];
+		
+		const randomRegex = new RegExp(`\\[random\\s?(${combinedOptions.join('|')})?\\s?(${combinedOptions.join('|')})?\\]`, 'gi');
+		// const randomRegex = /\[random\s?(common|uncommon|rare|very rare|legendary|artifact)\s?\]/gi;
+		let match;
+		while((match = randomRegex.exec(lineText)) != null){
+			const start = lineStart + match.index;
+			const end = start + match[0].length;
+			const rarityMatch = rarityOptions.includes(match[1]?.toLowerCase().trim()) ? match[1] : rarityOptions.includes(match[2]?.toLowerCase().trim()) ? match[2] : undefined;
+			let itemTypeMatch = itemTypes.includes(match[1]?.toLowerCase().trim()) ? match[1] : itemTypes.includes(match[2]?.toLowerCase().trim()) ? match[2] : undefined;
+			itemTypeMatch = itemTypeMatch?.toLowerCase().trim() == 'wondrous' ? 'wondrous item' : itemTypeMatch?.toLowerCase().trim() == 'other' ? 'other gear' : itemTypeMatch;
+			if(caretOffset >= start && caretOffset <= end)
+				return { model, start, end, rarity: rarityMatch, itemType: itemTypeMatch };
+		}
+		return undefined;
+	}
+	getDndSheetCellRangePoint(model, offset, cell){
+		for(const run of model.runs){
+			if(offset <= run.end)
+				return { node: run.node, offset: Math.max(0, offset - run.start) };
+		}
+		const lastRun = model.runs[model.runs.length - 1];
+		return lastRun ? { node: lastRun.node, offset: lastRun.node.nodeValue.length } : { node: cell, offset: cell.childNodes.length };
+	}
+	replaceDndSheetCellRange(cell, model, start, end, replacementText){
+		const ownerDocument = cell.ownerDocument || document;
+		const ownerWindow = ownerDocument.defaultView || window;
+		const range = ownerDocument.createRange();
+		const startPoint = this.getDndSheetCellRangePoint(model, start, cell);
+		const endPoint = this.getDndSheetCellRangePoint(model, end, cell);
+		range.setStart(startPoint.node, startPoint.offset);
+		range.setEnd(endPoint.node, endPoint.offset);
+		range.deleteContents();
+		const textNode = ownerDocument.createTextNode(replacementText);
+		range.insertNode(textNode);
+		const caretRange = ownerDocument.createRange();
+		caretRange.setStart(textNode, textNode.nodeValue.length);
+		caretRange.collapse(true);
+		const selection = ownerWindow.getSelection?.();
+		if(selection){
+			selection.removeAllRanges();
+			selection.addRange(caretRange);
+		}
+	}
+	// like replaceDndSheetCellRange but inserts an <a> instead of a plain text node
+	replaceDndSheetCellRangeHtml(cell, model, start, end, html){
+		const ownerDocument = cell.ownerDocument || document;
+		const ownerWindow = ownerDocument.defaultView || window;
+		const range = ownerDocument.createRange();
+		const startPoint = this.getDndSheetCellRangePoint(model, start, cell);
+		const endPoint = this.getDndSheetCellRangePoint(model, end, cell);
+		range.setStart(startPoint.node, startPoint.offset);
+		range.setEnd(endPoint.node, endPoint.offset);
+		range.deleteContents();
+		const fragment = range.createContextualFragment(html);
+		const lastNode = fragment.lastChild;
+		range.insertNode(fragment);
+		const caretRange = ownerDocument.createRange();
+		if(lastNode){
+			caretRange.setStartAfter(lastNode);
+		} else {
+			caretRange.setStart(range.startContainer, range.startOffset);
+		}
+		caretRange.collapse(true);
+		const selection = ownerWindow.getSelection?.();
+		if(selection){
+			selection.removeAllRanges();
+			selection.addRange(caretRange);
+		}
+	}
+	getDndSheetSuggestionAnchorRect(cell){
+		const ownerDocument = cell.ownerDocument || document;
+		const selection = (ownerDocument.defaultView || window).getSelection?.();
+		if(selection && selection.rangeCount > 0 && cell.contains(selection.focusNode)){
+			const range = selection.getRangeAt(0).cloneRange();
+			range.collapse(true);
+			let rect = range.getClientRects()[0];
+			if(!rect || (!rect.width && !rect.height)){
+				rect = range.getBoundingClientRect();
+			}
+			if(rect && (rect.width || rect.height || rect.top)){
+				return rect;
+			}
+		}
+		return cell.getBoundingClientRect();
+	}
+	/** Resolves which document a floating suggestion box should be appended to: the top window's document
+	 * when the cell lives inside a same-page iframe (e.g. tinyMCE), or the cell's own document otherwise
+	 * (e.g. a genuine popout window). */
+	getSuggestionHostDocument(node){
+		const ownerDocument = node?.nodeType === 9 ? node : (node?.ownerDocument || document);
+		const ownerWindow = ownerDocument.defaultView || window;
+		if(ownerWindow !== window && ownerWindow.frameElement && ownerWindow.frameElement.ownerDocument === document)
+			return document;
+		return ownerDocument;
+	}
+	// pixel offset to add to a cell's own-document rect to position it correctly within the suggestion host document
+	getSuggestionFrameOffset(cell){
+		const ownerDocument = cell?.ownerDocument || document;
+		const ownerWindow = ownerDocument.defaultView || window;
+		if(ownerWindow !== window && ownerWindow.frameElement && ownerWindow.frameElement.ownerDocument === document){
+			const frameRect = ownerWindow.frameElement.getBoundingClientRect();
+			return { left: frameRect.left, top: frameRect.top };
+		}
+		return { left: 0, top: 0 };
+	}
+	showDndSheetCellSuggestions(cell, suggestionType, onSelect, insertOptions = {}){
+		const target = $(cell);
+		const hostDocument = this.getSuggestionHostDocument(cell);
+		const hostWindow = hostDocument.defaultView || window;
+		const frameOffset = this.getSuggestionFrameOffset(cell);
+
+		const randomMatch = this.getDndSheetRandomBracketMatch(cell);
+		const segmentInfo = randomMatch ? undefined : this.getDndSheetSuggestionCommaSegment(cell);
+		const useSegmentedMatch = segmentInfo?.isSpellListLine === true;
+		// a spell list line always searches spells only, regardless of the cell's assigned suggestion type
+		const effectiveSuggestionType = randomMatch ? 'random' : (useSegmentedMatch ? 'spellcasting' : suggestionType);
+		const searchText = randomMatch ? '' : (useSegmentedMatch ? segmentInfo.segments[segmentInfo.index].text.trim() : target.text().trim());
+		const suggestions = randomMatch
+			? this.getRandomItemSuggestions(randomMatch.rarity, randomMatch.itemType)
+			: this.getDndSheetCellSuggestionItems(effectiveSuggestionType, searchText);
+		this.removeDndSheetCellSuggestions(hostDocument);
+		if(suggestions.length === 0)
+			return;
+		const suggestionBox = $(`<div class="dnd-sheet-cell-suggestions" role="listbox"></div>`);
+		suggestionBox.data('sourceElement', cell);
+		suggestions.forEach((suggestion, index) => {
+			const option = $(`<button type="button" class="dnd-sheet-cell-suggestion" data-index="${index}" role="option" aria-selected="false">
+				<span class="dnd-sheet-cell-suggestion-name"></span>
+				${suggestion.isLegacy ? `<span class="dnd-sheet-cell-suggestion-legacy">L</span>` : ''}
+				<span class="dnd-sheet-cell-suggestion-type"></span>
+				
+			</button>`);
+			const suggestionName = option.find('.dnd-sheet-cell-suggestion-name');
+			suggestionName.text(suggestion.name);
+			const tooltipTemplate = $(this.buildTooltipLinkHtml(suggestion));
+			if(tooltipTemplate.length > 0){
+				suggestionName
+					.addClass(tooltipTemplate.attr('class'))
+					.attr('href', tooltipTemplate.attr('href'));
+			}
+			option.find('.dnd-sheet-cell-suggestion-type').text(suggestion.type);
+			option.on('mouseenter', () => {
+				this.setActiveDndSheetCellSuggestion(hostDocument, index);
+			});
+			option.on('mousedown', (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				if(randomMatch){
+					this.replaceDndSheetCellRangeHtml(cell, randomMatch.model, randomMatch.start, randomMatch.end, this.buildTooltipLinkHtml(suggestion));	
+				} else if(useSegmentedMatch){
+					const segment = segmentInfo.segments[segmentInfo.index];
+					this.replaceDndSheetCellRangeHtml(cell, segmentInfo.model, segment.start, segment.end, this.buildTooltipLinkHtml(suggestion));
+				} else{
+					target.html(this.buildTooltipLinkHtml(suggestion));
+				} 
+				this.populateDndSheetSuggestionDetails(cell, suggestion);
+				this.removeDndSheetCellSuggestions(hostDocument);
+				onSelect?.();
+				cell.focus();
+			});
+			suggestionName[0].style.setProperty('--dnd-sheet-suggestion-color', suggestion.color);
+			suggestionName[0].style.setProperty('color', 'var(--dnd-sheet-suggestion-color)');
+			suggestionBox.append(option);
+		});
+		this.add_journal_tooltip_targets(suggestionBox);
+		add_stat_block_hover(suggestionBox);
+		$(hostDocument.body).append(suggestionBox);
+		const rect = cell.getBoundingClientRect();
+		const anchorRect = this.getDndSheetSuggestionAnchorRect(cell);
+		suggestionBox.css({
+			position: 'absolute',
+			left: `${rect.left + frameOffset.left + hostWindow.scrollX}px`,
+			top: '0px',
+			width: `240px`,
+			'z-index': 100000000,
+			background: 'var(--background-color, #fff)',
+			color: 'var(--text-color, #111)',
+			border: '1px solid var(--border-color, #999)',
+			'box-shadow': '0 2px 8px rgba(0, 0, 0, 0.25)',
+			'border-radius': '4px',
+			padding: '3px',
+			visibility: 'hidden'
+		});
+
+		const suggestionBoxHeight = suggestionBox.outerHeight();
+		suggestionBox.css({
+			top: `${anchorRect.top + frameOffset.top + hostWindow.scrollY - suggestionBoxHeight}px`,
+			visibility: 'visible'
+		});
+		this.setActiveDndSheetCellSuggestion(hostDocument, 0);
+	}
+	/** Determines whether the caret in a tinyMCE note editor is somewhere suggestions should appear:
+	 * a party-loot-table item-link-cell, a spellcasting list line, or a [random...] bracket. */
+	getTinyMceSuggestionCellFromEvent(e){
+		const ownerDocument = e.target?.ownerDocument || document;
+		const selection = (ownerDocument.defaultView || window).getSelection?.();
+		let anchor = selection && selection.rangeCount > 0 ? selection.anchorNode : e.target;
+		if(anchor && anchor.nodeType === Node.TEXT_NODE)
+			anchor = anchor.parentElement;
+		if(!anchor)
+			return undefined;
+		const lootCell = $(anchor).closest('.party-item-table td.item-link-cell')[0];
+		if(lootCell)
+			return { cell: lootCell, suggestionType: 'equipment', insertOptions:  {} };
+		const block = $(anchor).closest('p, li, td, div, h1, h2, h3, h4, h5, h6')[0];
+		if(!block)
+			return undefined;
+		if(this.getDndSheetRandomBracketMatch(block))
+			return { cell: block, suggestionType: 'random', insertOptions: { wrapTag: 'magicItem' } };
+		if(this.getDndSheetSuggestionCommaSegment(block).isSpellListLine)
+			return { cell: block, suggestionType: 'spellcasting', insertOptions: {} };
+		return undefined;
+	}
+
+	bindTinyMceSuggestionEvents(editor){
+		const self = this;
+		let suppressNextSuggestionFocusin = false;
+		editor.on('keydown keyup input focusin', function(e){
+			if(e.type == 'focusin' && suppressNextSuggestionFocusin){
+				suppressNextSuggestionFocusin = false;
+				return;
+			}
+			const context = self.getTinyMceSuggestionCellFromEvent(e);
+			if(!context)
+				return;
+			const { cell, suggestionType, insertOptions } = context;
+			const hostDocument = self.getSuggestionHostDocument(cell);
+			if(e.type == 'keydown' && !['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key))
+				return;
+			if(e.type == 'keyup' && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key))
+				return;
+			if(e.type == 'keydown' && e.key == 'Tab'){
+				suppressNextSuggestionFocusin = true;
+				self.removeDndSheetCellSuggestions(hostDocument);
+				return;
+			}
+			if(e.type == 'keydown' && ['ArrowDown', 'ArrowUp'].includes(e.key)){
+				e.preventDefault();
+				if(self.getDndSheetCellSuggestionOptions(hostDocument).length === 0){
+					self.showDndSheetCellSuggestions(cell, suggestionType, undefined, insertOptions);
+				}
+				self.moveActiveDndSheetCellSuggestion(hostDocument, e.key == 'ArrowDown' ? 1 : -1);
+				return;
+			}
+			if(e.type == 'keyup' && !['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key))
+				return;
+			if(e.key == 'Escape'){
+				e.preventDefault();
+				self.removeDndSheetCellSuggestions(hostDocument);
+				return;
+			}
+			if(e.key == 'Enter'){
+				const activeSuggestion = $('.dnd-sheet-cell-suggestions .dnd-sheet-cell-suggestion.is-active', hostDocument).first();
+				const selectedSuggestion = activeSuggestion.length > 0 ? activeSuggestion : $('.dnd-sheet-cell-suggestions .dnd-sheet-cell-suggestion', hostDocument).first();
+				if(selectedSuggestion.length > 0){
+					e.preventDefault();
+					selectedSuggestion.trigger('mousedown');
+				}
+				return;
+			}
+			self.showDndSheetCellSuggestions(cell, suggestionType, () => editor.fire('change'), insertOptions);
+		});
+		const dismissNamespace = `tinyMceSuggestionDismiss${editor.id}`;
+		const dismissHandler = function(e){
+			const hostDocument = self.getSuggestionHostDocument(editor.getDoc());
+			const suggestionBox = $('.dnd-sheet-cell-suggestions', hostDocument);
+			if(suggestionBox.length === 0)
+				return;
+			if($(e.target).closest('.dnd-sheet-cell-suggestions').length > 0)
+				return;
+			const sourceElement = suggestionBox.data('sourceElement');
+			if(sourceElement && $(e.target).closest(sourceElement).length > 0)
+				return;
+			self.removeDndSheetCellSuggestions(hostDocument);
+		};
+		editor.on('init', function(){
+			$(document).off(`pointerdown.${dismissNamespace} mousedown.${dismissNamespace}`).on(`pointerdown.${dismissNamespace} mousedown.${dismissNamespace}`, dismissHandler);
+		});
+		editor.on('remove', function(){
+			$(document).off(`pointerdown.${dismissNamespace} mousedown.${dismissNamespace}`);
+		});
+	}
+	/** Makes PC-template blocks editable, copyable, and draggable inside TinyMCE.*/
+	bindTinyMceDndSheetBlockEvents(editor){
+		let draggedBlock = null;
+		const iconSvg = {
+			drag: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>',
+			copy: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
+			delete: '<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z"/></svg>'
+		};
+		const controlStyle = 'display:none !important;position:absolute !important;top:3px;z-index:10;width:20px;height:20px;box-sizing:border-box;overflow:hidden;padding:1px;border:1px solid #ddd;border-radius:3px;background:#222;color:#fff;line-height:16px;';
+		const setup = () => {
+			const body = editor.getBody();
+			if(!body) return;
+			$(body).find('.dnd-sheet .section-title').attr('contenteditable', 'true').parent().addClass('avtt-dnd-sheet-block');
+			$(body).find('.dnd-sheet .hp-box').addClass('avtt-dnd-sheet-block');
+			$(body).find('.dnd-sheet .avtt-dnd-sheet-block').each(function(){
+					const block = $(this);
+					block.attr('data-avtt-block-positioned', 'true');
+					block[0].style.setProperty('position', 'relative', 'important');
+					if(block.children('.dnd-sheet-block-drag-handle').length === 0){
+						block.append($(`<button type="button" class="dnd-sheet-block-drag-handle" contenteditable="false" data-mce-bogus="all" aria-label="Drag block" title="Drag block" style="${controlStyle}right:52px;cursor:grab;">${iconSvg.drag}</button>`));
+					}
+					if(block.children('.dnd-sheet-block-copy-button').length === 0){
+						block.append($(`<button type="button" class="dnd-sheet-block-copy-button" contenteditable="false" data-mce-bogus="all" aria-label="Copy block" title="Copy block" style="${controlStyle}right:28px;">${iconSvg.copy}</button>`));
+					}
+					if(block.children('.dnd-sheet-block-delete-button').length === 0){
+						block.append($(`<button type="button" class="dnd-sheet-block-delete-button" contenteditable="false" data-mce-bogus="all" aria-label="Delete block" title="Delete block" style="${controlStyle}right:4px;">${iconSvg.delete}</button>`));
+					}
+			});
+		};
+		editor.on('init SetContent NodeChange Undo Redo', setup);
+		editor.on('mouseover mouseout', function(e){
+			const block = $(e.target).closest('.avtt-dnd-sheet-block');
+			if(block.length === 0 || (e.type === 'mouseout' && e.relatedTarget && block[0].contains(e.relatedTarget))) return;
+			block.children('.dnd-sheet-block-drag-handle, .dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button').each(function(){
+				this.style.setProperty('display', e.type === 'mouseover' ? 'inline-flex' : 'none', 'important');
+			});
+		});
+		editor.on('click', function(e){
+			const button = $(e.target).closest('.dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button');
+			if(button.length === 0) return;
+			e.preventDefault();
+			if(button.hasClass('dnd-sheet-block-delete-button') && !window.confirm('Delete this block?')) return;
+			editor.undoManager.transact(() => {
+				const block = button.parent();
+				if(button.hasClass('dnd-sheet-block-delete-button')){
+					block.remove();
+					return;
+				}
+				const copy = block.clone(false, false);
+				copy.find('.dnd-sheet-block-copy-button').remove();
+				copy.find('.dnd-sheet-block-delete-button').remove();
+				copy.find('.dnd-sheet-block-drag-handle').remove();
+				block.after(copy);
+				setup();
+			});
+			editor.fire('change');
+		});
+		const moveDraggedBlock = (event) => {
+			if(!draggedBlock) return false;
+			const targetSheet = $(event.target).closest('.dnd-sheet');
+			const sheet = targetSheet.length > 0 ? targetSheet : draggedBlock.closest('.dnd-sheet');
+			const columns = sheet.find('.avtt-dnd-sheet-block').parent().get().filter((column) => {
+				if(!column || typeof column.getBoundingClientRect !== 'function') return false;
+				const bounds = column.getBoundingClientRect();
+				return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+			}).sort((a, b) => (a.offsetWidth * a.offsetHeight) - (b.offsetWidth * b.offsetHeight));
+			const column = $(columns[0]);
+			if(column.length === 0) return false;
+			const sibling = column.children('.avtt-dnd-sheet-block').not(draggedBlock).filter(function(){
+				const bounds = this.getBoundingClientRect();
+				return event.clientY < bounds.top + bounds.height / 2;
+			}).first();
+			if(sibling.length > 0) sibling.before(draggedBlock);
+			else column.append(draggedBlock);
+			return true;
+		};
+		editor.on('init', function(){
+			const body = editor.getBody();
+			if(!body || body.dataset.avttBlockDragBound) return;
+			body.dataset.avttBlockDragBound = 'true';
+			const ownerDocument = body.ownerDocument;
+			let activePointerId;
+			ownerDocument.addEventListener('pointerdown', (event) => {
+				const handle = event.target.closest('.dnd-sheet-block-drag-handle');
+				const block = handle?.parentElement;
+				if(!block?.classList.contains('avtt-dnd-sheet-block')) return;
+				event.preventDefault();
+				activePointerId = event.pointerId;
+				draggedBlock = $(block).addClass('dnd-sheet-block-dragging');
+				handle.setPointerCapture?.(activePointerId);
+			});
+			ownerDocument.addEventListener('pointermove', (event) => {
+				if(!draggedBlock || event.pointerId !== activePointerId) return;
+				event.preventDefault();
+				moveDraggedBlock(event);
+			});
+			ownerDocument.addEventListener('pointerup', (event) => {
+				if(!draggedBlock || event.pointerId !== activePointerId) return;
+				draggedBlock.removeClass('dnd-sheet-block-dragging');
+				draggedBlock = null;
+				activePointerId = undefined;
+				editor.fire('change');
+			});
+		});
+	}
+	/** Adds a "+" element under every table while editing in tinyMCE, for quickly appending a row.
+	 * marked data-mce-bogus="all" so tinyMCE excludes it when saving*/
+	bindTinyMceTableRowButtons(editor){
+		const syncButtonWidth = (table, button) => {
+			const width = table.getBoundingClientRect().width;
+			if(width > 0)
+				button.style.width = `${width}px`;
+		};
+		const observeTableResize = (table, button) => {
+			const ownerWindow = table.ownerDocument.defaultView || window;
+			if(typeof ownerWindow.ResizeObserver !== 'function')
+				return;
+			const observer = new ownerWindow.ResizeObserver(() => syncButtonWidth(table, button));
+			observer.observe(table);
+		};
+		const syncAddRowButtons = () => {
+			const body = $(editor.getBody());
+			body.find('.avtt-tinymce-add-row').each(function(){
+				if(!$(this).prev().is('table'))
+					$(this).remove();
+			});
+			body.find('table').each(function(){
+				const table = this;
+				const $table = $(table);
+				let button = $table.next('.avtt-tinymce-add-row');
+				if(button.length === 0){
+					button = $(`<div class="avtt-tinymce-add-row" contenteditable="false" data-mce-bogus="all">+</div>`);
+					$table.after(button);
+				}
+				syncButtonWidth(table, button[0]);
+				if(!$table.data('avttRowButtonObserved')){
+					observeTableResize(table, button[0]);
+					$table.data('avttRowButtonObserved', true);
+				}
+			});
+		};
+		editor.on('init SetContent NodeChange Undo Redo', syncAddRowButtons);
+		editor.on('mousedown', function(e){
+			const button = $(e.target).closest('.avtt-tinymce-add-row');
+			if(button.length === 0)
+				return;
+			e.preventDefault();
+			const table = button.prev('table');
+			if(table.length === 0)
+				return;
+			const tbody = table.find('tbody');
+			const targetContainer = tbody.length > 0 ? tbody : table;
+			const lastRow = targetContainer.find('> tr:last');
+			if(lastRow.length === 0)
+				return;
+			const newRow = lastRow.clone();
+			newRow.find('td, th').html('&nbsp;');
+			targetContainer.append(newRow);
+			syncButtonWidth(table[0], button[0]);
+			editor.fire('change');
+		});
+	}
+
+	async getSortableJquery(ownerDocument){
+		const ownerWindow = ownerDocument.defaultView || window;
+		if(ownerDocument === document){
+			return $;
+		}
+		if(ownerWindow.jQuery && ownerWindow.jQuery !== window.jQuery && ownerWindow.jQuery.fn?.sortable){
+			return ownerWindow.jQuery;
+		}
+		if(!ownerWindow.avttJqueryUiPromise){
+			ownerWindow.avttJqueryUiPromise = (async () => {
+				const scriptNames = ['jquery-3.6.0.min.js', 'jquery-ui.min.js', 'jquery.ui.touch-punch.js'];
+				for(const scriptName of scriptNames){
+					await this.loadScriptInDocument(ownerDocument, `${window.EXTENSION_PATH}${scriptName}`);
+				}
+			})();
+		}
+		await ownerWindow.avttJqueryUiPromise;
+		return ownerWindow.jQuery;
+	}
+	loadScriptInDocument(ownerDocument, src){
+		return new Promise((resolve, reject) => {
+			const script = ownerDocument.createElement('script');
+			script.src = src;
+			script.onload = resolve;
+			script.onerror = reject;
+			ownerDocument.head.appendChild(script);
+		});
+	}
+	/** Sums the Weight column of every equipment table and shows the running total in that column's header. */
+	updateEquipmentWeightTotals(target){
+		$(target).find('.equipment-field table').each(function(){
+			const table = $(this);
+			const headers = table.find('thead th').not('.header-spacer');
+			let weightIndex = -1;
+			headers.each(function(index){
+				if(weightIndex === -1 && $(this).text().trim().toLowerCase().startsWith('weight'))
+					weightIndex = index;
+			});
+			if(weightIndex === -1)
+				return;
+			let total = 0;
+			table.find('tbody tr').each(function(){
+				const weight = parseFloat($(this).children('td').not('.table-row-drag-handle').eq(weightIndex).text().replace(/[^0-9.\-]/g, ''));
+				if(!isNaN(weight))
+					total += weight;
+			});
+			const header = headers.eq(weightIndex);
+			header.find('.avtt-equipment-weight-total').remove();
+			header.append(`<span class="avtt-equipment-weight-total" contenteditable="false"> ${Math.round(total * 100) / 100} lb</span>`);
+		});
+	}
+	setupDndSheetTableSortable(table, ownerDocument, persistCurrentNoteText, equipmentSortGroup){
+		const initializeSortable = (sortableJquery) => {
+			const $table = sortableJquery(table);
+			const rowsContainer = $table.find('tbody').length > 0 ? $table.find('tbody') : $table;
+			const isEquipmentTable = $table.closest('.equipment-field').length > 0;
+			const rowCount = rowsContainer.find('> tr').length;
+			if (!isEquipmentTable && rowCount <= 1) {
+				return;
+			}
+			if(isEquipmentTable && equipmentSortGroup)
+				$table.attr('data-avtt-equipment-sort-group', equipmentSortGroup);
+			rowsContainer.find('> tr').each(function() {
+				const $row = sortableJquery(this);
+				if ($row.find('> .table-row-drag-handle').length === 0) {
+					const $handleCell = sortableJquery('<td class="table-row-drag-handle" contenteditable="false" aria-hidden="true">⋮⋮</td>');
+					$row.prepend($handleCell);
+				}
+				this.setAttribute('draggable', 'false');
+				$row.off('dragstart.dndSheetRowSort dragover.dndSheetRowSort dragend.dndSheetRowSort drop.dndSheetRowSort');
+				$row.find('> .table-row-drag-handle').off('pointerdown.dndSheetRowSort mousedown.dndSheetRowSort pointerup.dndSheetRowSort mouseup.dndSheetRowSort');
+			});
+			if ($table.data('ui-sortable')) {
+				$table.sortable('destroy');
+			}
+			$table.sortable({
+				items: '> tbody > tr, > tr',
+				handle: '.table-row-drag-handle',
+				connectWith: isEquipmentTable && equipmentSortGroup ? `table[data-avtt-equipment-sort-group="${equipmentSortGroup}"]` : false,
+				placeholder: 'ui-sortable-placeholder',
+				scroll: false,
+				helper: function(e, ui) {
+					ui.children().each(function() {
+						$(this).width($(this).width());
+					});
+					return ui;
+				},
+				start: function(e, ui) {
+					const $cells = ui.item.children('td, th');
+					let placeholderHtml = '';
+
+					$cells.each(function() {
+						const width = $(this).outerWidth();
+						placeholderHtml += '<td style="width:' + width + 'px; box-sizing: border-box;">&nbsp;</td>';
+					});
+
+					ui.placeholder.html(placeholderHtml);
+					ui.placeholder.height(ui.item.height());
+				},
+				stop: function(e, ui) {
+					const $cells = ui.item.children('td, th');
+					$cells.css('width', '');
+					$cells.each(function() {
+						if (!$.trim($(this).attr('style'))) {
+							$(this).removeAttr('style');
+						}
+					});
+				},
+				update: function() {
+					persistCurrentNoteText({forceSave: false, rescanStatBlock: false});
+				}
+			});
+		};
+		if(ownerDocument === document){
+			initializeSortable($);
+			return;
+		}
+		this.getSortableJquery(ownerDocument).then(initializeSortable).catch((error) => {
+			console.warn('Failed to initialize sortable in popout document', error);
+		});
+	}
+	/** Adds copy controls and connected column sorting to PC-template blocks. */
+	setupDndSheetBlockSorting(noteText, ownerDocument, persistCurrentNoteText, sortGroup){
+		const ownerWindow = ownerDocument.defaultView || window;
+		const initializeSortable = (sortableJquery) => {
+			const columns = sortableJquery(noteText).find('.dnd-sheet .avtt-dnd-sheet-block').parent();
+			columns.attr('data-avtt-block-sort-group', sortGroup);
+			columns.each(function(){
+				const column = sortableJquery(this);
+				let scrollPopoutViewport = false;
+				let viewportScrollStyle;
+				let previousOverflowAnchor;
+				let previousOverflowAnchorPriority;
+				if(column.data('ui-sortable'))
+					column.sortable('destroy');
+				column.sortable({
+					items: '> .avtt-dnd-sheet-block',
+					handle: '.dnd-sheet-block-drag-handle',
+					cancel: 'input, textarea, select, option, [contenteditable="true"]',
+					connectWith: `[data-avtt-block-sort-group="${sortGroup}"]`,
+					placeholder: 'dnd-sheet-block-placeholder',
+					forcePlaceholderSize: true,
+					tolerance: 'pointer',
+					start: function(event, ui){
+						const sortable = column.sortable('instance');
+						const scrollParent = sortable.scrollParent[0];
+						scrollPopoutViewport = ownerDocument !== document &&
+							(scrollParent === ownerDocument || scrollParent === ownerDocument.documentElement ||
+								(scrollParent === ownerDocument.body &&
+									ownerWindow.getComputedStyle(ownerDocument.documentElement).overflow === 'visible'));
+						column.sortable('option', 'scroll', !scrollPopoutViewport);
+						if(scrollPopoutViewport){
+							viewportScrollStyle = (ownerDocument.scrollingElement || ownerDocument.documentElement).style;
+							previousOverflowAnchor = viewportScrollStyle.getPropertyValue('overflow-anchor');
+							previousOverflowAnchorPriority = viewportScrollStyle.getPropertyPriority('overflow-anchor');
+							// Moving the placeholder must not make the browser anchor-scroll the page.
+							viewportScrollStyle.setProperty('overflow-anchor', 'none');
+						}
+						ui.placeholder.height(ui.item.outerHeight());
+					},
+					sort: function(event){
+						if(!scrollPopoutViewport)
+							return;
+						// about:blank popouts can report content dimensions as jQuery's window size.
+						const sensitivity = column.sortable('option', 'scrollSensitivity');
+						const speed = column.sortable('option', 'scrollSpeed');
+						const deltaY = event.clientY < sensitivity ? -speed :
+							ownerWindow.innerHeight - event.clientY < sensitivity ? speed : 0;
+						const deltaX = event.clientX < sensitivity ? -speed :
+							ownerWindow.innerWidth - event.clientX < sensitivity ? speed : 0;
+						const previousX = ownerWindow.scrollX;
+						const previousY = ownerWindow.scrollY;
+						if(deltaX || deltaY){
+							ownerWindow.scrollBy(deltaX, deltaY);
+							if(ownerWindow.scrollX !== previousX || ownerWindow.scrollY !== previousY)
+								column.sortable('refreshPositions');
+						}
+					},
+					stop: function(){
+						if(viewportScrollStyle){
+							viewportScrollStyle.setProperty('overflow-anchor', previousOverflowAnchor, previousOverflowAnchorPriority);
+							viewportScrollStyle = undefined;
+						}
+						scrollPopoutViewport = false;
+					},
+					update: function(){
+						persistCurrentNoteText({forceSave: true, rescanStatBlock: false});
+					}
+				});
+			});
+		};
+		if(ownerDocument === document){
+			initializeSortable($);
+			return;
+		}
+		this.getSortableJquery(ownerDocument).then(initializeSortable).catch((error) => {
+			console.warn('Failed to initialize PC-template block sorting in popout document', error);
+		});
+	}
+	bindDndSheetTemplateEvents(id, note_text, note_container, options = {}){
+		const self = this;
+		const container = $(note_container);
+		const initialNoteText = $(note_text);
+		if(container.find('.dnd-sheet').length === 0 && initialNoteText.find('.dnd-sheet').length === 0){
+			return;
+		}
+		const ownerDocument = container[0]?.ownerDocument || initialNoteText[0]?.ownerDocument || document;
+		const ownerWindow = ownerDocument.defaultView || window;
+		if(ownerDocument !== document && typeof pcTemplateTabKey === 'function'){
+			$(ownerDocument).off('keydown.pcTemplateTabKey').on('keydown.pcTemplateTabKey', pcTemplateTabKey);
+		}
+		const tokenId = options.tokenId;
+		const downloadToken = options.downloadToken;
+		const uploadId = options.uploadId ?? (tokenId ?? id);
+		const getCurrentNoteText = () => self.getDisplayedNoteText(container, initialNoteText);
+		const persistCurrentNoteText = (persistOptions) => {
+			self.persistStatBlockContent(id, getCurrentNoteText(), container, {tokenId, ...persistOptions});
+		};
+		let suppressNextSuggestionFocusin = false;
+		const setLockState = () => {
+			const currentNoteText = getCurrentNoteText();
+			currentNoteText.find('.dnd-sheet').toggleClass('avtt-dnd-sheet-controls-unlocked', !!window.unlockTemplateStatBlocks);
+			if(!window.unlockTemplateStatBlocks){
+				currentNoteText.find('.dnd-sheet button').attr("contenteditable", "false");
+				currentNoteText.find('.dnd-sheet-block-drag-handle, .dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button').each(function(){
+					this.style.setProperty('display', 'none', 'important');
+				});
+			} else{
+				currentNoteText.find('.dnd-sheet [contenteditable]:not(.table-row-drag-handle):not(.add-table-row):not(.dnd-sheet-block-copy-button):not(.dnd-sheet-block-delete-button):not(.dnd-sheet-block-drag-handle):not(.injected-input):not(.added-input-desc)').attr("contenteditable", "true");
+			}
+		};
+
+		getCurrentNoteText().find('a').attr('contenteditable', 'false');
+		const sortGroup = `dnd-sheet-block-sort-${id}`;
+		const equipmentSortGroup = `dnd-sheet-equipment-sort-${id}`;
+		const setupEquipmentTableSorting = () => {
+			getCurrentNoteText().find('.dnd-sheet .equipment-field table').each(function() {
+				self.setupDndSheetTableSortable(this, ownerDocument, persistCurrentNoteText, equipmentSortGroup);
+			});
+		};
+		const setupBlockControls = () => {
+			const currentNoteText = getCurrentNoteText();
+			currentNoteText.find('.dnd-sheet .section-title').attr('contenteditable', 'true');
+			currentNoteText.find('.dnd-sheet .section-title').parent().addClass('avtt-dnd-sheet-block');
+			currentNoteText.find('.dnd-sheet .hp-box').addClass('avtt-dnd-sheet-block');
+			currentNoteText.find('.dnd-sheet .avtt-dnd-sheet-block').each(function(){
+				const block = $(this);
+				block.attr('data-avtt-block-positioned', 'true');
+				block[0].style.setProperty('position', 'relative', 'important');
+				const controlStyle = 'display:none !important;position:absolute !important;top:3px;z-index:10;width:20px;height:20px;box-sizing:border-box;overflow:hidden;padding:1px;border:1px solid #ddd;border-radius:3px;background:#222;color:#fff;line-height:16px;';
+				if(block.children('.dnd-sheet-block-drag-handle').length === 0){
+					block.append($(`<button type="button" class="dnd-sheet-block-drag-handle" contenteditable="false" aria-label="Drag block" title="Drag block" style="${controlStyle}right:52px;cursor:grab;"><span class="material-symbols-outlined">drag_indicator</span></button>`));
+				}
+				if(block.children('.dnd-sheet-block-copy-button').length === 0){
+					block.append($(`<button type="button" class="dnd-sheet-block-copy-button" contenteditable="false" aria-label="Copy block" title="Copy block" style="${controlStyle}right:28px;"><span class="material-symbols-outlined">content_copy</span></button>`));
+				}
+				if(block.children('.dnd-sheet-block-delete-button').length === 0){
+					block.append($(`<button type="button" class="dnd-sheet-block-delete-button" contenteditable="false" aria-label="Delete block" title="Delete block" style="${controlStyle}right:4px;"><span class="material-symbols-outlined">delete</span></button>`));
+				}
+			});
+			self.setupDndSheetBlockSorting(currentNoteText, ownerDocument, persistCurrentNoteText, sortGroup);
+		};
+		setupBlockControls();
+		container.off('mouseenter.dndSheetBlockControls mouseleave.dndSheetBlockControls').on('mouseenter.dndSheetBlockControls mouseleave.dndSheetBlockControls', '.dnd-sheet .avtt-dnd-sheet-block', function(e){
+			if(!window.unlockTemplateStatBlocks) return;
+			$(this).children('.dnd-sheet-block-drag-handle, .dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button').each(function(){
+				this.style.setProperty('display', e.type === 'mouseenter' ? 'inline-flex' : 'none', 'important');
+			});
+		});
+		container.off('pointerdown.dndSheetBlockCopy, touchstart.dndSheetBlockCopy').on('pointerdown.dndSheetBlockCopy, touchstart.dndSheetBlockCopy', '.dnd-sheet-block-copy-button', (e) => {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			const block = $(e.currentTarget).parent();
+			const copy = block.clone(false, false);
+			copy.find('.dnd-sheet-block-copy-button').remove();
+			copy.find('.dnd-sheet-block-delete-button').remove();
+			block.after(copy);
+			setupBlockControls();
+			setupEquipmentTableSorting();
+			self.updateEquipmentWeightTotals(getCurrentNoteText());
+			persistCurrentNoteText({forceSave: true, rescanStatBlock: false});
+		});
+		container.off('pointerdown.dndSheetBlockDelete, touchstart.dndSheetBlockDelete').on('pointerdown.dndSheetBlockDelete, touchstart.dndSheetBlockDelete', '.dnd-sheet-block-delete-button', (e) => {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if(!ownerWindow.confirm('Delete this block?')) return;
+			$(e.currentTarget).parent().remove();
+			persistCurrentNoteText({forceSave: true, rescanStatBlock: false});
+		});
+		container.off('focusout.editable').on('focusout.editable', '.dnd-sheet [contenteditable="true"]', (e)=>{
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			const ownerDocument = e.target?.ownerDocument || document;
+			setTimeout(() => {
+				$('.dnd-sheet-cell-suggestions', ownerDocument).each(function(){
+					const sourceElement = $(this).data('sourceElement');
+					if(!sourceElement?.matches(':focus-within')){
+						$(this).remove();
+					}
+				});
+			}, 0);
+			setTimeout(()=>{
+				if(container.find('.dnd-sheet [contenteditable="true"]:is(:focus, :focus-within)').length>0) return;
+				if($(e.target).is('.injected-input')) return;  
+				persistCurrentNoteText({forceSave: false, rescanStatBlock: true});
+			}, 10);
+		});
+		container.off('pointerdown.nonEditable, touchstart.nonEditable').on('pointerdown.nonEditable, touchstart.nonEditable', '.dnd-sheet :not([contenteditable=true])', (e)=>{
+			if($(e.target).closest('.dnd-sheet-block-drag-handle, .dnd-sheet-block-copy-button, .dnd-sheet-block-delete-button').length > 0) return;
+			if($(e.target).closest('[contenteditable=true]').length > 0) return;
+			e.preventDefault();
+			e.stopPropagation();
+			container.find(':focus').blur();
+		});
+		container.off('change.checkbox').on('change.checkbox', '.dnd-sheet input', (e)=>{
+			if (e.target && e.target.nodeName === 'INPUT' && e.target.type === 'checkbox') {				
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+				if (e.target.checked) {
+					e.target.setAttribute('checked', 'checked');
+				} else {
+					e.target.removeAttribute('checked');
+				}
+			} else if (e.target && e.target.nodeName === 'INPUT' && e.target.type === 'number') {
+				e.target.style.width = `${e.target.value.length+4}ch`;
+			}
+			persistCurrentNoteText({forceSave: true, rescanStatBlock: false});
+		})
+		container.off('pointerdown.profChange, touchstart.profChange').on('pointerdown.profChange, touchstart.profChange', '.dnd-sheet .prof-checkbox', (e)=>{
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			const target = $(e.currentTarget);
+			const currentState = parseInt(target.attr('data-state'));
+			const newState = (currentState + 1) % 4;
+			target.attr('data-state', newState);
+			persistCurrentNoteText({forceSave: true, rescanStatBlock: false});
+		})
+		container.off('paste.dndSheet').on('paste.dndSheet', '.dnd-sheet [contentEditable="true"]', function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			const text = (e.originalEvent?.clipboardData || e.clipboardData || window.clipboardData).getData('text/plain');
+			const ownerDocument = e.target?.ownerDocument || document;
+			ownerDocument.execCommand('insertText', false, text);
+		});
+		container.off('keydown.dndSheetEnter').on('keydown.dndSheetEnter', '.dnd-sheet [contenteditable="true"]', function (e) {
+			if(e.key !== 'Enter' || e.isDefaultPrevented()) return;
+			const ownerDocument = e.target?.ownerDocument || document;
+			if(self.getDndSheetCellSuggestionOptions(ownerDocument).length > 0) return;
+			const selection = (ownerDocument.defaultView || window).getSelection();
+			if(!selection || selection.rangeCount === 0 || !$(selection.anchorNode).closest('.dnd-sheet [contenteditable="true"]').length) return;
+			// left to the browser this wraps the rest of the field in new divs, which rewrites the sheet's structure
+			e.preventDefault();
+			e.stopPropagation();
+			const range = selection.getRangeAt(0);
+			range.deleteContents();
+			const lineBreak = ownerDocument.createElement('br');
+			const caretAnchor = ownerDocument.createTextNode('\u200B');
+			range.insertNode(lineBreak);
+			lineBreak.parentNode.insertBefore(caretAnchor, lineBreak.nextSibling);
+			range.setStart(caretAnchor, caretAnchor.nodeValue.length);
+			range.collapse(true);
+			selection.removeAllRanges();
+			selection.addRange(range);
+		});
+		container.off('input.dndSheetSuggestion keydown.dndSheetSuggestion keyup.dndSheetSuggestion focusin.dndSheetSuggestion').on('input.dndSheetSuggestion keydown.dndSheetSuggestion keyup.dndSheetSuggestion focusin.dndSheetSuggestion', '.dnd-sheet', function(e){
+			if(e.type == 'focusin' && suppressNextSuggestionFocusin){
+				suppressNextSuggestionFocusin = false;
+				return;
+			}
+			const suggestionCell = self.getDndSheetSuggestionCellFromEvent(e);
+			if(!suggestionCell)
+				return;
+			if(e.type == 'keydown' && !['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'].includes(e.key))
+				return;
+			if(e.type == 'keyup' && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key))
+				return;
+			if(e.type == 'keydown' && e.key == 'Tab'){
+				suppressNextSuggestionFocusin = true;
+				self.removeDndSheetCellSuggestions(suggestionCell.ownerDocument);
+				return;
+			}
+			if(e.type == 'keydown' && ['ArrowDown', 'ArrowUp'].includes(e.key)){
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+				const cellSuggestionType = $(suggestionCell).attr('data-avtt-suggestion-type') || 'spellcasting';
+				if(self.getDndSheetCellSuggestionOptions(suggestionCell.ownerDocument).length === 0){
+					self.showDndSheetCellSuggestions(suggestionCell, cellSuggestionType);
+				}
+				self.moveActiveDndSheetCellSuggestion(suggestionCell.ownerDocument, e.key == 'ArrowDown' ? 1 : -1);
+				return;
+			}
+			if(e.type == 'keyup' && !['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key))
+				return;
+			if(e.key == 'Escape'){
+				e.preventDefault();
+				self.removeDndSheetCellSuggestions(suggestionCell.ownerDocument);
+				return;
+			}
+			if(e.key == 'Enter'){
+				const ownerDocument = suggestionCell.ownerDocument || document;
+				const activeSuggestion = $('.dnd-sheet-cell-suggestions .dnd-sheet-cell-suggestion.is-active', ownerDocument).first();
+				const selectedSuggestion = activeSuggestion.length > 0 ? activeSuggestion : $('.dnd-sheet-cell-suggestions .dnd-sheet-cell-suggestion', ownerDocument).first();
+				if(selectedSuggestion.length > 0){
+					e.preventDefault();
+					e.stopPropagation();
+					e.stopImmediatePropagation();
+					selectedSuggestion.trigger('mousedown');
+				}
+				return;
+			}
+			self.showDndSheetCellSuggestions(suggestionCell, $(suggestionCell).attr('data-avtt-suggestion-type') || 'spellcasting');
+		});
+		$(ownerDocument).off('pointerdown.dndSheetSuggestionDismiss mousedown.dndSheetSuggestionDismiss focusin.dndSheetSuggestionDismiss').on('pointerdown.dndSheetSuggestionDismiss mousedown.dndSheetSuggestionDismiss focusin.dndSheetSuggestionDismiss', function(e){
+			if($('.dnd-sheet-cell-suggestions', ownerDocument).length === 0)
+				return;
+			if($(e.target).closest('.dnd-sheet-cell-suggestions').length > 0)
+				return;
+			const activeSuggestionCell = container.find('.dnd-sheet [data-avtt-suggestion-type][contenteditable="true"]:is(:focus, :focus-within)').first()[0];
+			const targetSuggestionCell = $(e.target).closest('.dnd-sheet [data-avtt-suggestion-type][contenteditable="true"]').first()[0];
+			if(activeSuggestionCell && targetSuggestionCell === activeSuggestionCell)
+				return;
+			self.removeDndSheetCellSuggestions(ownerDocument);
+		});
+
+		getCurrentNoteText().find('.dnd-sheet table').each(function() {
+			self.setupDndSheetTableSortable(this, ownerDocument, persistCurrentNoteText, equipmentSortGroup);
+			const $table = $(this);
+			const header = $table.find('th').first().parent().parent();
+			header.find('> tr').each(function() {
+				const $row = $(this);
+				if ($row.find('> .header-spacer').length === 0) {
+					const $handleCell = $('<th class="header-spacer" aria-hidden="true"></th>');
+					$row.prepend($handleCell);
+				}
+			});
+		
+			if($table.next('.add-table-row').length>0)
+				return;
+			const add_table_row = $(`<button class="add-table-row" contenteditable="false">+</button>`);
+			$table.after(add_table_row);
+		});
+		container.off('pointerdown.addRow, touchstart.addRow').on('pointerdown.addRow, touchstart.addRow', '.dnd-sheet .add-table-row', function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			const table = $(e.target).prev('table');
+			const tableBody = $(table).find('tbody');
+			const targetContainer = tableBody.length>0 ? tableBody : table;
+			const newRow = targetContainer.find('>tr:last').clone();
+			newRow.find('td:not(.table-row-drag-handle), th').html('');
+			targetContainer.append(newRow);
+			persistCurrentNoteText({forceSave: false, rescanStatBlock: false});
+		});
+		setLockState();
+		self.updateEquipmentWeightTotals(getCurrentNoteText());
+		container.off('input.equipmentWeightTotal').on('input.equipmentWeightTotal', '.dnd-sheet .equipment-field', function(){
+			self.updateEquipmentWeightTotals(getCurrentNoteText());
+		});
+
+		if(options.showControls !== true)
+			return;
+		const titleBar = container.find('.title_bar').first();
+		const controlContainer = options.controlContainer ? $(options.controlContainer) : (titleBar.length > 0 ? titleBar : container);
+		controlContainer.find('.lockStatButton, .download_button, .upload_button').remove();
+		const absoluteControls = titleBar.length === 0;
+		const controlStyle = absoluteControls ? "cursor: pointer; position: absolute; top: 3px; width: 20px; height: 20px; color: #ddd;" : "cursor: pointer; position: relative; display:inline-block; color: #ddd;";
+		const spanStyle = absoluteControls ? "font-size:20px;" : "font-size: 20px; position: relative; top: 4px;";
+		const lockStatButton = $(`<div class='lockStatButton' style="${controlStyle}${absoluteControls ? 'left: 2px;' : ''}">
+											<span title="Lock roll buttons so the text cursor isn't placed inside them on click" class="material-symbols-outlined" style="${spanStyle}">
+											${window.unlockTemplateStatBlocks ? "lock_open_right" : "lock"}
+											</span>
+										</div>`)
+		lockStatButton.off('click.lockStatBlock').on('click.lockStatBlock', ()=>{
+			window.unlockTemplateStatBlocks = !window.unlockTemplateStatBlocks;
+			const span = lockStatButton.find('>span');
+			setLockState();
+			span.text(window.unlockTemplateStatBlocks ? 'lock_open_right' : 'lock');
+		})
+		const downloadStat = $(`<div class='download_button' style="${controlStyle}${absoluteControls ? 'left: 25px;' : ''}">
+											<span title="Download Statblock as HTML" class="material-symbols-outlined" style="${absoluteControls ? 'font-size:20px;' : 'font-size: 24px; position: relative; top: 4px;'}">
+											download
+											</span>
+										</div>`)
+		downloadStat.off('click.exportStatBlock').on('click.exportStatBlock', function () { 
+			self.downloadStatBlock(id, downloadToken);
+		});
+		const uploadStat = $(`<div class='upload_button' style="${controlStyle}${absoluteControls ? 'left: 45px;' : ''}">
+			<span title="Upload HTML Statblock" class="material-symbols-outlined" style="${absoluteControls ? 'font-size:20px;' : 'font-size: 24px; position: relative; top: 4px;'}">
+				upload
+			</span>
+			<input accept='.html' class='import_pc_template' data-id='${uploadId}' type='file' single style='display: none' />
+			</div>
+		`);
+		uploadStat.find('>span').off('click.importStatBlock').on('click.importStatBlock', function(){
+			uploadStat.find('input[type="file"]').trigger('click');
+		});
+		uploadStat.find('input[type="file"]').change(function(e) {
+			import_pc_template_html(e.target.files, getCurrentNoteText(), id, tokenId);
+		});
+		if(titleBar.length > 0){
+			container.find('.title_bar_text').css('display', 'inline-block');
+			titleBar.prepend(lockStatButton, downloadStat, uploadStat);
+			titleBar.css({
+				'display': 'flex',
+				'align-items': 'center'
+			});
+		} else{
+			controlContainer.prepend(lockStatButton, downloadStat, uploadStat);
+		}
+	}
+	bindNotePopoutButton(id, note_container, statBlock = false){
+		const self = this;
+		note_container.find('.popout-button').off('click.popout').on('click.popout', function(event){
+			const windowName = self.getNotePopoutName(id);
+			popoutWindow(windowName, note_container.find(`div.note[data-id='${id}']`), note_container.width(), note_container.height());
+			const popoutBody = $(childWindows[windowName].document).find('body');
+			const popoutNote = popoutBody.find(`div.note[data-id='${id}']`);
+			const popoutNoteText = popoutNote.find('.note-text').first();
+			self.bindDisplayedNoteEvents(id, popoutNote, popoutNoteText, popoutBody);
+			self.injectDisplayedNoteRollControls(id, popoutNoteText, popoutBody);
+			popoutBody.css('overflow', 'auto');
+			$(event.currentTarget).closest('.resize_drag_window').hide();
+		})
+	}
+	findNotePopoutWindow(id){
+		for(const name in childWindows){
+			const childWindow = childWindows[name];
+			if(!childWindow || childWindow.closed)
+				continue;
+			try{
+				if($(childWindow.document).find(`div.note[data-id='${id}']`).length > 0)
+					return {name, childWindow};
+			}
+			catch(error){
+				console.warn('Unable to check note popout window', name, error);
+			}
+		}
+		return undefined;
+	}
+	findStatBlockPopoutWindow(id){
+		for(const name in childWindows){
+			const childWindow = childWindows[name];
+			if(!childWindow || childWindow.closed)
+				continue;
+			try{
+				if($(childWindow.document).find(`.custom-stat-block[data-stat-id="${id}"]`).length > 0)
+					return {name, childWindow};
+			}
+			catch(error){
+				console.warn('Unable to check stat block popout window', name, error);
+			}
+		}
+		return undefined;
+	}
+	async renderDisplayedNote(id, note, note_text, note_container, scrollTop = 0){
+		const self = this;
+		note_text.empty();
+		note_text.append(self.notes[id].text);
+		$(note_text).find('.injected-input, .added-input-desc').remove();
+		$(note_text).find('.add-input:not(.avtt-custom-tracker)').replaceWith((i, innerHtml) => {
+			return innerHtml;
+		});
+		await this.translateHtmlAndBlocks(note_text, id);
+		add_journal_roll_buttons(note_text);
+		this.add_journal_tooltip_targets(note_text);
+		this.block_send_to_buttons(note_text);
+		add_stat_block_hover(note_text);
+		add_aoe_statblock_click(note_text);
+		$(note_text).find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId: id})})
+
+		if(note.find('.note-text').length === 0){
+			note.append(note_text);
+		}
+		note.find("a").attr("target", "_blank");
+		if($(note).parent().length === 0){
+			note_container.append(note);
+		}
+		self.bindDisplayedNoteEvents(id, note, note_text, note_container);
+		this.positionNotePins(id, note_text);
+		note_text[0].scrollTop = scrollTop;
+		if(note_text.find('.dnd-sheet').length>0){
+			self.bindDndSheetTemplateEvents(id, note_text, note_container, {showControls: $(note_container).find('.title_bar').length > 0});
+			self.injectDisplayedNoteRollControls(id, note_text, note_container);
+		}
+	}
+	async updateNotePopout(id, scrollTop = 0){
+		const popout = this.findNotePopoutWindow(id);
+		if(!popout)
+			return false;
+		const popoutBody = $(popout.childWindow.document).find('body');
+		let popoutNote = popoutBody.find(`div.note[data-id='${id}']`);
+		if(popoutNote.length === 0){
+			popoutNote = $(`<div class='note' data-id='${id}'></div>`);
+			popoutBody.append(popoutNote);
+		}
+		let popoutNoteText = popoutNote.find('.note-text').first();
+		if(popoutNoteText.length === 0){
+			popoutNoteText = $(`<div class='note-text'/>`);
+		}
+		await this.renderDisplayedNote(id, popoutNote, popoutNoteText, popoutBody, scrollTop);
+		return true;
+	}
+	async updateStatBlockPopout(id, tokenId, scrollTop = 0){
+		const popout = this.findStatBlockPopoutWindow(id);
+		if(!popout || this.notes[id] == undefined)
+			return false;
+		const popoutBody = $(popout.childWindow.document).find('body');
+		let targetRescan = popoutBody.find('.avtt-stat-block-container, .note-text').first();
+		if(targetRescan.length === 0)
+			return false;
+		const token = window.TOKEN_OBJECTS[tokenId] || window.all_token_objects[tokenId];
+		targetRescan.html(this.notes[id].text);
+		popoutBody.find('.injected-input, .added-input-desc').remove();
+		popoutBody.find('.add-input:not(.avtt-custom-tracker)').replaceWith((i, innerHtml) => {
+			return innerHtml;
+		})
+		await this.translateHtmlAndBlocks(targetRescan);
+		add_journal_roll_buttons(targetRescan, tokenId);
+		this.add_journal_tooltip_targets(targetRescan);
+		add_ability_tracker_inputs(targetRescan, tokenId);
+		popoutBody.find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {token, noteId: id})});
+		add_stat_block_hover(targetRescan, tokenId);
+		add_aoe_statblock_click(targetRescan, tokenId);
+		targetRescan.find('a').attr('contenteditable', 'false');
+		if(token){
+			sync_pc_template(token, popoutBody);
+			let imageUrl = parse_img(token.options.imgsrc);
+			if(token.options.imgsrc.startsWith('above-bucket-not-a-url')){
+				imageUrl = await getAvttStorageUrl(imageUrl);
+			}
+			targetRescan.append(`<div class="image" style="display: inline-block; position: relative;"><${(token.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => token.options.imgsrc.includes(d))) ? 'video disableremoteplayback muted' : 'img'}
+				src="${imageUrl}"    
+				class="monster-image"
+				style="max-width: 100%;">
+				</div>`);
+			popoutBody.find("img.monster-image, .monster-image").each((i,block) => {
+				createSendPlayerButton(block, "login", true).insertAfter(block);
+			});
+		}
+		this.bindDndSheetTemplateEvents(id, targetRescan, popoutBody, {tokenId, showControls: false});
+		if(typeof inject_statblock_buff_dropdown === 'function')
+			inject_statblock_buff_dropdown(popoutBody, tokenId);
+		targetRescan[0].scrollTop = scrollTop;
+		return true;
+	}
+
+	/**
+	 * Wraps elements that prevent the caret from being placed beside them.
+	 * This is achieved by inserting zero-width space characters before and after such elements.
+	 * It also adds zero-width space characters to the start and end of contenteditable elements, table cells, and table headers 
+	 * To ensure the caret can be placed at the beginning or end of these elements.
+	 * @param {HTMLElement} container - The container element within which to ensure enclosing/wrapping zero-width space characters.
+	 */
+	ensureEnclosingZWSP(container) {
+		const zwspChar = '\u200B';
+		const stripRegex = /[\u200B-\u200D\uFEFF]|&(ZeroWidthSpace|#8203|#x200B);/gi;
+		const caretBoundaryTags = ['BR', 'DIV', 'P', 'LI', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE'];
+		const docWalker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+		let textNode = docWalker.nextNode();
+		while (textNode) {
+			if (stripRegex.test(textNode.nodeValue)) {
+				textNode.nodeValue = textNode.nodeValue.replace(stripRegex, '');
+			}
+			textNode = docWalker.nextNode();
+		}
+		container.normalize();
+
+
+		const wrapTargets = container.querySelectorAll('.prof-checkbox, input[type="checkbox"], input[type="number"]');
+
+		wrapTargets.forEach((target) => {
+			if (target.previousSibling?.nodeType !== Node.TEXT_NODE) {
+				target.parentNode.insertBefore(document.createTextNode(zwspChar), target);
+			}
+
+			if (target.nextSibling?.nodeType !== Node.TEXT_NODE) {
+				target.parentNode.insertBefore(document.createTextNode(zwspChar), target.nextSibling);
+			}
+		});
+
+		const targetContainers = container.querySelectorAll('[contenteditable="true"]');
+
+		targetContainers.forEach((el) => {
+			if(el.tagName === 'TABLE') return;
+			if (el.firstChild?.nodeType === Node.TEXT_NODE) {
+				el.firstChild.nodeValue = el.firstChild.nodeValue.trimStart();
+			}
+			if (el.lastChild?.nodeType === Node.TEXT_NODE) {
+				el.lastChild.nodeValue = el.lastChild.nodeValue.trimEnd();
+			}
+			el.normalize();
+
+			if (el.firstChild?.nodeType !== Node.TEXT_NODE  && !caretBoundaryTags.includes(el.firstChild?.tagName)) {
+				el.insertBefore(document.createTextNode(zwspChar), el.firstChild);
+			}
+			if (el.lastChild?.nodeType !== Node.TEXT_NODE && !el.lastChild?.classList?.contains('add-table-row') && !caretBoundaryTags.includes(el.lastChild?.tagName)) {
+				el.appendChild(document.createTextNode(zwspChar));
+			}
+		});
+	}
+
+	add_input_event_listeners(container, noteId, tokenId){
+		// the roll buff bar lives inside the stat block, we don't want to count those
+		const sheetCheckboxes = 'input[type="checkbox"]:not(.avtt-statblock-buffs input)';
+		if(tokenId && window.all_token_objects[tokenId].options.customCheckboxes?.length > 0){
+			container.find(sheetCheckboxes).each((i, el) => {
+				el.checked = window.all_token_objects[tokenId].options.customCheckboxes.includes(i);
+			});
+		}
+		
+		container.off('change.checkbox').on('change.checkbox', 'input', (e)=>{
+			const target = e.target;
+			if (target && target.nodeName === 'INPUT' && target.type === 'checkbox') {				
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+				if (target.checked) {
+					target.setAttribute('checked', 'checked');
+				} else {
+					target.removeAttribute('checked');
+				}
+				let note_text = $(target).closest(`:is(div.note, .note-flyout)[data-id]`)?.find('.note-text')?.first();
+				if(note_text.length>0){
+					const noteContent = basic_sanitize_html(note_text.html());
+					window.JOURNAL.notes[noteId].text = noteContent;
+					window.JOURNAL.setPersistTimeout();
+					debounceSendNote(noteId, window.JOURNAL.notes[noteId], tokenId);
+					if(noteId == tokenId && window.TOKEN_OBJECTS[tokenId]){
+						window.TOKEN_OBJECTS[tokenId].place();
+					}
+				} else {
+					note_text = $(target).closest(`.avtt-stat-block-container`);
+					const mapAllCheckedInputIndexes = note_text.find(sheetCheckboxes).map((i, el) => el.checked ? i : -1).get().filter(i => i !== -1);
+				
+					window.all_token_objects[tokenId].options.customCheckboxes = mapAllCheckedInputIndexes;
+					window.all_token_objects[tokenId].sync();
+					if(window.TOKEN_OBJECTS[tokenId]){
+						window.TOKEN_OBJECTS[tokenId].options.customCheckboxes = mapAllCheckedInputIndexes;
+						window.TOKEN_OBJECTS[tokenId].place();
+					} 
+				}
+				
+			} else if (target && target.nodeName === 'INPUT' && target.type === 'number') {
+				target.style.width = `${target.value.length+4}ch`;
+			}
+			
+		})
+	}
+
+	display_note(id, statBlock = false, scrollTop=0, bringToFront=true){
 		let self=this;
 		let noteAlreadyOpen = $(`div.note[data-id='${id}']`).length>0;
 		
 		let note= noteAlreadyOpen ? $(`div.note[data-id='${id}']`) : $(`<div class='note' data-id='${id}'></div>`);
-		const note_container = find_or_create_generic_draggable_window(`noteWindow_${id}`, self.notes[id].title, false, true, `div.note[data-id='${id}']`, "860px", "600px", undefined, undefined, false, 'input, button, .note-text', false, true)
+		const note_container = find_or_create_generic_draggable_window(`noteWindow_${id}`, self.notes[id].title, false, true, `div.note[data-id='${id}']`, "860px", "600px", undefined, undefined, false, 'input, button, .note-text', false, true, undefined, bringToFront)
 		//to do adjust so these attr/classes are no longer needed - they are hold over from when we used dialog instead of our own draggable window
 		note_container.attr("role", "dialog");
 		note_container.addClass(['ui-dialog', 'ui-corner-all', 'ui-widget', 'ui-widget-content', 'ui-front', 'ui-draggable', 'ui-resizable'])
@@ -1980,7 +4000,7 @@ class JournalManager{
 			note_container.toggleClass(['ui-dialog', 'ui-corner-all', 'ui-widget', 'ui-widget-content', 'ui-front', 'ui-draggable', 'ui-resizable'], !isMinimized);
 		});
 		if(!noteAlreadyOpen){
-			note.attr('title',self.notes[id].title);
+			note_container.find('.title_bar').attr('title',self.notes[id].title);
 			if(window.DM || self.notes[id].text.includes('.dnd-sheet')){
 				let visibility_container=$("<div class='visibility-container'/>");
 
@@ -2074,7 +4094,7 @@ class JournalManager{
 				
 			}
 		}
-		let note_text= noteAlreadyOpen ? note.find('.note-text') : $("<div class='note-text'/>");
+		let note_text = noteAlreadyOpen ? note.find('.note-text').first() : $("<div class='note-text'/>");
 		if(noteAlreadyOpen){
 			note_text.empty();
 			const titleBarMinimized = note_container.find('.title_bar.minimized');
@@ -2083,14 +4103,12 @@ class JournalManager{
 			} else{
 				note_container.css('display', '') // if note is hidden for popout this will display it
 			}
-			
-
 		}
 		note_text.append(self.notes[id].text); // valid tags are controlled by tinyMCE.init()
 		$(note_text).find('.injected-input, .added-input-desc').remove();
 		$(note_text).find('.add-input:not(.avtt-custom-tracker)').replaceWith((i, innerHtml) => {
 			return innerHtml;
-		})
+		});
 
 		this.translateHtmlAndBlocks(note_text, id).then(() => {	
 			add_journal_roll_buttons(note_text);
@@ -2099,145 +4117,57 @@ class JournalManager{
 			add_stat_block_hover(note_text);
 			add_aoe_statblock_click(note_text);
 			$(note_text).find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId: id})})
-
+			this.add_input_event_listeners(note_text, id, window.TOKEN_OBJECTS[id] ? id : undefined);
 			if (!noteAlreadyOpen) {
 				note.append(note_text);
 			}
 			note.find("a").attr("target", "_blank");
 			note_container.append(note);
 
-			note.off('click').on('click', '.tooltip-hover[href*="https://www.dndbeyond.com/sources/dnd/"], .int_source_link ', function (event) {
-				event.preventDefault();
-				render_source_chapter_in_iframe(event.target.href);
-			});
-			note.off('focusout.editable').on('focusout.editable', '[contenteditable="true"]', (e)=>{
-				if($('[contenteditable="true"] :is(:focus, :focus-within)').length>0) return;
-				if($(e.target).is('.injected-input')) return;  
-				self.persistStatBlockContent(id, note_text, note_container, {rescanStatBlock: true});
-			});
-			note.off('change.checkbox').on('change.checkbox', 'input', (e)=>{
-				if (e.target && e.target.nodeName === 'INPUT' && e.target.type === 'checkbox') {				
-					if (e.target.checked) {
-						e.target.setAttribute('checked', 'checked');
-					} else {
-						e.target.removeAttribute('checked');
-					}
-				}
-				self.persistStatBlockContent(id, note_text, note_container, {forceSave: true, rescanStatBlock: false});
-			})
-			note_container.off('pointerdown.profChange, touchstart.profChange').on('pointerdown.profChange, touchstart.profChange', '.prof-checkbox', (e)=>{
-				e.preventDefault();
-				const target = $(e.currentTarget);
-				const currentState = parseInt(target.attr('data-state'));
-				const newState = (currentState + 1) % 4;
-				target.attr('data-state', newState);
-				self.persistStatBlockContent(id, note_text, note_container, {forceSave: true, rescanStatBlock: false});
-			})
+			self.bindDisplayedNoteEvents(id, note, note_text, note_container);
+			self.bindNotePopoutButton(id, note_container, statBlock);
 			this.positionNotePins(id, note_text);
 			note_text[0].scrollTop = scrollTop;
 			
 			if(note_text.find('.dnd-sheet').length>0){
-				note_text.find('a').attr('contenteditable', 'false');
-				note_container.find('.popout-button, .lockStatButton, .download_button, .upload_button').remove();
-				const lockStatButton = $(`<div class='lockStatButton' style="cursor: pointer; position: relative; display:inline-block; color: #ddd;">
-											<span title="lock buttons" class="material-symbols-outlined" style="font-size: 20px; position: relative; top: 4px;">
-											${!window.lockTemplateStatBlocks ? "lock_open_right" : "lock"}
-											</span>
-										</div>`)
-				lockStatButton.off('click.lockStatBlock').on('click.lockStatBlock', ()=>{
-				window.lockTemplateStatBlocks = !window.lockTemplateStatBlocks;
-				const span = lockStatButton.find('>span');
-				if(window.lockTemplateStatBlocks){
-					note_text.find('.dnd-sheet button').attr("contenteditable", "false");
-					span.text('lock');
-				} else{
-					note_text.find('.dnd-sheet [contenteditable]:not(a):not(.table-row-drag-handle)').attr("contenteditable", "true");
-					span.text('lock_open_right');
-				}
-				})
-				
-				if(window.lockTemplateStatBlocks){
-					note_text.find('.dnd-sheet button').attr("contenteditable", "false");
-				} else{
-					note_text.find('.dnd-sheet [contenteditable]:not(a):not(.table-row-drag-handle)').attr("contenteditable", "true");
-				}
-
-				const downloadStat = $(`<div class='download_button' style="cursor: pointer; position: relative; display:inline-block; color: #ddd;">
-											<span title="Download Statblock as HTML" class="material-symbols-outlined" style="font-size: 24px; position: relative; top: 4px;">
-											download
-											</span>
-										</div>`)
-				downloadStat.off('click.exportStatBlock').on('click.exportStatBlock', function () { 
-					self.downloadStatBlock(id);
-				});
-				const uploadStat = $(`<div class='upload_button' style="cursor: pointer; position: relative; display:inline-block; color: #ddd;">
-					<span onclick='import_open_template();' title="Upload HTML Statblock" class="material-symbols-outlined" style="font-size: 24px; position: relative; top: 4px;">
-						upload
-					</span>
-					<input accept='.html' id='input_pc_template' type='file' single style='display: none' />
-					</div>
-				`);
-				uploadStat.find('input[type="file"]').change(function(e) {
-					import_pc_template_html(e.target.files, note_text, id);
-				});
-				note_container.find('.title_bar_text').css('display', 'inline-block');
-				note_container.find('.title_bar').prepend(lockStatButton, downloadStat, uploadStat);
-				note_container.find('.title_bar').css({
-					'display': 'flex',
-					'align-items': 'center'
-				});
-				
-				note_container.find('table').each(function() {
-					const $table = $(this);
-					const rowsContainer = $table.find('tbody').length > 0 ? $table.find('tbody') : $table;
-					if (rowsContainer.find('> tr').length > 1) {
-						rowsContainer.find('> tr').each(function() {
-							const $row = $(this);
-							if ($row.find('> .table-row-drag-handle').length === 0) {
-								const $handleCell = $('<td class="table-row-drag-handle" contenteditable="false" aria-hidden="true">⋮⋮</td>');
-								$row.prepend($handleCell);
-							}
-						});
-						if ($table.data('ui-sortable')) {
-							$table.sortable('destroy');
-						}
-						$table.sortable({
-							items: '> tbody > tr, > tr',
-							handle: '.table-row-drag-handle',
-							placeholder: 'ui-sortable-placeholder',
-							update: function() {
-								self.persistStatBlockContent(id, note_text, note_container, {forceSave: true, rescanStatBlock: false});
-							}
-						});
-					}
-					const header = $table.find('th').first().parent().parent();
-					header.find('> tr').each(function() {
-						const $row = $(this);
-						if ($row.find('> .header-spacer').length === 0) {
-							const $handleCell = $('<th class="header-spacer" aria-hidden="true"></td>');
-							$row.prepend($handleCell);
-						}
-					});
-					
-					if($table.next('.add-table-row').length>0)
-						return;
-					const add_table_row = $(`<button class="add-table-row">+</button>`);
-					$table.after(add_table_row);
-				});
-			
-
-				note_container.off('pointerdown.addRow, touchstart.addRow').on('pointerdown.addRow, touchstart.addRow', '.add-table-row', function (e) {
-					e.preventDefault();
-					const table = $(e.target).prev('table');
-					const tableBody = $(table).find('tbody');
-					const targetContainer = tableBody.length>0 ? tableBody : table;
-					const newRow = targetContainer.find('>tr:last').clone();
-					newRow.find('td:not(.table-row-drag-handle), th').html('');
-					targetContainer.append(newRow);
-				});
+				this.ensureEnclosingZWSP(note_text[0]);
+				self.bindDndSheetTemplateEvents(id, note_text, note_container, {showControls: true});
+				self.injectDisplayedNoteRollControls(id, note_text, note_container);
 			}
 		});	
 		
+	}
+	injectDisplayedNoteRollControls(id, note_text, note_container){
+		const titleBar = $(note_container).find('.title_bar').first();
+		const noteText = $(note_text);
+		titleBar.find('.avtt-note-roll-controls').remove();
+		noteText.children('.avtt-note-roll-controls').remove();
+		noteText.children('.avtt-note-roll-buff-pins').remove();
+		if(noteText.find('.dnd-sheet').length === 0 || typeof build_buff_dropdown !== 'function')
+			return;
+
+		const dropdown = build_buff_dropdown({type: 'note', noteId: id}, true);
+		const rollSettings = typeof build_note_roll_settings === 'function' ? build_note_roll_settings(id) : undefined;
+		if(!dropdown && !rollSettings)
+			return;
+
+		const controls = $(`<div class="avtt-note-roll-controls${titleBar.length === 0 ? ' avtt-statblock-buffs' : ''}"></div>`).append(dropdown, rollSettings);
+		const uploadButton = titleBar.find('.upload_button').first();
+		if(uploadButton.length > 0)
+			uploadButton.after(controls);
+		else if(titleBar.length > 0)
+			titleBar.append(controls);
+		else
+			noteText.prepend(controls);
+
+		const pinDisplay = $('<div class="avtt-note-roll-buff-pins"></div>').append(dropdown.find('.avttBuffSheetPins').detach());
+		if(titleBar.length > 0)
+			noteText.prepend(pinDisplay);
+		else
+			controls.after(pinDisplay);
+		const dropdownEntry = window.avttBuffDropdowns?.find(entry => entry.id === dropdown.attr('id'));
+		if(dropdownEntry)
+			dropdownEntry.pinContainer = pinDisplay;
 	}
 	add_journal_tooltip_targets(target){
 		const monsterIds = [];
@@ -2309,22 +4239,22 @@ class JournalManager{
 				monsterIds.push(monsterId);
 				window.JOURNAL.addTokenDragToMonsterLink(self);
 			}
-			if(self.href.match(/\/spells\/[0-9]|\/magic-items\/[0-9]|\/monsters\/[0-9]|\/sources\//gi)){
-				$self.attr('data-moreinfo', `${self.href}`);
+			if($self.attr('href')?.match(/\/spells\/[0-9]|\/magic-items\/[0-9]|\/monsters\/[0-9]|\/sources\//gi)){
+				$self.attr('data-moreinfo', `${$self.attr('href').replace(/[']/gi, "")}`);
 			}
 			if(!$self.hasClass('monster-tooltip')){
-				window.JOURNAL.getDataTooltip(self.href, function(url, typeClass, isRitual){
+				window.JOURNAL.getDataTooltip($self.attr('href'), function(url, typeClass, isRitual){
 					const matched = url.match(/\/(\d+)[^/]*-tooltip(\?.*)?$/i)
 					if(matched){
 						const tooltipId = matched[1];
-						let newHref = self.href.split(/\/(spells|magic-items|equipments|adventuring-gear)\//gi);
+						let newHref = $self.attr('href').split(/\/?(spells|magic-items|equipment|adventuring-gear|armor|weapons)\//gi);
 						if(newHref.length>1)
 							newHref[newHref.length-1] = newHref[newHref.length-1].replace('/','-');
 						newHref = newHref.join('/')
 						const newUrl = `${newHref.replace(/(\d+-)?([^/]*)(-tooltip)?(\?.*)?$/i, `${tooltipId}-$2`)}`;
 						$self.attr('href', newUrl);
-						if(self.href.match(/\/spells\/[0-9]|\/magic-items\/[0-9]|\/monsters\/[0-9]|\/sources\//gi)){
-							$self.attr('data-moreinfo', `${newUrl}`);
+						if($self.attr('href')?.match(/\/spells\/[0-9]|\/magic-items\/[0-9]|\/monsters\/[0-9]|\/sources\//gi)){
+							$self.attr('data-moreinfo', `${newUrl.replace(/[']/gi, "")}`);
 						}
 					}
 					$self.attr('data-tooltip-href', url);
@@ -2438,63 +4368,75 @@ class JournalManager{
 
 		}
 	}
+	
 	async getDataTooltip(url, callback){
+		if(url == "" || url == undefined) return;
 		if(window.spellIdCache == undefined){
 			window.spellIdCache = {};
 		}
-		const urlRegex = /www\.dndbeyond\.com\/[a-zA-Z\-]+\/([0-9]+)/g;
-		const urlType = /www\.dndbeyond\.com\/([a-zA-Z\-]+)/g;
-		let itemId = (url.matchAll(urlRegex).next().value) ? url.matchAll(urlRegex).next().value[1] : 0;
-		let itemType = url.matchAll(urlType).next().value[1];
+		const urlRegex = /^(https:\/\/)?((www\.)?dndbeyond\.com)?\/[a-zA-Z\-]+\/([0-9]+)/g;
+		const urlType = /^(https:\/\/)?((www\.)?dndbeyond\.com)?\/([a-zA-Z\-]+)/g;
+		let itemId = (url.matchAll(urlRegex).next().value) ? url.matchAll(urlRegex).next().value[4] : 0;
+		let itemType = url.matchAll(urlType)?.next()?.value?.[4] ?? false;
 		url = url.toLowerCase();
+		if(itemType == false){
+			noisy_log('invalid url for tooltip', url);
+			return;
+		}
+	
 		if(itemType == 'sources' || itemType == 'compendium')
 			return 
 		itemType = itemType == 'equipment' ? 'adventuring-gear' : itemType
 		if(itemId == 0 || (['spells', 'magic-items', 'adventuring-gear'].includes(itemType) && get_avtt_setting_value('2024Tooltips'))){
-			if(window.spellIdCache[url]){
-				callback(`www.dndbeyond.com/${window.spellIdCache[url].type}/${window.spellIdCache[url].id}-tooltip?disable-webm=1`, itemType.slice(0, -1), window.spellIdCache[url].isRitual);	
+			if(window.spellIdCache[url]){				
+				callback(`www.dndbeyond.com/${window.spellIdCache[url].type}/${window.spellIdCache[url].id}-tooltip?disable-webm=1`, itemType.trim(), window.spellIdCache[url].isRitual);	
 				return;
 			}
 			else if(itemId>0 && ['spells', 'magic-items', 'adventuring-gear'].includes(itemType)){       
 				if(itemType == 'spells')
 					itemId = getNonLegacySpellId({id: itemId});
-				else if(itemType == 'magic-items' || itemType == 'adventuring-gear')
-					itemId = getNonLegacyItemId({id: itemId});
+				else if(itemType == 'magic-items' || itemType == 'adventuring-gear' || itemType == 'armor' || itemType == 'weapons'){
+					const tooltipName = decodeURIComponent(url.split(/(magic-items|adventuring-gear|equipment|armor|weapons)\/\d+-/gi)[url.split(/(magic-items|adventuring-gear|equipment|armor|weapons)\/\d+-/gi).length-1].replaceAll('-', ' ')).replaceAll("’", "'");
+					itemId = getNonLegacyItemId({id: itemId, tooltipName: tooltipName});
+				}
+					
 			}
 			else{
 				if(url.includes('weapon-properties')){
 					let splitUrl = url.split('/');
-					let name = decodeURIComponent(splitUrl[splitUrl.length-1].replaceAll('-', ' ')).replaceAll("’", "'");;
-					itemId = window.ddbConfigJson.weaponProperties.filter(d=> d.name.toLowerCase() == name.toLowerCase())[0]?.id
+					let name = decodeURIComponent(splitUrl[splitUrl.length-1].replaceAll('-', ' ')).replaceAll("’", "'");
+					itemId = window.ddbConfigJson.weaponProperties.filter(d=> d.name.toLowerCase().replaceAll('-', ' ').replaceAll("’", "'") == name.toLowerCase())[0]?.id
 				}
 				else if(window.SPELLS_CACHE && itemType == 'spells'){
 					const splitUrl = url.split('spells/');
 					const name = decodeURIComponent(splitUrl[splitUrl.length-1].replaceAll('-', ' ')).replaceAll("’", "'");
 					const isLegacy = !get_avtt_setting_value('2024Tooltips');
-					let spell = window.SPELLS_CACHE.filter(d => d.definition.name.toLowerCase() == name.toLowerCase() && d.definition.isLegacy == isLegacy)
+					let spell = window.SPELLS_CACHE.filter(d => d.definition.name.toLowerCase() == name.toLowerCase() && (isLegacy || d.definition.isLegacy == isLegacy))
 					if(!spell.length){
-						console.warn(`spell not found`, name, `isLegacy`, isLegacy);
+						noisy_log(3, `spell not found`, name, `isLegacy`, isLegacy);
 						spell = window.SPELLS_CACHE.filter(d => d.definition.name.toLowerCase() == name.toLowerCase())
 					}
 					if(!spell.length){
-						console.warn(`spell not found`, name);
+						noisy_log(3, `spell not found`, name);
 						return;
 					}	
 					itemId = `${spell[0].definition.id}-${splitUrl[splitUrl.length-1].replace('/', '-')}`;
 				}
-				else if(window.ITEMS_CACHE && (itemType == 'magic-items' || itemType == 'adventuring-gear')){
-					const splitUrl = url.split(/(magic-items|adventuring-gear|equipment)\//gi);
+				else if(window.ITEMS_CACHE && (itemType == 'magic-items' || itemType == 'adventuring-gear' || itemType == 'armor' || itemType == 'weapons')){
+					const splitUrl = url.split(/(magic-items|adventuring-gear|equipment|armor|weapons)\//gi);
 					const name = decodeURIComponent(splitUrl[splitUrl.length-1].replaceAll('-', ' ')).replaceAll("’", "'");
 					const isLegacy = !get_avtt_setting_value('2024Tooltips');
-					let item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == name.toLowerCase() && d.isLegacy == isLegacy)
+					let item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == name.toLowerCase() && (isLegacy || d.isLegacy == isLegacy))
 					if(!item.length){
-						console.warn(`item not found`, name, `isLegacy`, isLegacy);
+						noisy_log(3, `item not found`, name, `isLegacy`, isLegacy);
 						item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == name.toLowerCase())
 					}
 					if(!item.length){
-						console.warn(`item not found`, name);
+						noisy_log(3, `item not found`, name);
 						return;
-					}		
+					}	
+					const filterType = item[0].filterType.toLowerCase() == 'weapon' ? 'weapons' : item[0].filterType.toLowerCase() == 'armor' ? 'armor' : itemType;
+					itemType = ['armor', 'weapons'].includes(filterType) ? filterType : itemType;
 					itemId = `${item[0].id}-${splitUrl[splitUrl.length-1].replace('/', '-')}`;
 				}
 				else{	
@@ -2518,8 +4460,32 @@ class JournalManager{
 				return d.definition.id == newItemId
 			})[0]?.definition.ritual 
 			: false;
+		
+		if(itemType == 'adventuring-gear'){
+			const splitUrl = url.split(/(adventuring-gear|equipment)\/\d+-/gi);		
+			const name = decodeURIComponent(splitUrl[splitUrl.length-1].replaceAll('-', ' ')).replaceAll("’", "'");
+				
+			const filterType = itemType == 'adventuring-gear' ? window.ITEMS_CACHE?.flatMap(d=> {
+				let newItemId = itemId;
+
+				if(typeof itemId == 'string') newItemId = itemId.replace(/(\d+)-.*/gi,'$1')
+				if(d.id == newItemId && d.name.toLowerCase() == name.toLowerCase()){
+					if(d.filterType.toLowerCase() == 'weapon')
+						return ['weapons'];
+					else if(d.filterType.toLowerCase() == 'armor')
+						return ['armor'];
+
+				}
+				return [];
+			})[0]
+			: false;	
+			itemType = ['armor', 'weapons'].includes(filterType) ? filterType : itemType;
+		}
+		
+		
 		window.spellIdCache[url] = {id: itemId, type: itemType, isRitual};
-		callback(`www.dndbeyond.com/${itemType}/${itemId}-tooltip?disable-webm=1`, itemType.slice(0, -1), isRitual);
+		callback(`www.dndbeyond.com/${itemType}/${itemId}-tooltip?disable-webm=1`, itemType.trim(), isRitual);
+	
 	}
 	async getNotes(){
 	for(let note in window.JOURNAL.notes){
@@ -2720,7 +4686,90 @@ class JournalManager{
 		return immediateChildren;
 	}
 	async translateHtmlAndBlocks(target, displayNoteId, isStatBlock=true) {
+
 		await embedDDBSection(target);
+
+		if(window.ITEMS_CACHE != undefined){
+			const equipmentBlock = target.find('.dnd-sheet .equipment-block');
+			if(equipmentBlock.length > 0){
+				const firstCells = equipmentBlock.find('table tbody tr td:is(:first-child:not(.table-row-drag-handle), .table-row-drag-handle+td)');
+				for(let i=0; i<firstCells.length; i++){
+
+					const cell = $(firstCells[i]);
+					cell.attr('data-avtt-suggestion-type', 'equipment');
+					if(cell.find('a').length > 0) continue;
+					const text = cell.text();
+					if(text.match(/(\[(magicitem|item)\])/gi) || text.trim() === '') continue;
+
+					const isLegacy = !get_avtt_setting_value('2024Tooltips');
+					let item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == text.toLowerCase() && (isLegacy || d.isLegacy == isLegacy))
+					if(!item.length){
+						noisy_log(2, `item not found`, text, `isLegacy`, isLegacy);
+						item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == text.toLowerCase())
+					}
+					if(!item.length){
+						noisy_log(2, `item not found`, text);
+						continue;
+					}
+					
+					const itemId = `${item[0].id}-${text.replace(/[\s\/\\]/g, '-')}`;
+					const isMagic = item[0].magic;
+					const {filterType } = item[0];
+					
+					const dataTooltipHref = `www.dndbeyond.com/${isMagic ? 'magic-items' : filterType.toLowerCase() == 'armor' ? 'armor' : filterType.toLowerCase() == 'weapon' ? 'weapons' : 'adventuring-gear'}/${itemId}-tooltip?disable-webm=1`;
+					const href = `/${isMagic ? 'magic-items' : 'equipment'}/${itemId}`;
+					const link = `<a class="tooltip-hover ${isMagic ? 'magic-item-tooltip' : 'item-tooltip adventuring-gear-tooltip'}" href="${href}" data-tooltip-href="${dataTooltipHref}">${text}</a>`;
+					cell.html(link);
+					this.populateDndSheetSuggestionDetails(cell, {type: isMagic ? 'Magic Item' : filterType || 'Item', raw: item[0]});
+						
+
+					
+
+				}
+			}
+			
+			const attacksBlock = target.find('.dnd-sheet .attacks-field');
+			if(attacksBlock.length > 0){
+				const firstCells = attacksBlock.find('table tbody tr td:is(:first-child:not(.table-row-drag-handle), .table-row-drag-handle+td)');
+				for(let i=0; i<firstCells.length; i++){
+
+					const cell = $(firstCells[i]);
+					cell.attr('data-avtt-suggestion-type', 'attack');
+					if(cell.find('a').length > 0) continue;
+					const text = cell.text();
+					if(text.match(/(\[(magicitem|item)\])/gi) || text.trim() === '') continue;
+					let type = 'item';
+					const isLegacy = !get_avtt_setting_value('2024Tooltips');
+					let item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == text.toLowerCase() && (isLegacy || d.isLegacy == isLegacy))
+					if(!item.length){
+						item = window.ITEMS_CACHE.filter(d => d.name.toLowerCase() == text.toLowerCase())
+					}
+					if(!item.length){
+						item = window.SPELLS_CACHE?.filter(d => d.definition.name.toLowerCase() == text.toLowerCase() && (isLegacy || d.definition.isLegacy == isLegacy)) || []
+						if(!item.length){
+							item = window.SPELLS_CACHE?.filter(d => d.definition.name.toLowerCase() == text.toLowerCase()) || []
+						}
+						if(!item.length){
+							noisy_log(3, `item/spell not found`, text);
+							continue;
+						}
+						type = 'spell';
+					}
+					
+					const itemId = `${type == 'spell' ? item[0].definition.id : item[0].id}-${text.replace(/[\s\/\\]/g, '-')}`;
+					const rawItem = type == 'spell' ? item[0].definition : item[0];
+					const isMagic = type != 'spell' && rawItem.magic;
+					const { filterType } = rawItem;
+					
+					const dataTooltipHref = `www.dndbeyond.com/${type == 'spell' ? 'spells' : isMagic ? 'magic-items' : filterType?.toLowerCase() == 'armor' ? 'armor' : filterType?.toLowerCase() == 'weapon' ? 'weapons' : 'adventuring-gear'}/${itemId}-tooltip?disable-webm=1`;
+					const href = `/${type == 'spell' ? 'spells' : isMagic ? 'magic-items' : 'equipment'}/${itemId}`;
+					const link = `<a class="tooltip-hover ${type == 'spell' ? 'spell-tooltip' : isMagic ? 'magic-item-tooltip' : 'item-tooltip adventuring-gear-tooltip'}" href="${href}" data-tooltip-href="${dataTooltipHref}">${text}</a>`;
+					cell.html(link);
+					this.populateDndSheetSuggestionDetails(cell, {type: type == 'spell' ? 'Spell' : isMagic ? 'Magic Item' : filterType || 'Item', raw: rawItem});
+				}
+			}
+		}
+
 		let pastedButtons = target.find('.avtt-roll-button, [data-rolltype="recharge"], .integrated-dice__container, span[data-dicenotation]');
     	target.find('>style:first-of-type, >style#contentStyles').remove();
 		
@@ -2756,7 +4805,7 @@ class JournalManager{
 		//remove DDB tags if loading from DDB data eg. on the DM Screen
 		data = data.replace(/\[rule\]|\[\/rule\]/gi, '');
 		data = data.replace(/\[condition\]|\[\/condition\]/gi, '');
-
+		data = data.replaceAll(/[\u200B-\u200D\uFEFF]|&(ZeroWidthSpace|#8203|#x200B);/gi, '');
 
         data = data.replace(/\[pin(.*?)\]([\s\S]+?)\[\/pin\]/gi, function(m, m1, m2){
           let label = '';
@@ -2783,7 +4832,7 @@ class JournalManager{
 
        	data = this.replaceNoteEmbed(data, [displayNoteId]);
 
-        let lines = data.split(/(<br \/>|<br>|<p>|<\/p>|\n)/g);
+		let lines = data.split(/(<br \/>|<br>|<p>|<\/p>|<div\b[^>]*>|<\/div>|\n)/gi);
         lines = lines.map((line, li) => {
             let input = line;
 
@@ -2885,7 +4934,7 @@ class JournalManager{
             	let eachNumberFound = (input.match(/(?<!<[^>]+)\d+\/day( each)?/gi)) ? parseInt(input.match(/(?<!<[^>]+)[0-9]+(?![0-9]?px)/gi)[0]) : undefined;
             	let slotsNumberFound = (input.match(/(?<!<[^>]+)\d+\w+ level \(\d+ slots?\)\:/gi)) ? parseInt(input.match(/(?<!<[^>]+)[0-9]+/gi)[1]) : undefined;
             	let spellLevelFound = (slotsNumberFound) ? input.match(/\d+\w+ level/gi)[0] : undefined;
-				
+				let isEach = eachNumberFound ? input.match(/(?<!<[^>]+)\d+\/day( each)?/i)[1] != undefined : false;
 				let parts = input.replace(/<(?!\/?(?:span|a)\b)[^>]*>/gi, '').split(/((?<!<[^>]+):)/gi)
 				parts[0] = `<strong>${parts[0]}`;
 				parts[1] = `${parts[1]}</strong>`;
@@ -2894,7 +4943,7 @@ class JournalManager{
 					for(let part in splitParts){
 						let spellName = (splitParts[part].match(/^(\s+)?<[^>]+>/gi)) ? $(splitParts[part]).text() : splitParts[part].replace(/(\s+)?<[^>]+>/g, '').replace(/\s?\[spell\]\s?|\s?\[\/spell\]\s?/g, '').replace('[/spell]', '').replace(/\s|&nbsp;/g, '');
 						if(splitParts[part].match(/^((\s+?)?(<a|<span))|^$/gi) && $(splitParts[part])?.is('a, span[data-spell], span.ignore-abovevtt-formating:has(a.tooltip-hover)')){
-							if(eachNumberFound){
+							if(isEach){
 								splitParts[part] = `<span class="add-input each" data-number="${eachNumberFound}" data-spell="${spellName}">${splitParts[part]}</span>`
 							}
 							continue;
@@ -2907,7 +4956,7 @@ class JournalManager{
 								.replace(/( \(|(?<!\))$)/gm, `[/spell]$1`);
 						}
 
-						if(eachNumberFound){
+						if(isEach){
 							splitParts[part] = `<span class="add-input each" data-number="${eachNumberFound}" data-spell="${spellName}">${splitParts[part]}</span>`
 						}
 					}
@@ -2918,8 +4967,10 @@ class JournalManager{
                	input = parts.join('');
                 if(slotsNumberFound){
                 	input = `<span class="add-input slots" data-number="${slotsNumberFound}" data-spell="${spellLevelFound}">${input}</span>`
+                } else if(eachNumberFound && !isEach){
+                	input = `<span class="add-input each perday" data-number="${eachNumberFound}" data-spell="spellPerDay${eachNumberFound}">${input}</span>`
                 }
-            }
+			}
 
             input = input.replace(/\[language=(.*?)\](.*?)\[\/language\]/g, function(m, language, languageText){
             	languageText = languageText.replace(/<\/?p>/g, '');   	
@@ -2944,7 +4995,7 @@ class JournalManager{
             })
 			input = input.replace(/\[prof\s*(\d*)\]/gi, function(m, m1){
 				const state = isNaN(parseInt(m1)) ?  0 : parseInt(m1) % 4;
-				return `&#8203;<span data-state="${state}" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;`;
+				return `<span data-state="${state}" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>`;
 			});
 			input = input.replace(/\[checkbox checked\]/gi, `<input type="checkbox" checked>`);
 			input = input.replace(/\[checkbox\]/gi, `<input type="checkbox">`);
@@ -3022,7 +5073,10 @@ class JournalManager{
 				}
 				return currentSpan[0].innerHTML;
             })		
- 
+ 			input = input.replace(/\[track id=([a-zA-Z\s]+)\]([\d]+)\[\/track\]/g, function(m, m1, m2){
+				return `<span class="add-input each avtt-custom-tracker" data-number="${m2}" data-spell="${m1}"></span>`
+			})
+            	
             input = input.replace(/\&nbsp\;/g, ' ');
             // Replace quotes to entity
             input = input.replace(/\'/g, '&rsquo;');
@@ -3120,15 +5174,15 @@ class JournalManager{
 									$(this).find('.item-link-cell')?.text();
 
 				const idNameMatch = targetLink?.match(/https.*\/(\d*?)\-(.*)?$/i);
-			
-				const itemId = link.length > 0 
+				
+				let itemId = link.length > 0 
 								? targetLink?.match(/\/(\d*?)\-.*?$/i)?.[1] 
 								: idNameMatch?.[1];
 
 				const name = link.length > 0
 								? link.text()
 									: idNameMatch?.[2].replace(/\-/g, ' ').replace(/\d+$/gi, '').trim();
-									
+
 				const quantityCell = $(this).find('.item-quantity-cell');
 				const quantity = parseInt($(this).find('.item-quantity-cell').text());
 				const itemAddCell = $(this).find('.item-add-cell');
@@ -4251,29 +6305,32 @@ class JournalManager{
 				transition: opacity 0.15s ease;
 			}
 
-			.prof-checkbox[data-state="1"] .half-fill {
+			.prof-checkbox[data-state="3"] .half-fill {
+				opacity: 1;
+			}
+
+			.prof-checkbox[data-state="1"] .full-fill {
 				opacity: 1;
 			}
 
 			.prof-checkbox[data-state="2"] .full-fill {
 				opacity: 1;
-
 			}
-
-			.prof-checkbox[data-state="3"] .full-fill {
-				opacity: 1;
-			}
-			.prof-checkbox[data-state="3"] .ring-stroke {
+			.prof-checkbox[data-state="2"] .ring-stroke {
 				opacity: 1;
 				fill: none;
-
 				stroke-width: 1;
 			}
 
 			.prof-checkbox .base-circle{
 				stroke: color-mix(in srgb, var(--font-color, #333) 50%, transparent 0%) !important;
 			}
-			.prof-checkbox[data-state="1"] .half-fill {
+			.prof-checkbox[data-state="3"] .half-fill {
+				fill: var(--font-color, #333) !important;
+			}
+
+			.prof-checkbox[data-state="1"] .full-fill {
+
 				fill: var(--font-color, #333) !important;
 			}
 
@@ -4281,15 +6338,11 @@ class JournalManager{
 
 				fill: var(--font-color, #333) !important;
 			}
-
-			.prof-checkbox[data-state="3"] .full-fill {
-
-				fill: var(--font-color, #333) !important;
-			}
-			.prof-checkbox[data-state="3"] .ring-stroke {
+			.prof-checkbox[data-state="2"] .ring-stroke {
 				fill: none !important;
 				stroke: var(--font-color, #333) !important;
 			}
+
 			.dnd-sheet {
 				font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 				color: var(--pc-template-text-color, #111);
@@ -4299,8 +6352,21 @@ class JournalManager{
 				box-sizing: border-box;
 				font-size: 11px;
 				line-height: 1.2;
-
-				
+				@media screen and (max-width: 1023px) {
+					i {
+						box-sizing: initial;
+						cursor: initial;
+						display: initial;
+						float: initial;
+						padding: initial;
+						position: initial;
+						width: initial;
+						height: initial;
+					}
+				}
+				b{
+				 font-weight: 600;
+				}
 
 				.table-row-drag-handle {
 					width: 15px;
@@ -4315,6 +6381,12 @@ class JournalManager{
 				}
 				.table-row-drag-handle:active {
 					cursor: grabbing;
+				}
+				.avtt-equipment-weight-total {
+					text-transform: none;
+					white-space: nowrap;
+					font-weight: bold;
+					font-size: 10px;
 				}
 				svg.ritual-icon-svg {
 					width: 10px;
@@ -4359,6 +6431,7 @@ class JournalManager{
 					box-sizing: border-box;
 					overflow-wrap: break-word;
 					color: var(--pc-template-text-color, #111);
+					flex: 1;
 				}
 				.label {
 					font-size: 8px;
@@ -4371,15 +6444,17 @@ class JournalManager{
 				}
 				.main-container {
 					display: flex;
-					gap: 10px;
+					gap: 2px;
 					box-sizing: border-box;
 				}
-				.left-column {
-					width: 190px;
+				.left-column,
+				.small-col {
 					display: flex;
 					flex-direction: column;
-					gap: 10px;
+					gap: 2px;
 					box-sizing: border-box;
+					width: fit-content;
+					max-width:240px;
 				}
 				.abilities-table-container, .skills-box {
 					border: 1px solid var(--pc-template-border-color, #333);
@@ -4403,6 +6478,74 @@ class JournalManager{
 					border-radius: 2px;
 					text-transform: uppercase;
 					letter-spacing: 0.5px;
+					position: relative;
+					cursor: text;
+				}
+				.dnd-sheet-block-copy-button,
+				.dnd-sheet-block-delete-button,
+				.dnd-sheet-block-drag-handle {
+					display: none !important;
+					position: absolute !important;
+					top: 3px;
+					right: 28px;
+					z-index: 2;
+					border: 0;
+					border-radius: 3px;
+					width: 20px;
+					height: 20px;
+					box-sizing: border-box;
+					overflow: hidden;
+					padding: 1px;
+					border: 1px solid #ddd;
+					background: var(--pc-template-border-color, #222);
+					color: #fff;
+					line-height: 18px;
+					cursor: pointer;
+				}
+				.dnd-sheet-block-copy-button .material-symbols-outlined,
+				.dnd-sheet-block-delete-button .material-symbols-outlined,
+				.dnd-sheet-block-drag-handle .material-symbols-outlined {
+					display: block;
+					width: 16px;
+					height: 16px;
+					font-size: 14px !important;
+					line-height: 16px !important;
+					overflow: hidden;
+				}
+				.dnd-sheet-block-copy-button svg,
+				.dnd-sheet-block-delete-button svg,
+				.dnd-sheet-block-drag-handle svg {
+					display: block;
+					width: 100% !important;
+					height: 100% !important;
+					max-width: 100%;
+					max-height: 100%;
+					fill: currentColor;
+				}
+				.dnd-sheet-block-delete-button {
+					right: 4px;
+				}
+				.dnd-sheet-block-drag-handle {
+					right: 52px;
+					cursor: grab;
+				}
+				.dnd-sheet-block-drag-handle:active {
+					cursor: grabbing;
+				}
+				.dnd-sheet-block-delete-button:hover {
+					background: #9d2a2a;
+				}
+				.dnd-sheet.avtt-dnd-sheet-controls-unlocked .avtt-dnd-sheet-block:hover > .dnd-sheet-block-copy-button,
+				.dnd-sheet.avtt-dnd-sheet-controls-unlocked .avtt-dnd-sheet-block:hover > .dnd-sheet-block-delete-button,
+				.dnd-sheet.avtt-dnd-sheet-controls-unlocked .avtt-dnd-sheet-block:hover > .dnd-sheet-block-drag-handle {
+					display: inline-flex !important;
+					align-items: center;
+					justify-content: center;
+				}
+				.dnd-sheet-block-placeholder {
+					border: 1px dashed var(--pc-template-border-color, #222);
+					background: var(--pc-template-box-bg, #fdfdfd);
+					visibility: visible !important;
 				}
 				.heroic-inspiration{
 					display: flex;
@@ -4471,6 +6614,9 @@ class JournalManager{
 				tbody tr td:is(:first-child, .table-row-drag-handle+:nth-child(2), :last-child) {
 					text-align: left;
 				} 
+				.abilities-table-container table{
+					white-space: nowrap;
+				}	
 				:is(.skills-box, .abilities-table-container) tbody  tr td:last-child{
 					text-align: center;
 				}
@@ -4510,11 +6656,12 @@ class JournalManager{
 					color: var(--pc-template-text-muted, #777);
 					font-size: 8px;
 				}
-				.mid-column {
+				.mid-column,
+				.col {
 					flex: 1;
 					display: flex;
 					flex-direction: column;
-					gap: 10px;
+					gap: 2px;
 					box-sizing: border-box;
 				}
 				.combat-stats-grid {
@@ -4527,9 +6674,13 @@ class JournalManager{
 					border: 2px solid var(--pc-template-border-light, #333);
 					padding: 6px;
 					flex: 1;
+					text-align: center;
 					background: var(--pc-template-box-bg, #fdfdfd);
 					border-radius: 4px;
 					box-sizing: border-box;
+					.custom-stat {
+						font-weight: bold;
+					}
 				}
 				.metric-val {
 					font-size: 16px;
@@ -4548,6 +6699,13 @@ class JournalManager{
 					margin-bottom: 6px;
 					box-sizing: border-box;
 				}
+				.hp-row.hp-input{
+					font-size: 16px;
+					font-weight: bold;
+					strong{
+						font-weight: bold;
+					}
+				}
 				.hp-row .col {
 					flex: 1;
 					box-sizing: border-box;
@@ -4560,6 +6718,8 @@ class JournalManager{
 				.hp-subgrid > div {
 					flex: 1;
 					box-sizing: border-box;
+					display:flex;
+       				flex-direction: column;
 				}
 				.container-block {
 					border: 1px solid var(--pc-template-border-light, #333);
@@ -4617,23 +6777,31 @@ class JournalManager{
 					overflow-wrap: break-word;
 					color: var(--pc-template-text-color, #111);
 				}
+				.col-container,
 				.page2-grid {
 					display: flex;
-					gap: 10px;
+					gap: 2px;
 					box-sizing: border-box;
 				}
-				.page2-grid > .col {
+				:is(.col-container, .page2-grid) > .col {
 					flex: 1;
 					box-sizing: border-box;
 				}
 				.bio-block,
+				.container-block,
 				.notes-block {
 					border: 1px solid var(--pc-template-border-light, #333);
 					padding: 6px;
 					border-radius: 4px;
-					margin-bottom: 8px;
+					margin-bottom: 2px;
 					background: var(--pc-template-sheet-bg, #fff);
 					box-sizing: border-box;
+					display: flex;
+					flex-direction: column;
+					position: relative;
+				}
+				.avtt-dnd-sheet-block {
+					position: relative;
 				}
 				.bio-appearance { min-height: 90px; height: auto; border: 1px solid var(--pc-template-border-color, #444); padding: 4px; background: var(--pc-template-box-bg, var(--pc-template-box-bg, #fdfdfd)); border-radius: 3px; box-sizing: border-box; overflow-wrap: break-word; color: var(--pc-template-text-color, #111);}
 				.bio-backstory { min-height: 140px; height: auto; border: 1px solid var(--pc-template-border-color, #444); padding: 4px; background: var(--pc-template-box-bg, #fdfdfd); border-radius: 3px; box-sizing: border-box; overflow-wrap: break-word; color: var(--pc-template-text-color, #111);}
@@ -4645,8 +6813,8 @@ class JournalManager{
 					gap: 8px;
 					box-sizing: border-box;
 				}
-				.trait-box-field {
-					min-height: 60px;
+				.trait-box-field,
+				.box-field {
 					height: auto;
 					border: 1px solid var(--pc-template-border-color, var(--pc-template-border-color, #444));
 					padding: 4px;
@@ -4654,6 +6822,7 @@ class JournalManager{
 					border-radius: 3px;
 					box-sizing: border-box;
 					overflow-wrap: break-word;
+					flex:1;
 				}
 				.attunement-content {
 					font-size: 11px;
@@ -4671,10 +6840,10 @@ class JournalManager{
 				}
 				.currency-container {
 					display: flex;
-					justify-content: space-between;
-					margin-bottom: 6px;
-					margin-top: 4px;
+					justify-content: flex-start;
+					gap: 5px;
 					box-sizing: border-box;
+					margin-bottom: 2px;
 				}
 				.coin-slot {
 					display: flex;
@@ -4689,15 +6858,14 @@ class JournalManager{
 					box-sizing: border-box;
 				}
 				.coin-input {
-					width: 40px;
-					min-height: 24px;
 					height: auto;
-					border: 1px solid var(--pc-template-border-color, #ccc);
-					background: var(--pc-template-box-bg, transparent);
-					color: var(--pc-template-text-color, #111);
+					border: 1px solid #ccc;
+					background: transparent;
 					text-align: right;
 					display: inline-block;
-					line-height: 24px;
+					padding: 3px;
+					width: fit-content;
+					min-width: 30px;
 				}
 				.treasure-field {
 					min-height: 80px;
@@ -4801,6 +6969,25 @@ class JournalManager{
 			}
 			
 			/***** END NEW STAT BLOCKS ****/
+			.avtt-tinymce-add-row{
+				outline: none;
+				display: block;
+				box-sizing: border-box;
+				margin: 2px 0 10px;
+				padding: 2px 0;
+				text-align: center;
+				border: 1px dashed var(--border-color, #999);
+				border-radius: 4px;
+				background: none;
+				color: var(--text-color, #999999);
+				font-weight: 800;
+				font-size: 16px;
+				line-height: 18px;
+				cursor: pointer;
+			}
+			.avtt-tinymce-add-row:hover{
+				background: color-mix(in srgb, var(--text-color, #111) 8%, transparent 92%);
+			}
 		`
 	}
 	edit_note(id, statBlock = false){
@@ -4831,8 +7018,8 @@ class JournalManager{
 			width: 900,
 			height: 600,
 			position: {
-			   my: "center",
-			   at: "center-200",
+			   my: "center center",
+			   at: "center center",
 			   of: window
 			},
 			open: function(event, ui){
@@ -4877,6 +7064,11 @@ class JournalManager{
 				const avttImages = body.find('img[data-src*="above-bucket-not-a-url"]');
 				avttImages.attr('src', '');
 				avttImages.attr('href', '');
+				body.find('.avtt-dnd-sheet-block').removeClass('avtt-dnd-sheet-block');
+				body.find('[data-avtt-block-positioned]').each(function(){
+					this.style.removeProperty('position');
+					this.removeAttribute('data-avtt-block-positioned');
+				});
 				self.notes[id].text = basic_sanitize_html(body.html()); 
 		    	self.notes[id].plain = editor.getContent({ format: 'text' });
 		    	self.notes[id].statBlock = statBlock;
@@ -4885,7 +7077,7 @@ class JournalManager{
 		}, 800)
 
 		const contentStyles = this.content_styles()
-
+		
 		tinyMCE.init({
 			selector: '#' + tmp,
 			menubar: false,
@@ -4907,7 +7099,7 @@ class JournalManager{
 			      { title: 'Read Aloud Text', block: 'div', wrapper: true, classes: 'read-aloud-text' },
 			      { title: 'Stat Block Paper (1 Column)', block: 'div', wrapper: true, classes: 'Basic-Text-Frame stat-block-background one-column-stat' },
 			      { title: 'Stat Block Paper (2 Column)', block: 'div', wrapper: true, classes: 'Basic-Text-Frame stat-block-background' },
-			      { title: 'For DM Eyes Online', block: 'div', wrapper: true, classes: 'dm-eyes-only' },
+			      { title: 'For DM Eyes Only', block: 'div', wrapper: true, classes: 'dm-eyes-only' },
 				  { title: 'DM Screen Chunk - won\'t be auto split into columns when used with the DM Screen', block: 'div', wrapper: true, classes: 'dmScreenChunk' },
 				  { title: 'Add Ability Tracker; Format: "Wild Shape 2"', inline: 'span', wrapper:true, classes: 'note-tracker'},
 			      { title: 'Ignore AboveVTT auto formating', inline: 'span', wrapper: true, classes: 'ignore-abovevtt-formating' },
@@ -5106,13 +7298,8 @@ class JournalManager{
 									<span class="label">XP</span>
 								</div>
 							</div>
-							<div class="main-container">
-								<div class="left-column">
-									<div class="abilities-table-container">
-										<div class="section-title"><span class="ignore-abovevtt-formating">Heroic Inspiration</span></div>
-										<div class="box-field heroic-inspiration"><input id="template-heroic-inspiration" type="checkbox" />
-										</div>
-									</div>
+							<div class="col-container">
+								<div class="small-col">
 									<div class="abilities-table-container">
 										<div class="section-title">Abilities</div>
 										<div class="box-field">
@@ -5128,38 +7315,38 @@ class JournalManager{
 												<tbody>
 													<tr>
 														<td>Str</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 													<tr>
 														<td>Dex</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 													<tr>
 														<td>Con</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 													<tr>
 														<td>Int</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 													<tr>
 														<td>Wis</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 													<tr>
 														<td>Cha</td>
-														<td><span contenteditable="true">+0</span></td>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;<span contenteditable="true">+0</span></td>
+														<td>+0</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>+0</td>
 														<td>10</td>
 													</tr>
 												</tbody>
@@ -5172,109 +7359,109 @@ class JournalManager{
 											<table contenteditable="true">
 												<tbody>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Acrobatics</td>
 														<td>Dex</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="1" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="1" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Animal Handling</td>
 														<td>Wis</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="2" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="2" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Arcana</td>
 														<td>Int</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="3" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="3" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Athletics</td>
 														<td>Str</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Deception</td>
 														<td>Cha</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>History</td>
 														<td>Int</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Insight</td>
 														<td>Wis</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Intimidation</td>
 														<td>Cha</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Investigation</td>
 														<td>Int</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Medicine</td>
 														<td>Wis</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Nature</td>
 														<td>Int</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Perception</td>
 														<td>Wis</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Performance</td>
 														<td>Cha</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Persuasion</td>
 														<td>Cha</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Religion</td>
 														<td>Int</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Sleight of Hand</td>
 														<td>Dex</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Stealth</td>
 														<td>Dex</td>
 													</tr>
 													<tr>
-														<td>&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;</td>
+														<td><span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span></td>
 														<td>+0</td>
 														<td>Survival</td>
 														<td>Wis</td>
@@ -5284,15 +7471,14 @@ class JournalManager{
 										</div>
 									</div>
 								</div>
-								<div class="mid-column">
-									<div class="combat-stats-grid">
+								<div class="col">
+									<div class="col-container">
 										<div class="combat-metric"><span class="label">Armor Class</span>
-											<div class="metric-val" contenteditable="true"><strong class="custom-ac custom-stat">16</strong>
+											<div class="metric-val" contenteditable="true">16
 											</div>
 										</div>
 										<div class="combat-metric"><span class="label">Initiative</span>
-											<div class="metric-val"><strong class="custom-initiative custom-stat"
-													contenteditable="true">+1</strong></div>
+											<div class="metric-val" contenteditable="true">+1</div>
 										</div>
 										<div class="combat-metric"><span class="label">Speed</span>
 											<div class="metric-val" contenteditable="true">30 ft.</div>
@@ -5300,25 +7486,34 @@ class JournalManager{
 										<div class="combat-metric"><span class="label">Proficiency Bonus</span>
 											<div class="metric-val" contenteditable="true">+2</div>
 										</div>
+										<div class="combat-metric">
+											<span class="label">Heroic Inspiration</span>
+											<div class="box-field heroic-inspiration"><input type="checkbox" id="template-heroic-inspiration"></div>
+										</div>
 									</div>
 									<div class="hp-box">
-										<div class="hp-row">
-											<div class="col"><span class="label">Maximum Hit Points</span>
-												<div class="box-field" contenteditable="true"><strong class="custom-avghp custom-stat">
-														10</strong></div>
-											</div>
+										<div class="hp-row hp-input">
 											<div class="col"><span class="label">Current Hit Points</span>
 												<div class="box-field" contenteditable="true">&nbsp;</div>
 											</div>
-										</div>
-										<div class="hp-row">
+											<div class="col"><span class="label">Maximum Hit Points</span>
+												<div class="box-field" contenteditable="true">10</div>
+											</div>
 											<div class="col"><span class="label">Temporary Hit Points</a></span>
 												<div class="box-field" contenteditable="true">&nbsp;</div>
 											</div>
+										</div>
+										<div class="hp-row">	
 											<div class="col">
 												<div class="hp-subgrid">
 													<div><span class="label">Hit Dice</span>
 														<div class="box-field" contenteditable="true"><input type="checkbox" /> 1d10</div>
+													</div>
+													<div><span class="label">Defenses</span>
+														<div class="box-field" contenteditable="true">&nbsp;</div>
+													</div>
+													<div><span class="label">Conditions</span>
+														<div class="box-field" contenteditable="true">&nbsp;</div>
 													</div>
 													<div><span class="label">Death Saves</span>
 														<div class="box-field" contenteditable="true">&nbsp;</div>
@@ -5341,48 +7536,48 @@ class JournalManager{
 												</thead>
 												<tbody>
 													<tr>
-														<td contenteditable="true">[magicItem]Dagger of Venom[/magicItem]</td>
-														<td contenteditable="true">+1</td>
-														<td contenteditable="true">1d4+1 piercing</td>
-														<td contenteditable="true">DC15 Con (2d10) Poison , [wprop]Nick[/wprop]</td>
+														<td>[magicItem]Dagger of Venom[/magicItem]</td>
+														<td>+1</td>
+														<td>1d4+1 piercing</td>
+														<td>DC15 Con (2d10) Poison , [wprop]Nick[/wprop]</td>
 													</tr>
 													<tr>
-														<td contenteditable="true">Handaxe</td>
-														<td contenteditable="true">+0</td>
-														<td contenteditable="true">(1d6) slashing</td>
-														<td contenteditable="true">[wprop]Light[/wprop], [wprop]Thrown[/wprop](20/60)</td>
+														<td>Handaxe</td>
+														<td>+0</td>
+														<td>(1d6) slashing</td>
+														<td>[wprop]Light[/wprop], [wprop]Thrown[/wprop](20/60)</td>
 													</tr>
 													<tr>
-														<td contenteditable="true">[spell]Acid Splash[/spell]</td>
-														<td contenteditable="true">10 DEX</td>
-														<td contenteditable="true">(1d6) acid</td>
-														<td contenteditable="true">5-foot-radius Sphere</td>
+														<td>[spell]Acid Splash[/spell]</td>
+														<td>10 DEX</td>
+														<td>(1d6) acid</td>
+														<td>5-foot-radius Sphere</td>
 													</tr>
 													<tr>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
 													</tr>
 													<tr>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
 													</tr>
 													<tr>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
-														<td contenteditable="true">&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
 													</tr>
 												</tbody>
 											</table>
 										</div>
 									</div>
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Spellcasting Notes / Summary</div>
-										<div class="spellcasting-field" contenteditable="true">Spellcasting. Spell save DC 10, +0 to hit
+										<div class="box-field" contenteditable="true">Spellcasting. Spell save DC 10, +0 to hit
 											with spell attacks<br /> <br />Cantrips (at will): acid splash, light, mage hand,
 											prestidigitation<br /><br />1st level (2 slots): detect magic, mage armor<br />
 											<p>&nbsp;</p>
@@ -5390,7 +7585,7 @@ class JournalManager{
 									</div>
 									<div class="container-block">
 										<div class="section-title">Features &amp; Traits</div>
-										<div class="features-field" contenteditable="true">
+										<div class="box-field" contenteditable="true">
 											<table>
 												<tbody class="ui-sortable">
 													<tr>
@@ -5418,20 +7613,20 @@ class JournalManager{
 							</div>
 						</div>
 						<div class="dnd-page">
-							<div class="page2-grid">
+							<div class="col-container">
 								<div class="col">
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Magic Item Attunement (3 Slots Available)</div>
-										<div class="attunement-content" contenteditable="true">
+										<div class="box-field" contenteditable="true">
 											<div style="margin-bottom: 2px;"><input checked="checked"
 													type="checkbox" />&nbsp;[magicItem]Cloak of Protection[/magicItem]</div>
 											<div style="margin-bottom: 2px;"><input type="checkbox" /> Empty Slot</div>
 											<div><input type="checkbox" /> Empty Slot</div>
 										</div>
 									</div>
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Additional Features &amp; Traits</div>
-										<div class="bio-traits-add" contenteditable="true"><strong>Armor</strong>
+										<div class="box-field" contenteditable="true"><strong>Armor</strong>
 											<div>&bull; Light Armor</div>
 											<div><strong>Weapons</strong></div>
 											<div>&bull; Simple Weapons</div>
@@ -5441,39 +7636,43 @@ class JournalManager{
 											<div>&bull; Common</div>
 										</div>
 									</div>
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Character Appearance</div>
-										<div class="bio-appearance" contenteditable="true">&nbsp;</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
 									</div>
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Character Backstory</div>
-										<div class="bio-backstory" contenteditable="true">&nbsp;</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
 									</div>
-									<div class="traits-grid">
-										<div class="bio-block">
-											<div class="section-title">Personality Traits</div>
-											<div class="trait-box-field" contenteditable="true">&nbsp;</div>
+									<div class="col-container">
+										<div class="col">
+											<div class="container-block">
+												<div class="section-title">Personality Traits</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="container-block">
+												<div class="section-title">Bonds</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
 										</div>
-										<div class="bio-block">
-											<div class="section-title">Ideals</div>
-											<div class="trait-box-field" contenteditable="true">&nbsp;</div>
-										</div>
-										<div class="bio-block">
-											<div class="section-title">Bonds</div>
-											<div class="trait-box-field" contenteditable="true">&nbsp;</div>
-										</div>
-										<div class="bio-block">
-											<div class="section-title">Flaws</div>
-											<div class="trait-box-field" contenteditable="true">&nbsp;</div>
+										<div class="col">
+											<div class="container-block">
+												<div class="section-title">Ideals</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="container-block">
+												<div class="section-title">Flaws</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
 										</div>
 									</div>
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Organization &amp; Allies</div>
-										<div class="bio-allies" contenteditable="true">&nbsp;</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
 									</div>
 								</div>
 								<div class="col">
-									<div class="bio-block">
+									<div class="container-block">
 										<div class="section-title">Treasure &amp; Currency</div>
 										<div class="currency-container">
 											<div class="coin-slot">CP:
@@ -5492,9 +7691,9 @@ class JournalManager{
 												<div class="coin-input" contenteditable="true">&nbsp;</div>
 											</div>
 										</div>
-										<div class="treasure-field" contenteditable="true">&nbsp;</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
 									</div>
-									<div class="container-block">
+									<div class="container-block equipment-block">
 										<div class="section-title">Equipment</div>
 										<div class="equipment-field" contenteditable="true">
 											<table>
@@ -5502,53 +7701,53 @@ class JournalManager{
 													<tr>
 														<th>Name</th>
 														<th>Weight</th>
-														<th>QTY</th>
-														<th>Cost (GP)</th>
+														<th>Qty</th>
+														<th>Cost (gp)</th>
 														<th>Notes</th>
 													</tr>
 												</thead>
 												<tbody>
 													<tr>
-														<td>[magicItem]Cloak of Protection[/magicItem]</td>
-														<td>&nbsp;</td>
-														<td>1</td>
-														<td>&nbsp;</td>
-														<td>&nbsp;</td>
-													</tr>
-													<tr>
-														<td>[magicItem]Dagger of Venom[/magicItem]</td>
-														<td>1 lbs</td>
-														<td>1</td>
-														<td>&nbsp;</td>
-														<td>&nbsp;</td>
-													</tr>
-													<tr>
-														<td>[item]Rope[/item]</td>
-														<td>5 lbs</td>
-														<td>50 ft</td>
-														<td>1</td>
-														<td>&nbsp;</td>
-													</tr>
-													<tr>
-														<td>&nbsp;[track][item]Arrows[/item] 20[/track]</td>
+														<td>Cloak of Protection</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 													</tr>
 													<tr>
-														<td>&nbsp;[track][item]Rations[/item] 10[/track]&nbsp;</td>
+														<td>Dagger of Venom</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 													</tr>
 													<tr>
+														<td>Rope</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
 														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Arrows</td>
 														<td>&nbsp;</td>
+														<td>20</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Rations</td>
+														<td>&nbsp;</td>
+														<td>10</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Healer's Kit</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>[track id=healersKit]10[/track] uses remaining</td>
 													</tr>
 													<tr>
 														<td>&nbsp;</td>
@@ -5713,9 +7912,1446 @@ class JournalManager{
 						</div>
 						<div class="dnd-page">
 							<div class="col">
-								<div class="notes-block">
+								<div class="container-block">
 									<div class="section-title">Notes</div>
-									<div class="notes-field" contenteditable="true">&nbsp;</div>
+									<div class="box-field" contenteditable="true">&nbsp;</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					`
+				},
+				{
+					"title": "Fillable Character Sheet - Fullscreen Template",
+					"description": "Adds a fillable character sheet to the note. This style is meant for full screen popout use. Has limited edit capabilities for Players.",
+					"content": `
+						<style id='contentStyles'>${contentStyles}</style>
+						<div class="dnd-sheet">
+							<div class="dnd-page">
+								<div class="header-box" style="padding: 0px; border: none;">
+									<div class="combat-stats-grid" style="flex: 6;">
+										<div class="combat-metric" style="flex: 2;"><span class="label">Armor Class</span>
+											<div class="metric-val" contenteditable="true">16</div>
+										</div>
+										<div class="combat-metric"><span class="label">Initiative</span>
+											<div class="metric-val" contenteditable="true">+0</div>
+										</div>
+										<div class="combat-metric"><span class="label">Speed</span>
+											<div class="metric-val" contenteditable="true">30 ft</div>
+										</div>
+										<div class="combat-metric"><span class="label">Proficiency Bonus</span>
+											<div class="metric-val" contenteditable="true">+2</div>
+										</div>
+										<div class="combat-metric"><span class="label">Heroic <a class="tooltip-hover condition-tooltip"
+													style="display: inline-block;" contenteditable="false"
+													href="https://www.dndbeyond.com/compendium/rules/basic-rules/combat#Inspiration"
+													target="_blank" data-tooltip-href="//www.dndbeyond.com/rules/80-tooltip"
+													data-tooltip-json-href="//www.dndbeyond.com/conditions/80/tooltip-json">Inspiration</a></span>
+											<div class="box-field heroic-inspiration"><input id="template-heroic-inspiration" type="checkbox" />
+											</div>
+										</div>
+									</div>
+									<div class="col char-name-box combat-metric"><span class="label">Character Name</span>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+									<div class="col combat-metric" style="flex: 2;"><span class="label">Class &amp; Level</span>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+									<div class="col combat-metric"><span class="label">Background</span>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+									<div class="col combat-metric"><span class="label">Species (Race)</span>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+									<div class="col combat-metric"><span class="label">Alignment</span>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+								</div>
+								<div class="col-container">
+									<div class="small-column">
+										<div class="abilities-table-container">
+											<div class="section-title">Abilities</div>
+											<div class="box-field">
+												<table class="ui-sortable" contenteditable="true">
+													<thead>
+														<tr>
+															<th>Ability</th>
+															<th>Mod</th>
+															<th>Save</th>
+															<th>Score</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td>Str</td>
+															<td><span contenteditable="true">+0</span></td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> <span style="letter-spacing: 1px;"><strong> +0</strong></span>
+															</td>
+															<td>10</td>
+														</tr>
+														<tr draggable="false">
+															<td>Dex</td>
+															<td><span contenteditable="true">+0</span></td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> +0</td>
+															<td>10</td>
+														</tr>
+														<tr draggable="false">
+															<td>Con</td>
+															<td><span contenteditable="true">+0</span></td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> <span contenteditable="true">+0</span></td>
+															<td>10</td>
+														</tr>
+														<tr draggable="false">
+															<td>Int</td>
+															<td>+0</td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> <span contenteditable="true">+0</span></td>
+															<td>10</td>
+														</tr>
+														<tr draggable="false">
+															<td>Wis</td>
+															<td><span contenteditable="true">+0</span></td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> <span contenteditable="true">+0</span></td>
+															<td>10</td>
+														</tr>
+														<tr draggable="false">
+															<td>Cha</td>
+															<td>+0</td>
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span> <span contenteditable="true">+0</span></td>
+															<td>10</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+										<div class="skills-box">
+											<div class="section-title"><strong>Skills</strong></div>
+											<div class="box-field">
+												<table class="ui-sortable" contenteditable="true">
+													<tbody>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Acrobatics"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/3-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/3/tooltip-json">Acrobatics</a>
+															</td>
+															<td>Dex</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Animal Handling"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/11-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/11/tooltip-json">Animal
+																	Handling</a></td>
+															<td>Wis</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Arcana"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/6-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/6/tooltip-json">Arcana</a>
+															</td>
+															<td>Int</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Athletics"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/2-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/2/tooltip-json">Athletics</a>
+															</td>
+															<td>Str</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td><span style="letter-spacing: 1px; white-space: nowrap;"> +0</span></td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Deception"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/16-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/16/tooltip-json">Deception</a>
+															</td>
+															<td>Cha</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td><strong style="letter-spacing: 1px; white-space: nowrap;"> +0</strong></td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#History"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/7-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/7/tooltip-json">History</a>
+															</td>
+															<td>Int</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Insight"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/12-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/12/tooltip-json">Insight</a>
+															</td>
+															<td>Wis</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Intimidation"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/17-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/17/tooltip-json">Intimidation</a>
+															</td>
+															<td>Cha</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td><strong style="letter-spacing: 1px; white-space: nowrap;"> +0</strong></td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Investigation"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/8-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/8/tooltip-json">Investigation</a>
+															</td>
+															<td>Int</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Medicine"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/13-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/13/tooltip-json">Medicine</a>
+															</td>
+															<td>Wis</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Nature"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/9-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/9/tooltip-json">Nature</a>
+															</td>
+															<td>Int</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Perception"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/14-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/14/tooltip-json">Perception</a>
+															</td>
+															<td>Wis</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td><strong style="letter-spacing: 1px; white-space: nowrap;"> +0</strong></td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Performance"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/18-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/18/tooltip-json">Performance</a>
+															</td>
+															<td>Cha</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Persuasion"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/19-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/19/tooltip-json">Persuasion</a>
+															</td>
+															<td>Cha</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td><strong style="letter-spacing: 1px; white-space: nowrap;"> +0</strong></td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Religion"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/10-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/10/tooltip-json">Religion</a>
+															</td>
+															<td>Int</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Sleight of Hand"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/4-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/4/tooltip-json">Sleight
+																	of Hand</a></td>
+															<td>Dex</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Stealth"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/5-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/5/tooltip-json">Stealth</a>
+															</td>
+															<td>Dex</td>
+														</tr>
+														<tr draggable="false">
+															<td><span class="prof-checkbox" data-state="0"><svg name="preventRemove"
+																		class="prof-icon">
+																		<circle cx="9" cy="9" r="6" class="base-circle"></circle>
+																		<path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path>
+																		<circle cx="9" cy="9" r="6" class="full-fill"></circle>
+																		<circle cx="9" cy="9" r="8" class="ring-stroke"></circle>
+																	</svg></span></td>
+															<td>+0</td>
+															<td><a class="tooltip-hover skill-tooltip" style="display: inline-block;"
+																	contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/using-ability-scores#Survival"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/skills/15-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/skills/15/tooltip-json">Survival</a>
+															</td>
+															<td>Wis</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Magic Item Attunement (3 Slots Available)</div>
+											<div class="box-field" contenteditable="true">
+												<div style="margin-bottom: 2px;"><input type="checkbox" /></div>
+												<div style="margin-bottom: 2px;"><input type="checkbox" /></div>
+												<div><input type="checkbox" /></div>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Additional Features &amp; Traits</div>
+											<div class="box-field" contenteditable="true">
+												<div>Armor</div>
+												<div>&bull; Light Armor, Medium Armor, Shields</div>
+												<div>Weapons</div>
+												<div>&bull; Martial Weapons, Simple Weapons</div>
+												<div>Tools</div>
+												<div>&bull;</div>
+												<div><strong>Languages</strong></div>
+												<div>&bull; Common</div>
+											</div>
+										</div>
+									</div>
+									<div class="col" style="flex: 3;">
+										<div class="hp-box">
+											<div class="hp-row hp-input">
+												<div class="col"><span class="label">Current Hit Points</span>
+													<div class="box-field" contenteditable="true">10</div>
+												</div>
+												<div class="col"><span class="label">Maximum Hit Points</span>
+													<div class="box-field" contenteditable="true">10</div>
+												</div>
+												<div class="col"><span class="label"><a class="tooltip-hover condition-tooltip"
+															style="display: inline-block;" contenteditable="false"
+															href="https://www.dndbeyond.com/compendium/rules/basic-rules/combat#Temporary Hit Points"
+															target="_blank" data-tooltip-href="//www.dndbeyond.com/rules/76-tooltip"
+															data-tooltip-json-href="//www.dndbeyond.com/conditions/76/tooltip-json">Temporary
+															Hit Points</a></span>
+													<div class="box-field" contenteditable="true">&nbsp;</div>
+												</div>
+											</div>
+											<div class="hp-row">
+												<div class="col">
+													<div class="hp-subgrid">
+														<div><span class="label"><a class="tooltip-hover condition-tooltip"
+																	style="display: inline-block;" contenteditable="false"
+																	href="https://www.dndbeyond.com/compendium/rules/basic-rules/combat#Hit Dice"
+																	target="_blank" data-tooltip-href="//www.dndbeyond.com/rules/39-tooltip"
+																	data-tooltip-json-href="//www.dndbeyond.com/conditions/39/tooltip-json">Hit
+																	Dice</a></span>
+															<div class="box-field" contenteditable="true"><input type="checkbox" /> 1d8+0</div>
+														</div>
+														<div><span class="label">Defenses</span>
+															<div class="box-field" contenteditable="true">&nbsp;</div>
+														</div>
+														<div><span class="label">Conditions</span>
+															<div class="box-field" contenteditable="true">&nbsp;</div>
+														</div>
+														<div><span class="label">Death Saves</span>
+															<div class="box-field" contenteditable="true">&nbsp;</div>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Attacks &amp; Spellcasting</div>
+											<div class="attacks-field"><br />
+												<table class="ui-sortable" contenteditable="true">
+													<thead>
+														<tr>
+															<th>Weapon/ability</th>
+															<th>Attack/Save</th>
+															<th>Damage</th>
+															<th>Notes</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+															<td contenteditable="true">&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									</div>
+									<div class="col" style="flex: 3;">
+										<div class="container-block">
+											<div class="section-title">Spellcasting Notes / Summary</div>
+											<div class="box-field" contenteditable="true">
+												<div><em><strong>Spellcasting.</strong></em> Spell save DC 10, +0 to hit with spell attacks
+												</div>
+												<div><br/><strong>Cantrips (at will):</strong><br/><br/><span class="add-input slots"
+														data-number="2" data-spell="1st level"><strong>1st level (2
+															slots):</strong></span><br/><br/></div>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Features &amp; Traits</div>
+											<div class="box-field" contenteditable="true">
+												<table class="ui-sortable">
+													<tbody class="ui-sortable">
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									</div>
+									<div class="col" style="flex: 1;">
+										<div class="container-block equipment-block">
+											<div class="section-title">Spell Components</div>
+											<div class="equipment-field" contenteditable="true">
+												<table class="ui-sortable">
+													<thead>
+														<tr>
+															<th>Name</th>
+															<th>Weight</th>
+															<th>Qty</th>
+															<th>Cost (gp)</th>
+															<th>Notes</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+										<div class="container-block equipment-block">
+											<div class="section-title">Potion Pouch</div>
+											<div class="equipment-field" contenteditable="true">
+												<table class="ui-sortable">
+													<thead>
+														<tr>
+															<th>Name</th>
+															<th>Weight</th>
+															<th>Qty</th>
+															<th>Cost (gp)</th>
+															<th>Notes</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+										<div class="container-block equipment-block">
+											<div class="section-title">Consumables / Tools</div>
+											<div class="equipment-field" contenteditable="true">
+												<table class="ui-sortable">
+													<thead>
+														<tr>
+															<th>Name</th>
+															<th>Weight</th>
+															<th>Qty</th>
+															<th>Cost (gp)</th>
+															<th>Notes</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Treasure &amp; Currency</div>
+											<div class="currency-container">
+												<div class="coin-slot">CP:
+													<div class="coin-input" contenteditable="true">&nbsp;</div>
+												</div>
+												<div class="coin-slot">SP:
+													<div class="coin-input" contenteditable="true">&nbsp;</div>
+												</div>
+												<div class="coin-slot">EP:
+													<div class="coin-input" contenteditable="true">&nbsp;</div>
+												</div>
+												<div class="coin-slot">GP:
+													<div class="coin-input" contenteditable="true">&nbsp;</div>
+												</div>
+												<div class="coin-slot">PP:
+													<div class="coin-input" contenteditable="true">&nbsp;</div>
+												</div>
+											</div>
+											<div class="box-field" contenteditable="true">&nbsp;</div>
+										</div>
+										<div class="container-block equipment-block">
+											<div class="section-title">Equipment</div>
+											<div class="equipment-field" contenteditable="true">
+												<table class="ui-sortable">
+													<thead>
+														<tr>
+															<th>Name</th>
+															<th>Weight</th>
+															<th>Qty</th>
+															<th>Cost (gp)</th>
+															<th>Notes</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+														<tr draggable="false">
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+															<td>&nbsp;</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+							<div class="dnd-page">
+								<div class="page2-grid">
+									<div class="col">
+										<div class="container-block">
+											<div class="section-title">Character Appearance</div>
+											<div class="bio-appearance" contenteditable="true">&nbsp;</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Character Backstory</div>
+											<div class="bio-backstory" contenteditable="true">&nbsp;</div>
+										</div>
+										<div class="traits-grid">
+											<div class="container-block">
+												<div class="section-title">Personality Traits</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="container-block">
+												<div class="section-title">Ideals</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="container-block">
+												<div class="section-title">Bonds</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="container-block">
+												<div class="section-title">Flaws</div>
+												<div class="box-field" contenteditable="true">&nbsp;</div>
+											</div>
+										</div>
+										<div class="container-block">
+											<div class="section-title">Organization &amp; Allies</div>
+											<div class="bio-allies" contenteditable="true">&nbsp;</div>
+										</div>
+									</div>
+									<div class="col">
+										<div class="notes-block">
+											<div class="section-title">Notes</div>
+											<div class="box-field" contenteditable="true">&nbsp;</div>
+										</div>
+									</div>
+								</div>
+							</div>
+							<div class="dnd-page">
+								<div class="col">
+									<div class="notes-block">
+										<div class="section-title">Notes</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					`
+				},
+				{
+					"title": "Fillable Inventory Sheet",
+					"description": "Adds a fillable inventory sheet to the note. Has limited edit capabilites for Players.",
+					"content": `
+					<style id='contentStyles'>${contentStyles}</style>
+					<div class="dnd-sheet">
+						<div class="dnd-page">
+							<div class="col-container">
+								<div class="col">
+									<div class="container-block">
+										<div class="section-title">Treasure &amp; Currency</div>
+										<div class="currency-container">
+											<div class="coin-slot">CP:
+												<div class="coin-input" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="coin-slot">SP:
+												<div class="coin-input" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="coin-slot">EP:
+												<div class="coin-input" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="coin-slot">GP:
+												<div class="coin-input" contenteditable="true">&nbsp;</div>
+											</div>
+											<div class="coin-slot">PP:
+												<div class="coin-input" contenteditable="true">&nbsp;</div>
+											</div>
+										</div>
+										<div class="box-field" contenteditable="true">&nbsp;</div>
+									</div>
+									<div class="container-block equipment-block">
+										<div class="section-title">Equipment</div>
+										<div class="equipment-field" contenteditable="true">
+											<table>
+												<thead>
+													<tr>
+														<th>Name</th>
+														<th>Weight</th>
+														<th>Qty</th>
+														<th>Cost (gp)</th>
+														<th>Notes</th>
+													</tr>
+												</thead>
+												<tbody>
+													<tr>
+														<td>Cloak of Protection</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Dagger of Venom</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Rope</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Arrows</td>
+														<td>&nbsp;</td>
+														<td>20</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Rations</td>
+														<td>&nbsp;</td>
+														<td>10</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>Healer's Kit</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>[track id=healersKit]10[/track] uses remaining</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+													<tr>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+														<td>&nbsp;</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="dnd-page">
+							<div class="col">
+								<div class="container-block">
+									<div class="section-title">Notes</div>
+									<div class="box-field" contenteditable="true">&nbsp;</div>
 								</div>
 							</div>
 						</div>
@@ -5767,7 +9403,8 @@ class JournalManager{
 									<td class="item-add-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
 								</tr>
 							</tbody>
-						</table>		
+						</table>	
+						<br/>	
 					`
 				},
 				{
@@ -5821,7 +9458,8 @@ class JournalManager{
 									<td class="item-add-cell" style="padding: 8px; text-align: left;">&nbsp;</td>
 								</tr>
 							</tbody>
-						</table>		
+						</table>	
+						<br/>	
 					`
 				},
 			],
@@ -5840,6 +9478,34 @@ class JournalManager{
 			valid_children : '+body[style]',
 			extended_valid_elements: 'svg[name|xmlns|viewBox|width|height|class|fill|stroke],path[d|fill|stroke|stroke-width|class],g[class|fill|stroke|class],circle[cx|cy|r|fill|stroke|class],rect[x|y|width|height|fill|stroke|class],polygon[points|fill|stroke|class]',
 			setup: function (editor) { 
+				self.bindTinyMceSuggestionEvents(editor);
+				self.bindTinyMceTableRowButtons(editor);
+				self.bindTinyMceDndSheetBlockEvents(editor);
+				editor.on('PreInit', function() {
+					const iframeWin = editor.getWin();
+					if (iframeWin && iframeWin.addEventListener) {
+						const origAdd = iframeWin.addEventListener;
+						iframeWin.addEventListener = function(type, listener, options) {
+							if (type === 'unload') {
+								return origAdd.call(this, 'pagehide', listener, options);
+							}
+							return origAdd.call(this, type, listener, options);
+						};
+					}
+				});
+				editor.on('keydown', function (e) {
+					if (e.key === 'PageUp' || e.key === 'PageDown') {
+						e.preventDefault();
+						e.stopPropagation();
+						const container = $(editor.getContainer()).closest('.note, .ui-dialog-content')
+						const height = container.height() - 80;
+						container[0].scrollBy({
+							top: e.key === 'PageUp' ? -height : height,
+							left: 0,
+							behavior: "smooth",
+						});
+					}
+				});
 				editor.addButton('fontsizeinput', {
 					type: 'container',
 					html: '<input type="number" id="mce-custom-font-size" style="width: 40px;height: 16px;text-align:right;padding: 4px 1px;" placeholder="px"> px',
@@ -5939,7 +9605,7 @@ class JournalManager{
 							onclick: (e) => { 
 								e.preventDefault();
 								e.stopPropagation(); 
-								editor.insertContent(`&#8203;<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>&#8203;`);
+								editor.insertContent(`<span data-state="0" class="prof-checkbox"><svg name="preventRemove" class="prof-icon"> <circle cx="9" cy="9" r="6" class="base-circle"></circle> <path d="M 9 3 A 3 3 0 0 0 9 15 Z" class="half-fill"></path> <circle cx="9" cy="9" r="6" class="full-fill"></circle> <circle cx="9" cy="9" r="8" class="ring-stroke"></circle> </svg></span>`);
 							}
 						},
 					],
@@ -6234,6 +9900,7 @@ class JournalManager{
 			}
 		});
 		note.parent().css('height', '600px');		
+		note.dialog("option", "position", { my: "center center", at: "center center", of: window });
 	}
 }
 
@@ -6406,6 +10073,12 @@ function render_source_chapter_in_iframe(url) {
 			background: url(https://dndbeyond.com/content/1-0-3132-0/skins/waterdeep/images/character-sheet/loading-ring.svg) no-repeat;
 			background-size: contain;
 			content: '';
+		}
+		svg.ritual-icon-svg {
+			width: 10px;
+			height: auto;
+			margin-left:3px;
+			vertical-align:middle;
 		}
 		button.avtt-roll-button,
 		.avtt-ability-roll-button{

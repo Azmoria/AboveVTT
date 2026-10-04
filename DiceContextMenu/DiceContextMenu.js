@@ -16,7 +16,7 @@ function gamelog_send_to_text() {
     return "Self"
 }
 
-function standard_dice_context_menu(expression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined) {
+function standard_dice_context_menu(expression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined, rollOptions = undefined) {
     if (typeof modifierString !== "string") {
         modifierString = "";
     }
@@ -80,13 +80,19 @@ function standard_dice_context_menu(expression, modifierString = "", action = un
         diceRoll.sendToOverride = dcm.checkedRow(0)?.title?.replace(/\s+/g, "");
      
         window.diceRoller.roll(diceRoll);
-        
+        if (rollOptions?.onRollComplete) {
+            rollOptions.onRollComplete();
+        } else {
+            $(".roll-mod-container").removeClass("show");
+            $(".dice-roller > div img[data-count]").removeAttr("data-count");
+            $(".dice-roller > div span").remove();
+        }
     });
 
     return menu;
 }
 
-function damage_dice_context_menu(diceExpression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined, damageType = undefined, spellSave = undefined) {
+function damage_dice_context_menu(diceExpression, modifierString = "", action = undefined, rollType = undefined, name = undefined, avatarUrl = undefined, entityType = undefined, entityId = undefined, damageType = undefined, spellSave = undefined, rollOptions = undefined) {
     if (typeof modifierString !== "string") {
         modifierString = "";
     }
@@ -114,18 +120,18 @@ function damage_dice_context_menu(diceExpression, modifierString = "", action = 
             let diceRoll;
             if (rollAsIndex === 0) {
                 // crit damage
-                diceExpression = diceExpression.replaceAll(/([+-]|^)([\d]+)?d([\d]+)/gi, function(m, m1, m2, m3){
+                diceExpression = typeof buildCritExpression === 'function' ? buildCritExpression(diceExpression, 0) : diceExpression.replaceAll(/([+-]|^)([\d]+)?d([\d]+)/gi, function(m, m1, m2, m3){
                     m2 = m2 != undefined ? m2 : 1;
                     return m1 == '-' ? `${m1}${parseInt(m2)}d${m3}` : `${m1 != undefined ? m1 : ''}${parseInt(m2)*2}d${m3}`
-                })
+                });
                 diceRoll = new DiceRoll(diceExpression)
             } 
              else if (rollAsIndex === 1) {
                 // perfect crit damage
-                diceExpression = diceExpression.replaceAll(/(([+-]|^)([\d]+)?d([\d]+).*?)([+-]|$)/gi, function(m, m1, m2, m3, m4, m5){
+                diceExpression = typeof buildCritExpression === 'function' ? buildCritExpression(diceExpression, 1) : diceExpression.replaceAll(/(([+-]|^)([\d]+)?d([\d]+).*?)([+-]|$)/gi, function(m, m1, m2, m3, m4, m5){
                     m3 = m3 != undefined ? m3 : 1;
-                    return `${m1}${m2 == '-' ? '' : `+${parseInt(m3)*parseInt(m4)}${m5}`}`
-                })
+                    return `${m1}${m2 == '-' ? '' : `+${m3}d${m4}min${m4}${m5}`}`
+                });
                 diceRoll = new DiceRoll(diceExpression)
             } 
             else if (rollAsIndex === 2 ) {
@@ -153,8 +159,14 @@ function damage_dice_context_menu(diceExpression, modifierString = "", action = 
 
             const doubleDamage = rollAsIndex === 2 ? 3 : undefined;
 
-            window.diceRoller.roll(diceRoll, undefined, rollAsIndex == 2 ? 3 : undefined, undefined, spellSave, damageType, doubleDamage);
-            
+            window.diceRoller.roll(diceRoll, undefined, doubleDamage, undefined, spellSave, damageType, doubleDamage);
+            if (rollOptions?.onRollComplete) {
+                rollOptions.onRollComplete();
+            } else {
+                $(".roll-mod-container").removeClass("show");
+                $(".dice-roller > div img[data-count]").removeAttr("data-count");
+                $(".dice-roller > div span").remove();
+            }
         });
 
     return menu;
@@ -189,7 +201,7 @@ class DiceContextMenu {
         return this;
     }
 
-    build() {
+    build(targetDocument = document) {
         let html = $(`
         	<div role="presentation" class="dcm-backdrop">
                 <div class="dcm-container">
@@ -197,8 +209,12 @@ class DiceContextMenu {
                 </div>
 	        </div>
         `);
-        html.off('click').on("click", function (clickEvent) {
-            $(".dcm-backdrop").remove();
+        html.off('pointerdown').on("pointerdown", function (clickEvent) {
+            // Only the transparent backdrop dismisses the menu. Controls inside
+            // the menu may be in a popout document, so do not rely on their
+            // handlers stopping this event before it bubbles here.
+            if (clickEvent.target !== clickEvent.currentTarget) return;
+            $(targetDocument).find(".dcm-backdrop").remove();
         });
         html.off('contextmenu').on('contextmenu', function(e) {
             e.preventDefault();
@@ -206,38 +222,41 @@ class DiceContextMenu {
         let sectionList = html.find("ul");
         this.sections.forEach(s => {
             let li = $(`<li></li>`);
-            li.append(s.build());
+            li.append(s.build(targetDocument));
             sectionList.append(li);
             sectionList.append(`<hr class="dcm-hr">`);
         });
 
         let rollButton = $(`<button class="dcm-roll-button" tabIndex="0" type="button">Roll</button>`);
-        rollButton.on("click", function(rollButtonClick) {
-            window.dcm.rollDice();
+        rollButton.off("pointerdown.click touchstart.click").on("pointerdown.click touchstart.click", function(rollButtonClick) {
+            rollButtonClick.preventDefault();
+            (targetDocument.defaultView || window).dcm.rollDice();
+            $(targetDocument).find(".dcm-backdrop").remove();
         });
         sectionList.after(rollButton)
         return html;
     }
 
-    present(top, left) {
-        $(".dcm-backdrop").remove();
-        let html = this.build(top, left);
-        $("body").append(html);
+    present(top, left, targetDocument = document) {
+        const targetWindow = targetDocument.defaultView || window;
+        $(targetDocument).find(".dcm-backdrop").remove();
+        let html = this.build(targetDocument);
+        $(targetDocument.body).append(html);
 
         let container = html.find(".dcm-container");
         if (top < 0) {
             top = 0;
-        } else if (top >= (window.innerHeight - container.height())) {
-            top = (window.innerHeight - container.height());
+        } else if (top >= (targetWindow.innerHeight - container.height())) {
+            top = (targetWindow.innerHeight - container.height());
         }
         if (left < 0) {
             left = 0;
-        } else if (left >= (window.innerWidth - container.width())) {
-            left = (window.innerWidth - container.width());
+        } else if (left >= (targetWindow.innerWidth - container.width())) {
+            left = (targetWindow.innerWidth - container.width());
         }
         html.find(".dcm-container").css({ top: top, left: left });
 
-        window.dcm = this;
+        targetWindow.dcm = this;
     }
 
     didClickRow(sectionIndex, rowIndex) {
@@ -275,16 +294,15 @@ class DiceContextMenuSection {
     expressionRow(rowTitle, expression, inputCallback=()=>{}){
        
         const row = {
-            build: function(){
+            build: function(targetDocument = document){
                 let rowInput = $(`<input type='text' class='dcmExpressionRow' value='${expression}'></input>`);
-                rowInput.on('click', function(e){
-                    e.preventDefault();
+                rowInput.on('pointerdown touchstart', function(e){
                     e.stopPropagation();
                 })
-                rowInput.on("keypress change blur", function(e) {
+                rowInput.on("change blur input keydown", function(e) {
                     inputCallback($(this).val());
                     if (e.key === "Enter") {      
-                        $('.dcm-roll-button').click();
+                        $(targetDocument).find('.dcm-roll-button').trigger('pointerdown');
                     }
                 });
                 let rowHtml = $(`
@@ -332,9 +350,10 @@ class DiceContextMenuSection {
                     </div>
                 `) 
 
-                diceRoller.off('click.extraDice').on('click.extraDice', '>div>div[alt]', function(e){
+                diceRoller.off('pointerdown.extraDice').on('pointerdown.extraDice', '>div>div[alt]', function(e){
                     e.preventDefault();
                     e.stopPropagation();
+                    if(e.button == 2) return;
                     const targetDie = e.currentTarget;
                     let dataCount = $(targetDie).attr("data-count");
                     $(targetDie).parent().find("span").remove();
@@ -400,15 +419,13 @@ class DiceContextMenuSection {
 
     }
 
-       
-
-    build() {
+    build(targetDocument = document) {
         let sectionHtml = $(`
             <ul class="dcm-section" data-index="${this.index}">
                 <li class="dcm-section-header">${this.title}</li>
             </ul>
         `);
-        this.rows.forEach(r => sectionHtml.append(r.build()))
+        this.rows.forEach(r => sectionHtml.append(r.build(targetDocument)))
         return sectionHtml;
     }
     didClickRow(index) {
@@ -432,7 +449,7 @@ class DiceContextMenuRow {
         this.sectionIndex = sectionIndex;
         this.index = index;
     }
-    build() {
+    build(targetDocument = document) {
         let rowHtml = $(`
             <div class="dcm-row" role="button" tabIndex="0" data-index="${this.index}" data-section-index="${this.sectionIndex}">
                 <div class="dcm-row-icon">
@@ -441,19 +458,22 @@ class DiceContextMenuRow {
                 <div class="dcm-row-title">
                     <span>${this.title}</span>
                 </div>
+                ${svg_checkmark()}
             </div>
         `);
-        if (this.isChecked) {
-            rowHtml.append(svg_checkmark());
+        if (!this.isChecked) {
+            rowHtml.find(".dcm-checkmark").css("visibility", "hidden");
         }
-        rowHtml.on("click", function(rowClickEvent) {
+     
+        rowHtml.on("pointerdown touchstart", function(rowClickEvent) {
+            rowClickEvent.preventDefault();
             rowClickEvent.stopPropagation();
             let clickedRow = $(rowClickEvent.currentTarget);
             let clickedRowIndex = clickedRow.attr("data-index");
             let clickedSectionIndex = clickedRow.attr("data-section-index");
-            clickedRow.parent().find(".dcm-checkmark").remove();
-            clickedRow.append(svg_checkmark());
-            window.dcm.didClickRow(clickedSectionIndex, clickedRowIndex);
+            clickedRow.parent().find(".dcm-checkmark").css("visibility", "hidden");
+            clickedRow.find(".dcm-checkmark").css("visibility", "visible");   
+            (targetDocument.defaultView || window).dcm.didClickRow(clickedSectionIndex, clickedRowIndex);
         });
         return rowHtml;
     }

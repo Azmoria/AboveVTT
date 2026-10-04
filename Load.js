@@ -25,59 +25,17 @@
             console.log("⛔  AVTT: no extension loading here.")
             return; //don't load anything
         }
-    } else{
+        // due to DDB redirecting between with and without www, we need to resolve URLs through the background script
+        window.addEventListener('message', (event) => {
+            if (event.source !== window || event.data?.type !== 'avtt-resolve-url') return;
+            const { id, url } = event.data;
+            runtime.sendMessage({ type: 'avtt-resolve-url', url }, (response) => {
+                const error = runtime.lastError?.message;
+                window.postMessage({ type: 'avtt-resolve-url-result', id, ...(response || { error: error || 'no response' }) }, window.location.origin);
+            });
+        });
+    } 
         
-        /** Logs that are super noisy should be sent through here.
-         * This allows us to enable these logs on the fly when we need to debug things that would otherwise flood the console */
-
-        //Load this as soon as possible for new dice, gets the workers for the dice 
-        (function() {
-            function noisy_log(...message) {
-                if (window.enableNoisyLogs === true) {
-                    console.debug(...message);
-                }
-            }
-            const OriginalWorker = window.Worker;
-            window.Worker = function(scriptURL, options) {
-                const worker = new OriginalWorker(scriptURL, options);
-                if(window.ActiveWorkers == undefined) window.ActiveWorkers = {};
-                
-                const originalPostMessage = worker.postMessage;
-                worker.postMessage = async function(message, transfer) {
-                    noisy_log('worker Messages', message);
-                    if (message && typeof message === 'object' && message.type == 'resize') {
-                        await originalPostMessage.call(worker, message, transfer);
-                        // Need to do this due to a DDB bug that causes an infinite loop that hurts lower end pcs performance
-                        // We reset the props after resizing the window since on resize DDB resets frameloop to 'always' 
-                        // Without resizing the window it stays 'demand' but we force resize events
-                        // This bug exists on base DDB without AboveVTT but being in AVTT makes it worse on performance
-                        worker.postMessage({"type": "props", "payload": { "dpr": 1, "frameloop": "demand" }});
-                        return;
-                    }
-                    return originalPostMessage.call(worker, message, transfer);
-                };
-                window.ActiveWorkers[scriptURL] = worker;
-                return worker;
-            };
-        })();
-
-        function interceptRollEvent(e) {
-            if(e.button == 2) return;
-            const newDice = $("[class*='DiceContainer_button']").length > 0;
-            if(!newDice) return;
-            const target = $(e.target);
-            // allow hit dice and death saves roll to go through ddb for auto heals - maybe setup our own message by put to https://character-service.dndbeyond.com/character/v5/life/hp/damage-taken later
-            if (target.closest('.ct-reset-pane__hitdie-manager-dice').length>0 || target.closest('[class*="styles_heading__"]').find('>h2').text().trim().match(/^death saves$/gi))
-                return;
-            const rollButton = target.closest(`.integrated-dice__container:not('.above-combo-roll'):not('.above-aoe'):not(.avtt-roll-formula-button)`);
-            if (!rollButton.length) return;
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            e.stopPropagation();
-            rollDiceButton(e, rollButton[0]);
-        }
-        window.addEventListener('pointerdown', interceptRollEvent, true);
-    }
 
     //setup to work in both contexts
     const getExtURL = runtime?.getURL ? ((url) => runtime.getURL(url))
@@ -134,8 +92,7 @@
         "built-in-tokens.js",
         "PeerManager.js",
         "PeerCommunication.js",
-        "peerVideo.js",
-        "peerDice.js",		
+        "peerVideo.js",	
         "DiceRoller.js",
         "DMScreen.js",
         "Main.js",
@@ -147,13 +104,13 @@
     	"WeatherOverlay.js"
     ]
     const avttCharacterScripts = [
-        "Load.js", //load Loader on character sheets to support DBB Character Overhaul Extension
-        // External Dependencies
+        // External Dependencies	
         "jquery-3.6.0.min.js",
-        "jquery.contextMenu.js",	
+        "jquery.contextMenu.js",   
         "purify.min.js",	
         "ajaxQueue/ajaxQueueIndex.mjs",
         // AboveVTT Files
+        "Load.js", //load this script to support iframe inject
         "CoreFunctions.js", // Make sure CoreFunctions executes first
         "DDBApi.js",
         "MonsterDice.js",
@@ -203,6 +160,7 @@
     }
     
     async function inject(pgType, where) {
+        const isIframe = where.defaultView && where.defaultView.self !== where.defaultView.top;
         console.log("⌛ AVTT Loading", pgType, (isIframe && window.parent) ? ("parent: " + pageType(window.parent.location)) : "");        
         if(pgType.startsWith("vtt-")) {
             const loadingOverlay = where.createElement('div');
@@ -226,7 +184,7 @@
         
         injectStyles(pgType === "char" ? simpleAvttStyles : avttStyles, where);
         const scripts = pgType === "char" ?
-              avttCharacterScripts
+                isIframe ? ["DDBMb.js", ...avttCharacterScripts] : avttCharacterScripts               
               : pgType === "gamelog" ? [
                   "jquery.magnific-popup.min.js",
                   "purify.min.js",
@@ -256,8 +214,8 @@
                   "Settings.js",
                   "CampaignPage.mjs"
               ] : [
-                    "Load.js",//load Loader on VTT full pages (for iframe inject - see below)
                     ...avttScripts,
+                    "Load.js",//load Loader on VTT full pages (for iframe inject - see below)
                    (pgType.endsWith("-dm") ? "SceneData.js" : "CharactersPage.js"),
                   ];
         if(pgType.startsWith("vtt-")) scripts.push("Startup.mjs");        

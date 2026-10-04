@@ -59,14 +59,6 @@ $(function() {
       .then(set_campaign_secret)      // set it to window.CAMPAIGN_SECRET
       .then(store_campaign_info)      // store gameId and campaign secret in localStorage for use on other pages
       .then(async () => {
-        startup_step("Building Spells Cache");
-        DDBApi.fetchSpellsJsonWithToken();
-        startup_step("Building Items Cache")
-        DDBApi.fetchItemsJsonWithToken().then((data)=>{
-          window.ITEMS_CACHE = data;
-        });
-        startup_step("Fetching Party Inventory")
-        DDBApi.debounceGetPartyInventory();
         startup_step("Fetching Campaign Info")
         const maxRetries = 5
         const baseDelay = 500
@@ -86,14 +78,38 @@ $(function() {
           }
         }
         window.AVTT_CAMPAIGN_INFO = await AboveApi.getCampaignData();
+        
         return window.CAMPAIGN_INFO.dmId;
       })
-      .then((campaignDmId) => {
+      .then(async (campaignDmId) => {
+        startup_step("Fetching PCs")
+        await rebuild_window_pcs();
+        startup_step("Fetching Party Inventory/Items/Spells")
+        let inventoryTimeout;
+        try{
+          await Promise.race([
+            Promise.all([
+              DDBApi.debounceGetPartyInventory(),
+              DDBApi.fetchSpellsJsonWithToken(),
+              DDBApi.fetchItemsJsonWithToken()
+            ]),
+            new Promise((resolve) => {
+              inventoryTimeout = setTimeout(() => {
+                showError(new Error("Timed out fetching party inventory/items/spells after 30 seconds"));
+                resolve();
+              }, 60000);
+            })
+          ]);
+        } catch (error) {
+          console.warn(`Failed to fetch party inventory/items/spells`, error)
+        } finally {
+          clearTimeout(inventoryTimeout);
+        }
         const isDmPage = is_encounters_page();
         const isSpectator = is_spectator_page();
         const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;
         if ((isDmPage && campaignDmId == userId) || isSpectator) {
-          inject_dice();
+          add_new_dice();
         }
         return { campaignDmId, userId, isDmPage, isSpectator };
       })
@@ -118,7 +134,12 @@ $(function() {
           // this should never happen because `is_abovevtt_page` covers all the above cases, but cover all possible cases anyway
           throw new Error(`Invalid AboveVTT page: ${window.location.href}`)
         }
+
       }).then(()=>{
+        const userId = $(`#message-broker-client[data-userid]`)?.attr('data-userid') || Cobalt?.User?.ID;   
+        let playerUser = window.playerUsers.filter(d=> d.id == (window.PLAYER_ID ?? getPlayerIdFromSheet(window.location.pathname)))[0]?.userId;
+        window.myUser = playerUser ? playerUser : userId; // current tabs player user
+        refresh_aoe_style_menu();
         addExtensionPathStyles();
         $('body').append(`<script type="text/javascript" src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="h3iaoazdu0wqrfd"></script>`)
       }).then(() => {     
@@ -133,12 +154,7 @@ $(function() {
         $('body').toggleClass('reduceMovement', (window.EXPERIMENTAL_SETTINGS['reduceMovement'] == true));
         $('body').toggleClass('mobileAVTTUI', (window.EXPERIMENTAL_SETTINGS['iconUi'] != false));
         $('body').toggleClass('color-blind-avtt', (window.EXPERIMENTAL_SETTINGS['colorBlindText'] == true));
-          // STREAMING STUFF
 
-        window.STREAMPEERS = {};
-        window.MYSTREAMID = uuid();
-        window.JOINTHEDICESTREAM = window.EXPERIMENTAL_SETTINGS['streamDiceRolls'] == true;
-        enable_dice_streaming_feature(window.JOINTHEDICESTREAM);
 
         tabCommunicationChannel.addEventListener ('message', (event) => {
           if((event.data.msgType == 'addCondition' || event.data.msgType == 'removeCondition') && event.data.sendTo == window.PLAYER_ID){ // Sets a player token's condition on and off
@@ -206,10 +222,10 @@ $(function() {
               let newHp = Math.max(0, parseInt(token.hp) - parseInt(event.data.damage));
 
               if(window.all_token_objects[id] != undefined){
-                window.all_token_objects[id].hp = newHp;
+                window.all_token_objects[id].totalHp = newHp;
               }     
               if(token != undefined){   
-                token.hp = newHp;
+                token.totalHp = newHp;
                 token.place_sync_persist()
                 addFloatingCombatText(id, event.data.damage, event.data.damage<0);
               }   
@@ -479,7 +495,7 @@ async function start_above_vtt_common() {
   $("#site").append("<div id='windowContainment'></div>");
   $("body").append(`<style>.ddb-footer{display:none}</style>`);
   startup_step("Gathering player character data");
-  await rebuild_window_pcs();
+ 
   window.color = color_for_player_id(my_player_id()); // shortcut that we should figure out how to not rely on
   localStorage.removeItem(`CampaignCharacters${window.gameId}`); // clean up old pc data
 
@@ -683,7 +699,7 @@ const debounceResizeUI = mydebounce(function(){
   reposition_player_sheet();
   if(!window.showPanel){
     hide_sidebar(false);
-  }
+  }  
 }, 100)
 
 function inject_dm_roll_default_menu(){
@@ -761,14 +777,13 @@ function inject_dm_roll_default_menu(){
   })
 
 
-  $('.dice-rolling-panel').off('click.sendTo').on('click.sendTo', '.dice-toolbar__target>button:first-of-type', function(e){
-    window.modifiySendToDDBDiceClicked = true;
-  })
+
   //dm only css for campaign page use
   $('body').append(`
     <style>
       .glc-game-log .gameLogSendToMenu li div:last-of-type svg{
         visibility: hidden;
+        width:20px;
       }
       .glc-game-log .gameLogSendToMenu li.selected div:last-of-type svg{
         visibility: visible;
@@ -1167,9 +1182,7 @@ async function start_above_vtt_for_players() {
     debounceResizeUI();
     if(!window.CURRENT_SCENE_DATA.is_video || !window.CURRENT_SCENE_DATA.player_map.includes('youtu')){
       $("#youtube_controls_button").css('visibility', 'hidden');
-    }
-    add_dice_stream_gamelog_button()
-     
+    }     
   });
 
   /*prevents repainting due to ddb adjusting player sheet classes and throttling it*/

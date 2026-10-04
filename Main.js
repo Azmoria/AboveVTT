@@ -16,10 +16,13 @@ window.onbeforeunload = function(event)
 };
 
 function getGameLogButton() {
-	let btn = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton']");
+	let btn = $("div.ct-character-header__group--game-log.ct-character-header__group--game-log-last, [data-original-title='Game Log'] button, button[class*='-gamelog-button'], div[class*='campaignButtonGroup'][class*='GameLogButton'], [aria-roledescription='Game Log'][role='button']");
 	if(btn.length === 0){
 		// Fallback SVG selector
 		btn = $(`[d='M243.9 7.7c-12.4-7-27.6-6.9-39.9 .3L19.8 115.6C7.5 122.8 0 135.9 0 150.1V366.6c0 14.5 7.8 27.8 20.5 34.9l184 103c12.1 6.8 26.9 6.8 39.1 0l184-103c12.6-7.1 20.5-20.4 20.5-34.9V146.8c0-14.4-7.7-27.7-20.3-34.8L243.9 7.7zM71.8 140.8L224.2 51.7l152 86.2L223.8 228.2l-152-87.4zM48 182.4l152 87.4V447.1L48 361.9V182.4zM248 447.1V269.7l152-90.1V361.9L248 447.1z']`).closest('[role="button"]');
+	}
+	if(btn.length === 0){
+		btn = $(`[d="M213.3 128H416V64L213.3 64l-32 32 32 32zM190.6 41.4c6-6 14.1-9.4 22.6-9.4H416c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H213.3c-8.5 0-16.6-3.4-22.6-9.4l-43.3-43.3c-6.2-6.2-6.2-16.4 0-22.6l43.3-43.3zM64 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm0 160a32 32 0 1 1 0-64 32 32 0 1 1 0 64zM32 416a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm181.3 32H416V384H213.3l-32 32 32 32zm-22.6-86.6c6-6 14.1-9.4 22.6-9.4H416c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H213.3c-8.5 0-16.6-3.4-22.6-9.4l-43.3-43.3c-6.2-6.2-6.2-16.4 0-22.6l43.3-43.3zM181.3 256l32 32H480V224l-266.7 0-32 32zm-33.9-11.3l43.3-43.3c6-6 14.1-9.4 22.6-9.4H480c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H213.3c-8.5 0-16.6-3.4-22.6-9.4l-43.3-43.3c-6.2-6.2-6.2-16.4 0-22.6z]`).closest('[role="button"]');
 	}
 	return btn;
 }
@@ -99,6 +102,14 @@ const debounce_scroll_event = mydebounce(function(){
 const debounce_font_change = mydebounce(function(){
 	$('#VTTWRAPPER').css({"--font-size-zoom": Math.max(12 * Math.max((3 - window.ZOOM), 0), 8.5) + "px"})
 }, 25);
+
+const throttleRedrawAfterZoom = throttle((sceneContainer = $('#scene_map_container')) => {
+	sceneContainer.css('will-change','');
+	sceneContainer[0].offsetHeight; // triggers reloading image at new scale after will-change is removed
+
+}, 150)
+
+
 /**
  * Changes the zoom level.
  * @param {Number} newZoom new zoom value
@@ -108,6 +119,10 @@ const debounce_font_change = mydebounce(function(){
 function change_zoom(newZoom, x, y, reset = false) {
 	console.group("change_zoom")
 	noisy_log("zoom", newZoom, x , y)
+	const zoomingIn = newZoom > window.ZOOM;
+	const sceneContainer = $('#scene_map_container');
+	sceneContainer.css('will-change','transform');
+						
 	let zoomCenterX = x || $(window).width() / 2
 	let zoomCenterY = y || $(window).height() / 2
 	// window.VTTMargin is the size of the black area to the left and top of the map
@@ -151,8 +166,19 @@ function change_zoom(newZoom, x, y, reset = false) {
 	$(".peerCursorPosition").css("transform", "scale(" + 1/window.ZOOM + ")");
 	if($('#projector_zoom_lock.enabled > [class*="is-active"]').length>0 && window.DM)
 		debounce_scroll_event()
-	
-	
+
+	if(zoomingIn){
+		//we can fully reset this as we don't lose parts of the map as we zoom in
+		clearTimeout(window.redrawAfterZoom);
+		window.redrawAfterZoom = setTimeout(()=>{
+			sceneContainer.css('will-change','');
+			sceneContainer[0].offsetHeight; // triggers reloading image at new scale after will-change is removed
+		}, 500)
+	}else{
+		// we only throttle this so that as we zoom out, unloaded sections of the map off screen still load
+		throttleRedrawAfterZoom(sceneContainer);
+	}
+
 	console.groupEnd()
 }
 
@@ -506,15 +532,7 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 		$("#scene_map_container").toggleClass('video', false);
 
 		let newmap;
-
-		
-
-		if(UVTTFile && width != null){		
-			newmap = $(`<img id='scene_map' src='${url}' style='position:absolute;top:0;left:0;z-index:10'>`);		
-			newmap.width(width);
-			newmap.height(height);		
-		}
-		else if(url.startsWith('above-bucket-not-a-url')){
+		if(url.startsWith('above-bucket-not-a-url')){
 			url = await getAvttStorageUrl(url, true);
 			newmap = $(`<img id='scene_map' src='${url}' style='position:absolute;top:0;left:0;z-index:10'>`);
 
@@ -522,6 +540,12 @@ async function load_scenemap(url, is_video = false, width = null, height = null,
 		else{
 			url = await getGoogleDriveAPILink(url)
 			newmap = $(`<img id='scene_map' src='${url}' style='position:absolute;top:0;left:0;z-index:10'>`);
+		}
+		
+
+		if(UVTTFile && width != null){			
+			newmap.width(width);
+			newmap.height(height);		
 		}
 
 
@@ -751,17 +775,22 @@ async function popout_all_selected_token_stat(){
 	const tokens = [];
 	forSelTokens((token) => {
 		if (token.options.statBlock) {
-			const {customStatBlock, pcURL} = token.getCustomPcUrl();
-			if (pcURL || customStatBlock) return;
+			const {pcURL} = token.getCustomPcUrl();
+			if (pcURL) return;
 		}
-		if(token.options.monster){
+		if(token.isMonster()){
 			fetchMonsters.push(token.options.monster)
 		}
 		tokens.push(token);
 
 	})
-	fetch_and_cache_monsters(fetchMonsters, function () {
-		tokens.every(async (token) => {
+	const promiseMonsters = new Promise((resolve) => {
+		fetch_and_cache_monsters(fetchMonsters, function () {
+			resolve();
+		});
+	});
+	promiseMonsters.then(() => {
+			tokens.every(async (token) => {
 			let container = $(`<div class='popout-prep'></div>`);
 			if(token.isPlayer()) return;
 
@@ -781,7 +810,16 @@ async function popout_all_selected_token_stat(){
 			}
 			await async_sleep(1);
 			const windowName = `${token.options.name}_${token.options.id}`.replaceAll(/(\r\n|\n|\r)/gi, "").trim();
-			popoutWindow(windowName, container.find(".avtt-stat-block-container"));
+			const isPcTempalate = container.find('.dnd-sheet');
+			const width = isPcTempalate.length > 0 ? 800 : undefined;
+			popoutWindow(windowName, container.find(".avtt-stat-block-container"), width);
+			const popoutBody = $(window.childWindows[windowName].document).find("body");
+			const popoutStatBlock = popoutBody.find(".avtt-stat-block-container").first();
+			popoutStatBlock.find("span.hideme").parent().parent().hide();
+			if(popoutStatBlock.find('.dnd-sheet').length > 0){
+				const noteId = popoutStatBlock.attr('data-stat-id') || token.options.statBlock;
+				window.JOURNAL.bindDndSheetTemplateEvents(noteId, popoutStatBlock, popoutBody, {tokenId: token.options.id, showControls: false});
+			}
 			$(window.childWindows[windowName].document).find(".avtt-roll-button").on("contextmenu", function (contextmenuEvent) {
 				$(window.childWindows[windowName].document).find("body").append($("div[role='presentation']").clone(true, true));
 				let popoutContext = $(window.childWindows[windowName].document).find(".dcm-container");
@@ -801,7 +839,7 @@ async function popout_all_selected_token_stat(){
 			close_player_monster_stat_block();
 		});
 	});
-	
+
 }
 function open_selected_token_stat() {
 	const selectedTokens = window.CURRENTLY_SELECTED_TOKENS;
@@ -836,12 +874,12 @@ function open_selected_token_stat() {
  * @param {Number} monsterId given monster ID
  * @param {UUID} tokenId selected token ID
  */
-async function load_monster_stat(monsterId, tokenId, customStatBlock=undefined, container) {
+async function load_monster_stat(monsterId, tokenId, customStatBlock=undefined, container, bringToFront=true) {
 	const token = window.TOKEN_OBJECTS[tokenId] || window.all_token_objects[tokenId];
 	if (!token) {
 		return null;
 	}
-	container = container ?? build_draggable_monster_window(tokenId)
+	container = container ?? build_draggable_monster_window(tokenId, bringToFront)
 	if(customStatBlock){
 		await display_stat_block_in_container(customStatBlock, container, tokenId, customStatBlock);
 		$(".sidebar-panel-loading-indicator").remove();
@@ -995,7 +1033,7 @@ function load_monster_stat_iframe(monsterId, tokenId) {
 	return container;
 }
 
-function build_draggable_monster_window(tokenId) {
+function build_draggable_monster_window(tokenId, bringToFront=true) {
 
 	$("#resizeDragMon").append(build_combat_tracker_loading_indicator())
 	let container = $("<div id='resizeDragMon'/>");
@@ -1028,8 +1066,16 @@ function build_draggable_monster_window(tokenId) {
 	}
 	popoutButton.off('click.popout').on('click.popout', function() {
 		let name = $("#resizeDragMon .avtt-stat-block-container .mon-stat-block__name-link").text();
-		const windowName = `${token?.options?.name ? token.options.name : name}_${tokenId ? tokenId : ''}`.replaceAll(/(\r\n|\n|\r)/gi, "").trim();
-		popoutWindow(windowName, $("#resizeDragMon .avtt-stat-block-container"));
+		const windowName = `${token?.options?.name ? token.options.name : name}_${tokenId ? tokenId : ''}`.replaceAll(/(\r\n|\n|\r)/gi, "").trim();	
+		popoutWindow(windowName, $("#resizeDragMon .avtt-stat-block-container"), $("#resizeDragMon").width(), $("#resizeDragMon").height());
+		const popoutBody = $(window.childWindows[windowName].document).find("body");
+		const popoutStatBlock = popoutBody.find(".avtt-stat-block-container").first();
+		// the clone's handlers still point at the original window's element, so build a fresh one
+		inject_statblock_buff_dropdown(popoutBody, tokenId);
+		if(popoutStatBlock.find('.dnd-sheet').length > 0){
+			const noteId = popoutStatBlock.attr('data-stat-id') || token?.options?.statBlock;
+			window.JOURNAL.bindDndSheetTemplateEvents(noteId, popoutStatBlock, popoutBody, {tokenId, showControls: false});
+		}
 		$(window.childWindows[windowName].document).find(".avtt-roll-button").on("contextmenu", function (contextmenuEvent) {
 			$(window.childWindows[windowName].document).find("body").append($("div[role='presentation']").clone(true, true));
 			let popoutContext = $(window.childWindows[windowName].document).find(".dcm-container");
@@ -1059,6 +1105,8 @@ function build_draggable_monster_window(tokenId) {
 		addClasses: false,
 		handles: "all",
 		containment: "#windowContainment",
+		distance: 5,
+		cancel: 'input, [contenteditable]',
 		start: function() {
 			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
@@ -1068,18 +1116,19 @@ function build_draggable_monster_window(tokenId) {
 		minWidth: 200,
 		minHeight: 200
 	});
-	frame_z_index_when_click(container, true);
+	frame_z_index_when_click(container, true, bringToFront);
 	container.draggable({
 		addClasses: false,
 		scroll: false,
 		containment: "#windowContainment",
+		distance: 5,
 		start: function() {
 			$("#resizeDragMon, .note:has(iframe) form .mce-container-body, #sheet").append($('<div class="iframeResizeCover"></div>'));
 		},
 		stop: function() {
 			$('.iframeResizeCover').remove();
 		},
-		cancel: '[contenteditable]'
+		cancel: 'input, select, [contenteditable], .avtt-statblock-buffs'
 	});
 	minimize_player_monster_window_double_click(container);
 
@@ -1443,59 +1492,6 @@ function close_splash() {
 
 
 
-var DDB_WS_OBJ = null;
-var DDB_WS_FORCE_RECONNECT_LOCK = false; // Best effort (not atomic) - ensure function is called only once at a time
-/**
- * Attempts to force DDBs WebSocket to re-connect.
- * @returns Bool false - wasn't able to force / no need
- * @returns Bool true - was able to attempt force reconnec
- */
-function forceDdbWsReconnect() {
-	try {
-		if (DDB_WS_FORCE_RECONNECT_LOCK) {
-			console.log("forceDdbWsReconnect is already locked!");
-			return false;
-		}
-
-		if (window.navigator && !window.navigator.onLine) {
-			console.log("No internet connection, cannot re-connect to DDBs WebSocket.");
-			return false;
-		}
-
-		DDB_WS_FORCE_RECONNECT_LOCK = true;
-
-		const key = Symbol.for('@dndbeyond/message-broker-lib');
-		if (key) {
-			DDB_WS_OBJ = window[key];
-		}
-
-		if ((DDB_WS_OBJ && DDB_WS_OBJ.status == 'disconnected') || (window.MB.ws.readyState != window.MB.ws.OPEN)) {
-			console.log("Detected that DDBs WebSocket is disconnected - attempting to force reconnect.");
-			DDB_WS_OBJ.reset();
-			DDB_WS_OBJ.connect();
-			get_cobalt_token(function(token) {
-				window.MB.loadWS(token, null);
-
-				// Wait 8 seconds before checking again if the websocket is connected
-				setTimeout(function() {
-					if (DDB_WS_OBJ.status == 'open') {
-						console.log("Managed to reconnect DDBs WebSocket successfully!");
-					}
-					DDB_WS_FORCE_RECONNECT_LOCK = false;
-				}, 8000);
-			});
-
-			return true;
-		}
-
-		DDB_WS_FORCE_RECONNECT_LOCK = false;
-
-		return false;
-	} catch(e) {
-		console.log("forceDdbWsReconnect error: " + e);
-		DDB_WS_FORCE_RECONNECT_LOCK = false;
-	}
-}
 
 /**
  * Register event to minimize/restore a player window when double clicking the DOMObject.
@@ -1533,10 +1529,11 @@ function minimize_player_window_double_click(titleBar) {
  * Move frames behind each other in the order they were clicked
  * @param {DOMObject} moveableFrame
  */
-function frame_z_index_when_click(moveableFrame, install=false){
+function frame_z_index_when_click(moveableFrame, install=false, bringToFront=true){
 	if(install) {
 		moveableFrame.on('pointerdown', (e) => frame_z_index_when_click($(e.currentTarget)));;
 	}
+	if(!bringToFront) return;
 	const moveableWindows = $(".moveableWindow, [role='dialog']");
 	const someFrameNotSet = moveableWindows.not("[style*='z-index']").length > 0;
 	if (someFrameNotSet || moveableFrame.css('z-index') != 100000 || !moveableFrame.attr('style')?.includes('z-index')) {
@@ -2231,10 +2228,16 @@ function init_ui() {
 	// canvas, based on the drawing function
 	const tempOverlay = $("<canvas id='temp_overlay' class='TLA'/>");
 	tempOverlay.css("z-index", "25");
-
+	
+	const captureMouse = $("<div id='capture_mouse' class='TLA'/>");
+	captureMouse.css({
+		"z-index": "25",
+		"transform": "scale(var(--scene-scale))",
+		"transform-origin": "top left"
+	});
 	const darknessLayer = $("<div id='darkness_layer' class='TLA'/>");
 
-	tempOverlay.dblclick(function(e) {
+	captureMouse.dblclick(function(e) {
 		if(window.DRAWFUNCTION != 'select')
 			return;
 		e.preventDefault();
@@ -2285,23 +2288,15 @@ function init_ui() {
 	VTT.append(mapContainer);
 	VTT.append(peerOverlay);
 	VTT.append(drawOverlayUnderFogDarkness);
-	VTT.append(fog);
 	VTT.append(grid_svg_overlay_container);
-	VTT.append(drawOverlay);
-	VTT.append(textDiv);
-	VTT.append(tempOverlay);
-	VTT.append(dragSelectBox, rotDragbox);
-	VTT.append(walls);
-	VTT.append(elev);
-	VTT.append(weather);
+	VTT.append(textDiv, captureMouse, dragSelectBox, rotDragbox);
 	mapItems.append(tokenMapItems);
 	mapItems.append(grid_svg_underlay);
-	
 	mapContainer.append(outer_light_container);
 	mapContainer.append(mapItems);
 	if (window.DM) grid_svg_overlay_container.append(wizbox);
-	
 	mapContainer.append(darknessLayer);
+	mapContainer.append(tempOverlay, drawOverlay, fog, walls, elev, weather);
 	outer_light_container.append(rayCasting);
 	outer_light_container.append(lightContainer);
 	lightContainer.append(lightOverlay, weatherLight);
@@ -2467,7 +2462,7 @@ function init_ui() {
 
 	window.enable_window_mouse_handlers();
 
-	$("#temp_overlay").bind("contextmenu", function (e) {
+	$("#temp_overlay, #capture_mouse").bind("contextmenu", function (e) {
 		return false;
 	});
 
@@ -2550,12 +2545,10 @@ function init_zoom_buttons() {
 		const iconWrapper = $(event.currentTarget).find(".ddbc-tab-options__header-heading");
 		if (iconWrapper.hasClass('ddbc-tab-options__header-heading--is-active')) {
 			iconWrapper.removeClass('ddbc-tab-options__header-heading--is-active');
-			$(`#scene_map_container`).css('z-index', '');
-			$(`#fog_overlay`).css('z-index', '21');
+			$('#scene_map_container canvas, #capture_mouse').css('pointer-events', '');
 		} else {
 			iconWrapper.addClass('ddbc-tab-options__header-heading--is-active');
-			$(`#fog_overlay`).css('z-index', '101');
-			$(`#scene_map_container`).css('z-index', '100');
+			$('#scene_map_container canvas, #capture_mouse').css('pointer-events', 'none');
 		}
 	});	
 	youtube_controls_button.append(`<div class="ddbc-tab-options__header-heading"><span style="font-size: 20px;" class="material-symbols-outlined">video_settings</span></div>`);
@@ -3167,6 +3160,26 @@ function init_help_menu() {
 							<dd>Prev creature in combat</dd>
 						</dl>
 						<dl>
+							<dt>Drag select box up</dt>
+							<dd>Select tokens fully in the select box.</dd>
+						</dl>
+						<dl>
+							<dt>Drag select box down</dt>
+							<dd>Select tokens partially in the select box.</dd>
+						</dl>
+						<dl>
+							<dt>Drag eye icon to rotate (above token)</dt>
+							<dd>Rotate selected tokens to face the eye. Hold ${getShiftKeyName()} to snap to half grid increments.</dd>
+						</dl>
+						<dl>
+							<dt>Drag aoe origin icon (top right of token)</dt>
+							<dd>Rotate selected AoE around it\'s origin point. Hold ${getShiftKeyName()} to snap to half grid increments.</dd>
+						</dl>
+						<dl>
+							<dt>Drag center point icon to rotate (top right of token)</dt>
+							<dd>Rotate selected tokens as a group around the center point. Hold ${getShiftKeyName()} to snap to half grid increments.</dd>
+						</dl>
+						<dl>
 							<dt>Double Click on Scene/Token</dt>
 							<dd>Ping/highlight location or token to all players. The DM has a quick toggle (right side) for centering player views on scene ping.</dd>
 						</dl>
@@ -3183,7 +3196,7 @@ function init_help_menu() {
 							<dd>Move selected tokens in direction of arrow key</dd>
 						</dl>
 						<dl>
-							<dt>Shift+Arrow Keys</dt> 
+							<dt>${getShiftKeyName()}+Arrow Keys</dt> 
 							<dd>Rotate selected tokens to face in direction of arrow key</dd>
 						</dl>
 						<dl>
@@ -3326,7 +3339,7 @@ function init_help_menu() {
 
 						<dl>
 							<dt>${getModKeyName()}+click scenes/tokens while reordering (DM only)</dt>
-							<dd>While reordering the scenes listing or token listing this will to add/remove scenes to multi-selection</dd>
+							<dd>While reordering the scenes listing or token listing this will add/remove scenes to multi-selection</dd>
 						</dl>
 						<dl>
 							<dt>${getShiftKeyName()}+click scenes/tokens while reordering (DM only)</dt>
@@ -3439,28 +3452,6 @@ function init_help_menu() {
 	});
 }
 
-/**
- * Load dice configuration from DDB.
- */
-function init_my_dice_details(){
-	get_cobalt_token(function (token) {
-		window.ajaxQueue.addRequest({
-			type: 'GET',
-			url: "https://dice-service.dndbeyond.com/diceuserconfig/v1/get",
-			contentType: "application/json; charset=utf-8",
-			dataType: 'json', // added data type
-			beforeSend: function (xhr) {
-				xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-			},
-			xhrFields: {
-				withCredentials: true
-			},
-			success: function(res) {
-				window.mydice = res
-			}
-    	});
-	});
-}
 
 /**
  * Gathers browser information from User Agent.
@@ -3806,17 +3797,18 @@ function show_sidebar(dispatchResize = true) {
 			$(`[class*='styles_mobileNav']>button`).click();
 	} else {
 		let sidebar = is_characters_page() ? $(".ct-sidebar__portal") : $(".sidebar--right");
-		sidebar.css("transform", "translateX(0px)");
-		$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', false)
+		sidebar.css("transform", "translateX(0px)");		
 	}
-
+	
 	if (is_characters_page()) {
 		reposition_player_sheet();
 	} else {
 		$("#sheet").removeClass("sidebar_hidden");
 	}
-	$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', get_sidebar_width() + 'px');
-	$('canvas.streamer-canvas').css('--sidebar-width', get_sidebar_width() + 'px');
+	
+	$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', false)
+	$('canvas.dice-container, canvas.dice-rolling-panel__container, .roll-mod-container, canvas.streamer-canvas, #character-tools-target>canvas, .boss-hp-bar').css('--sidebar-width', get_sidebar_width() + 'px');
+
 	if(dispatchResize)
 		window.dispatchEvent(new Event('resize'));
 	addGamelogPopoutButton()
@@ -3830,13 +3822,15 @@ function addGamelogPopoutButton(){
 	let windowTarget = `https://dndbeyond.com/campaigns/${window.find_game_id()}?id=${window.PLAYER_ID}&player_name=${window.PLAYER_NAME}&popoutgamelog=true`
 
 	gamelog_popout.off().on("click",function(){
+		const existingPopout = childWindows["Gamelog"];
+		if (existingPopout && !existingPopout.closed) {
+			existingPopout.focus();
+			return;
+		}
 		popoutWindow("Gamelog", $("<div/>"), 400, 800, windowTarget);
-		// this seems to never go away for me so I just disabled it for now
-		// let beholderIndicator = build_combat_tracker_loading_indicator("One moment while we load the gamelog");
-		// setTimeout(function() {
-		// 	$(childWindows["Gamelog"].document).find("body").append(beholderIndicator);
-		// }, 1000)
-		childWindows["Gamelog"].addEventListener('load', popoutGamelogCleanup)
+		childWindows["Gamelog"].addEventListener('load', function() {
+			waitForGamelogPopout(this);
+		});
 		childWindows["Gamelog"].pcs = window.pcs;
 		childWindows["Gamelog"].TOKEN_OBJECTS = window.TOKEN_OBJECTS;
 		childWindows["Gamelog"].ddbConfigJson = window.ddbConfigJson
@@ -3871,13 +3865,55 @@ width=${width},height=${height},left=100,top=100`;
 
 	checkTitle();
 
-	$(childWindows[name].document).find('body, head').empty();
-	$(childWindows[name].document).find('body').append(cloneSelector.clone(true,true));
-	$(childWindows[name].document).find('head').append($('link, style').clone());
-	$(childWindows[name].document).find('a[href^="/"]').each(function() {
-        this.href = `https://dndbeyond.com${this.getAttribute("href")}`;
-	});
+	if (!windowTarget) {
+		$(childWindows[name].document).find('body, head').empty();
+		$(childWindows[name].document).find('body').append(cloneSelector.clone(true,true));
+		$(childWindows[name].document).find('head').append($('link, style').clone());
+		$(childWindows[name].document).find('a[href^="/"]').each(function() {
+	        this.href = `https://dndbeyond.com${this.getAttribute("href")}`;
+		});
+	}
 	return childWindows[name];
+}
+function waitForGamelogPopout(popout) {
+	const popoutDocument = popout.document;
+	let openedGamelog = false;
+	let finished = false;
+	const stopWaiting = function() {
+		finished = true;
+		observer.disconnect();
+		clearInterval(readinessCheck);
+		clearTimeout(timeout);
+		popout.removeEventListener("pagehide", stopWaiting);
+	};
+	const checkReady = function() {
+		if (finished) return;
+		if (popout.closed || childWindows["Gamelog"] !== popout) {
+			stopWaiting();
+			return;
+		}
+		const gamelogButton = popoutDocument.querySelector(".gamelog-button, button[class*='gamelog-button']");
+		if (!openedGamelog && gamelogButton) {
+			openedGamelog = true;
+			gamelogButton.click();
+		}
+		if (popout.MB &&
+			popoutDocument.querySelector("body > div > .sidebar .glc-game-log #chat-text") &&
+			$(".dice-roller").length > 0 &&
+			$(".roll-mod-container").length > 0) {
+			stopWaiting();
+			popoutGamelogCleanup();
+		}
+	};
+	const observer = new MutationObserver(checkReady);
+	observer.observe(popoutDocument.documentElement, { childList: true, subtree: true });
+	const readinessCheck = setInterval(checkReady, 250);
+	const timeout = setTimeout(function() {
+		stopWaiting();
+		showError(new Error("Timed out waiting for the gamelog popout to initialize"), "Failed to set up gamelog popout");
+	}, 60000);
+	popout.addEventListener("pagehide", stopWaiting, { once: true });
+	checkReady();
 }
 function popoutGamelogCleanup(){
 	$(childWindows["Gamelog"].document).find("#popoutGamelogCleanup").remove();
@@ -3915,30 +3951,299 @@ function popoutGamelogCleanup(){
 		    top: 0 !important;
 		    height: 100% !important;
 		}
-		.body-rpgcampaign:not(.encounter-builder) select#chat-language {
-	    bottom:0px;
-	    right: 20px;
+		.glc-game-log .popout-chat-text-wrapper select#chat-language {
+		    position: relative !important;
+		    inset: auto !important;
+		    float: none !important;
+		    flex: 0 0 24px;
+		    width: 24px !important;
+		    height: 30px !important;
+		    margin: 0 0 0 -24px !important;
+		    font-size: 0 !important;
+		    appearance: auto !important;
+		    -webkit-appearance: auto !important;
+		}
+		.glc-game-log .popout-chat-text-wrapper {
+		    display: flex;
+		    align-items: center;
+		    position: relative;
+		    box-sizing: border-box;
+		    width: 100%;
+		    padding: 0 20px !important;
+		}
+		.popout-chat-text-wrapper #chat-text {
+		    box-sizing: border-box;
+		    flex: 1 1 auto;
+		    min-width: 0;
+		    width: 100%;
+		    padding-right: 28px;
+		}
+		.popout-dice-controls {
+		    display: flex;
+		    align-items: center;
+		    flex-wrap: nowrap;
+		    box-sizing: border-box;
+		    width: 100%;
+		    min-width: 0;
+		    overflow: clip;
+			padding: 0px 20px;
+		}
+		.popout-dice-controls > .dice-roller {
+		    flex: 1 1 auto;
+		    min-width: 0;
+			max-width:290px;
+		    width: auto !important;
+		    justify-content: space-between;
+		    overflow: visible;
+		}
+		.popout-dice-controls > .dice-roller > div {
+		    flex: 0 1 34px;
+		    min-width: 0;
+		    width: 34px;
+		    height: 40px;
+		    overflow: visible;
+		}
+		.popout-dice-controls > .dice-roller > div img {
+		    top: 3px;
+		    width: 34px !important;
+		    height: 34px !important;
+		}
+		.popout-dice-controls .dice-badge {
+		    z-index: 12;
+		    width: auto;
+		    min-width: 22px;
+		    height: 22px;
+		    padding: 0 3px;
+		    box-sizing: border-box;
+		    overflow: visible;
+		    text-overflow: clip;
+		    font-size: 13px;
+		    transform: scale(.8);
+		}
+		.popout-roll-mod-container.roll-mod-container.show {
+		    position: relative !important;
+		    inset: auto !important;
+		    display: block !important;
+		    flex: 0 0 60px;
+		    width: 60px !important;
+		    height: 60px !important;
+		    min-width: 60px;
+		    margin: 0 5px 0 24px !important;
+		    padding: 0 !important;
+		    opacity: 1 !important;
+		}
+		.popout-roll-mod-container #sendRoll.roll-button {
+		    top: 0 !important;
+		    bottom: auto !important;
+		    left: 0 !important;
+		    width: 40px !important;
+		    height: 30px !important;
+		    margin: 0 !important;
+		    padding: 0 !important;
+		}
+		.gamelogcontainer{
+			position:fixed;
+		}
+		body .gamelogcontainer .sidebar__pane-content{
+			height: 100% !important;	
+		}
+		.popout-roll-mod-container #contextSelect {
+		    top: 0 !important;
+		    right: auto !important;
+		    bottom: auto !important;
+		    left: 40px !important;
+		    width: 20px !important;
+		    height: 30px !important;
+		    margin: 0 !important;
+		    padding: 0 !important;
+		    border-radius: 0 10px 10px 0 !important;
+		    --roll-arrow-width: 8px;
+		    --roll-arrow-height: 5px;
+		}
+		.popout-roll-mod-container button.roll-button-mod {
+		    position: absolute !important;
+		    top: 34px !important;
+		    bottom: auto !important;
+		    height: 20px !important;
+		    min-height: 20px !important;
+		    padding: 0 !important;
+		    color: #222;
+		    font-size: 14px !important;
+		    line-height: 20px !important;
+		    transform: none !important;
+		}
+		.popout-roll-mod-container button.roll-button-mod.dis {
+		    top: 20px !important;
+		    left: -24px !important;
+		    width: 20px !important;
+		}
+		.popout-roll-mod-container button.roll-button-mod.adv {
+		    top: 0 !important;
+		    left: -24px !important;
+		    width: 20px !important;
+		}
+		.popout-roll-mod-container button.roll-button-mod.minus {
+		    left: 0 !important;
+		    width: 18px !important;
+		}
+		.popout-roll-mod-container input.roll-input-mod {
+		    position: absolute !important;
+		    top: 34px !important;
+		    left: 18px !important;
+		    width: 24px !important;
+		    height: 20px !important;
+		    min-height: 20px !important;
+		    box-sizing: border-box !important;
+		    padding: 0 !important;
+		    color: #222;
+		    font-size: 12px !important;
+		    line-height: 20px !important;
+		}
+		.popout-roll-mod-container button.roll-button-mod.plus {
+		    left: 42px !important;
+		    width: 18px !important;
 		}
 	</style>`);
-	$(childWindows["Gamelog"].document).find(".gamelog-button, button[class*='gamelog-button']").click();
 	$(childWindows["Gamelog"].document).find(".sidebar__control-group--lock button").click();
 	removeFromPopoutWindow("Gamelog", ".dice-roller");
 	removeFromPopoutWindow("Gamelog", ".sidebar-panel-content:not('.glc-game-log')");
 	removeFromPopoutWindow("Gamelog", ".chat-text-wrapper");
+	removeFromPopoutWindow("Gamelog", "#chat-language");
 	removeFromPopoutWindow("Gamelog", ".avtt-sidebar-controls");
 	removeFromPopoutWindow("Gamelog", ".sidebar__control");
+	removeFromPopoutWindow("Gamelog", ".clear-dice");
 	$(childWindows["Gamelog"].document).find("body>div>.sidebar").parent().toggleClass("gamelogcontainer", true);
 	let gamelogMessageBroker = $(childWindows["Gamelog"].document).find(".ddb-campaigns-detail-gamelog").clone(true, true)
 	removeFromPopoutWindow("Gamelog", "body>*:not(.gamelogcontainer):not(.sidebar-panel-loading-indicator)");
-	removeFromPopoutWindow("Gamelog", ".chat-text-wrapper");
 	removeFromPopoutWindow("Gamelog", "iframe");
 	$(childWindows["Gamelog"].document).find("body").append(gamelogMessageBroker);
-	$(childWindows["Gamelog"].document).find(".glc-game-log").append($(".chat-text-wrapper").clone(true, true));
-	$(childWindows["Gamelog"].document).find(".glc-game-log").append($("#chat-language").clone(true, true));
-
-	$(childWindows["Gamelog"].document).find("#chat-language").off('change.value').on('change.value', function(){
+	const popoutChatWrapper = $(".chat-text-wrapper").clone(true, true).addClass("popout-chat-text-wrapper");
+	popoutChatWrapper.find("#chat-language").remove();
+	const popoutChatLanguage = $("#chat-language").clone(true, true);
+	popoutChatLanguage.each(function() {
+		this.style.removeProperty("appearance");
+		this.style.removeProperty("-webkit-appearance");
+		this.style.removeProperty("-moz-appearance");
+	});
+	popoutChatWrapper.append(popoutChatLanguage);
+	$(childWindows["Gamelog"].document).find(".glc-game-log").append(popoutChatWrapper);
+	popoutChatLanguage.off('change.value').on('change.value', function(){
 		$("#chat-language").val($(this).val());
 	})
+	const popoutDocument = childWindows["Gamelog"].document;
+	const diceControls = $('<div class="popout-dice-controls"></div>');
+	const diceRoller = $(".dice-roller").first().clone(false);
+	const popoutDice = diceRoller.find("> div img");
+	popoutDice.removeAttr("data-count").each(function() {
+		$(this).parent().find(".dice-badge").remove();
+	});
+
+	const rollModifiers = $(".roll-mod-container").first().clone(false)
+		.addClass("show popout-roll-mod-container");
+	const modifierInput = rollModifiers.find(".roll-input-mod").val(0);
+
+	let popoutAdvDis;
+	const clearPopoutDice = function() {
+		popoutDice.removeAttr("data-count");
+		popoutDice.parent().find(".dice-badge").remove();
+		modifierInput.val(0);
+	};
+	const getPopoutExpression = function() {
+		const positiveTerms = [];
+		const negativeTerms = [];
+		popoutDice.each(function() {
+			const count = parseInt($(this).attr("data-count"));
+			if (Number.isNaN(count) || count === 0) {
+				return;
+			}
+			const term = `${Math.abs(count)}${$(this).attr("alt")}`;
+			(count < 0 ? negativeTerms : positiveTerms).push(term);
+		});
+
+		let expression = positiveTerms.join("+");
+		negativeTerms.forEach(term => {
+			expression = expression ? `${expression}-${term}` : `0-${term}`;
+		});
+		if (!expression) {
+			expression = "1d20";
+		}
+		const modifier = parseInt(modifierInput.val()) || 0;
+		expression += modifier < 0 ? `${modifier}` : `+${modifier}`;
+		if (popoutAdvDis !== undefined) {
+			expression = `{${expression},${expression}}${popoutAdvDis}1`;
+		}
+		popoutAdvDis = undefined;
+		return expression;
+	};
+	const rollOptions = {
+		onRollComplete: clearPopoutDice
+	};
+	const showPopoutContextMenu = function(e) {
+		const expression = getPopoutExpression();
+		if (!/^1d20/i.test(expression)) {
+			damage_dice_context_menu(expression, "", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, rollOptions)
+				.present(e.clientY - 15, e.clientX + 45, popoutDocument);
+		} else {
+			standard_dice_context_menu(expression, "", undefined, undefined, undefined, undefined, undefined, undefined, rollOptions)
+				.present(e.clientY - 15, e.clientX + 48, popoutDocument);
+		}
+	};
+	const popoutRollButton = rollModifiers.find("button#sendRoll");
+	popoutRollButton.on("pointerdown.popoutRoll", function(e) {
+		if (e.button === 2) return;
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+		window.diceRoller.roll(new DiceRoll(getPopoutExpression()));
+		clearPopoutDice();
+	}).on("contextmenu.popoutRoll", function(e) {
+		e.preventDefault();
+		showPopoutContextMenu(e);
+	});
+
+	rollModifiers.find("button.roll-button-mod").on("pointerdown.popoutRoll", function(e) {
+		if (e.button === 2) return;
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+		const $button = $(this);
+		if ($button.hasClass("minus")) {
+			modifierInput.val((parseInt(modifierInput.val()) || 0) - 1);
+		} else if ($button.hasClass("plus")) {
+			modifierInput.val((parseInt(modifierInput.val()) || 0) + 1);
+		} else if ($button.hasClass("adv")) {
+			popoutAdvDis = "kh";
+			popoutRollButton.trigger("pointerdown", { button: 0 });
+		} else if ($button.hasClass("dis")) {
+			popoutAdvDis = "kl";
+			popoutRollButton.trigger("pointerdown", { button: 0 });
+		}
+	});
+
+	rollModifiers.find("#contextSelect").on("click.popoutRoll contextmenu.popoutRoll", function(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+	}).on("pointerdown.popoutRoll", function(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+		showPopoutContextMenu(e);
+	});
+
+	popoutDice.on("click.popoutRoll", function() {
+		const $die = $(this);
+		const nextCount = parseInt($die.attr("data-count")) || 0;
+		update_dice_badge($die, nextCount + 1);
+	}).on("contextmenu.popoutRoll", function(e) {
+		e.preventDefault();
+		const $die = $(this);
+		const currentCount = parseInt($die.attr("data-count")) || 0;
+		update_dice_badge($die, currentCount - 1);
+	});
+
+	diceControls.append(rollModifiers, diceRoller);
+	$(popoutDocument).find(".glc-game-log").append(diceControls);
 	setTimeout(function(){removeFromPopoutWindow("Gamelog", "body>.sidebar-panel-loading-indicator")}, 200);
 }
 function updatePopoutWindow(name, cloneSelector){
@@ -3981,17 +4286,18 @@ function hide_sidebar(triggerResize = true) {
 		
 	} else {
 		let sidebar = is_characters_page() ? $(".ct-sidebar__portal") : $(".sidebar--right");
-		sidebar.css("transform", `translateX(${get_sidebar_width()}px)`);
-		$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', true)
+		sidebar.css("transform", `translateX(${get_sidebar_width()}px)`);	
 	}
-
+	
 	if (is_characters_page()) {
 		reposition_player_sheet();
 	} else {
 		$("#sheet").addClass("sidebar_hidden");
 	}
-	$('canvas.dice-rolling-panel__container, .roll-mod-container').css('--sidebar-width', '0px');
-	$('canvas.streamer-canvas').css('--sidebar-width', '0px');
+
+	$('#combat_carousel_container.tracker-list').toggleClass('sidebarClosed', true)
+	$('canvas.dice-container, canvas.dice-rolling-panel__container, .roll-mod-container, canvas.streamer-canvas, #character-tools-target>canvas, .boss-hp-bar').css('--sidebar-width', '0px');
+
 	if(triggerResize)
 		window.dispatchEvent(new Event('resize'));
 }
@@ -4040,4 +4346,3 @@ function adjust_site_bar() {
 		});
 	}
 }
-

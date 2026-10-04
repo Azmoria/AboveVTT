@@ -69,21 +69,20 @@ function display_sidebar_modal(sidebarPanel) {
 }
 
 function observe_hover_text(sidebarPanelContent) {
-  sidebarPanelContent.off("mouseenter mouseleave").on("mouseenter mouseleave", ".sidebar-hover-text:not(.chat-text-wrapper)", function(hoverEvent) {
+  sidebarPanelContent.off("mouseenter mouseleave").on("mouseenter mouseleave", ".sidebar-hover-text[data-hover]:not(.chat-text-wrapper)", function(hoverEvent) {
     const displayText = $(hoverEvent.currentTarget).attr("data-hover");
     if (typeof displayText === "string" && displayText.length > 0) {
+      $(".sidebar-hover-text-flyout").closest(".sidebar-flyout").remove();
       if (hoverEvent.type === "mouseenter") {
         build_and_display_sidebar_flyout(hoverEvent.clientY, function (flyout) {
+          flyout.css('pointer-events', 'none');
           flyout.append(`<div class="sidebar-hover-text-flyout">${displayText}</div>`);
           if(sidebarPanelContent.hasClass('context-menu-flyout'))
             position_flyout_right_of(sidebarPanelContent, flyout);
           else
             position_flyout_left_of(sidebarPanelContent, flyout);
         });
-      } else {
-        // only remove hover text flyouts. Don't remove other types of flyouts that may or may not be up
-        $(".sidebar-hover-text-flyout").closest(".sidebar-flyout").remove();
-      }
+      } 
     }
   });
 }
@@ -479,7 +478,7 @@ function build_flyout_input(settingOption, currentValue, changeHandler){
   }
 
   let wrapper = $(`
-   <div class="token-image-modal-footer-select-wrapper" data-option-name="${settingOption.name}">
+   <div class="token-image-modal-footer-select-wrapper sidebar-hover-text" data-option-name="${settingOption.name}" ${settingOption.description ? `data-hover="${settingOption.description}"` : ''}>
      <div class="token-image-modal-footer-title">${settingOption.label}</div>
    </div>
  `);
@@ -797,7 +796,7 @@ class SidebarListItem {
     if (typeof name !== "string" || name.length === 0) {
       name = `${shape} AoE`;
     }
-    const image = `class=aoe-token-tileable aoe-style-${style} aoe-shape-${shape} ${name ? set_spell_override_style(name) : ""}`
+    const image = `class='aoe-token-tileable aoe-style-${style} aoe-shape-${shape} ${name ? set_spell_override_style(name) : ""}'`
     let item = new SidebarListItem(path_to_html_id(RootFolder.Aoe.path, name), name, image, ItemType.Aoe, RootFolder.Aoe.path, RootFolder.Aoe.id);
     item.shape = shape;
     let parsedSize = parseInt(size);
@@ -1641,7 +1640,8 @@ function build_sidebar_list_row(listItem) {
 
   const isCustomEncounterFolder = !listItem.isRootFolder() && listItem.folderType == ItemType.Encounter;
 
-  if ((!listItem.isTypeFolder() && !listItem.isTypeScene()) || isCustomEncounterFolder) {
+
+  if ((!listItem.isTypeFolder() && !listItem.isTypeScene()) || isCustomEncounterFolder || listItem.folderType == ItemType.PC) {
     if(isCustomEncounterFolder){
       let editEncounter = $(`<button class="token-row-button token-row-edit-encounter" title="Edit Encounter">
          <span class="material-symbols-outlined">
@@ -1743,7 +1743,14 @@ function build_sidebar_list_row(listItem) {
           create_folder_inside(clickedItem);
         });     
       }
-      
+      if(listItem.isRootFolder() && listItem.id == RootFolder.Aoe.id){
+        let addFolder = $(`<button class="token-row-button" title="Assign tokens to AoE Templates"><span class="material-icons">image</span></button>`);
+        rowItem.append(addFolder);
+        addFolder.on("click", function (clickEvent) {
+          clickEvent.stopPropagation();
+          edit_aoe_style_tokens();
+        }); 
+      }
       if(listItem.folderType === ItemType.PC && listItem.id !== RootFolder.Players.id){
         let popoutButton = $(`<div class="players-popout-button subfolder-popout"><svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 0 24 24" width="18px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"/></svg></div>`);
         row.append(popoutButton);
@@ -2117,6 +2124,11 @@ function build_sidebar_list_row(listItem) {
     rowItem.append(settingsButton);
     settingsButton.on("click", did_click_row_gear);
   }
+ if(listItem.isTypeScene){
+  const scene = window.ScenesHandler.scenes.find(s => s.id === listItem.id);
+  if(scene?.favorite == 1)
+    row.addClass('favorite');
+ }
 
   return row;
 }
@@ -2814,6 +2826,458 @@ function edit_encounter(clickEvent) {
 
 }
 /**
+ * Returns the map of AoE style name (lowercase) to token image url that the DM has assigned.
+ * @returns {object} a map of styleName -> imageUrl
+ */
+function get_aoe_style_tokens() {
+  if (!window.DM) {
+    return window.AOE_STYLE?.TOKENS ?? {};
+  }
+  const customization = find_token_customization(ItemType.Folder, RootFolder.Aoe.id);
+  const assigned = customization?.tokenOptions?.aoeStyleTokens;
+  return (typeof assigned === "object" && assigned !== null) ? assigned : {};
+}
+
+function get_aoe_style_sync_data() {
+  const customization = find_token_customization(ItemType.Folder, RootFolder.Aoe.id);
+  return {
+    aoeStyleTokens: customization?.tokenOptions?.aoeStyleTokens || {},
+    aoeStyleTokenTiling: customization?.tokenOptions?.aoeStyleTokenTiling || {},
+    aoeStyleTokenOpacity: customization?.tokenOptions?.aoeStyleTokenOpacity || {},
+    aoeStyleTokenAnimation: customization?.tokenOptions?.aoeStyleTokenAnimation || {},
+    aoeStyleTokenBorder: customization?.tokenOptions?.aoeStyleTokenBorder || {},
+    aoeStyleTokenVideo: customization?.tokenOptions?.aoeStyleTokenVideo || {},
+    aoeStyleOrder: customization?.tokenOptions?.aoeStyleOrder || [],
+    aoeStyleTokenDarkness: customization?.tokenOptions?.aoeStyleTokenDarkness || {},
+  };
+}
+
+const send_aoe_style_tokens_to_players = mydebounce(function(){
+  if (window.DM && window.MB) {
+    window.MB.sendMessage("custom/myVTT/aoeStyles", get_aoe_style_sync_data());
+  }
+}, 5000); 
+
+function normalize_aoe_style_key(style) {
+  return String(style || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Returns the image url assigned to the given AoE style, or undefined if the default style should be used.
+ * @param style {string} the AoE style name
+ * @returns {string|undefined} the assigned image url
+ */
+function get_aoe_style_token_image(style) {
+  if (typeof style !== "string") return undefined;
+  const image = get_aoe_style_tokens()[normalize_aoe_style_key(style)];
+  return (typeof image === "string" && image.length > 0) ? image : undefined;
+}
+
+/**
+ * Returns whether the assigned image for the given AoE style should repeat.
+ * Existing assignments default to tiled for compatibility with the built-in styles.
+ * @param style {string} the AoE style name
+ * @returns {boolean}
+ */
+function get_aoe_style_token_tiling(style) {
+  if (typeof style !== "string") return true;
+  if (!window.DM && window.AOE_STYLE?.TOKEN_TILING) {
+    return window.AOE_STYLE.TOKEN_TILING[normalize_aoe_style_key(style)] !== false;
+  }
+  const customization = find_token_customization(ItemType.Folder, RootFolder.Aoe.id);
+  const tiling = customization?.tokenOptions?.aoeStyleTokenTiling?.[normalize_aoe_style_key(style)];
+  return tiling !== false;
+}
+
+function get_aoe_style_token_opacity(style) {
+  if (typeof style !== "string") return undefined;
+  const styleKey = normalize_aoe_style_key(style);
+  if (!window.DM && window.AOE_STYLE?.TOKEN_OPACITY) {
+    const opacity = window.AOE_STYLE.TOKEN_OPACITY[styleKey];
+    return typeof opacity === "number" ? opacity : undefined;
+  }
+  const customization = find_token_customization(ItemType.Folder, RootFolder.Aoe.id);
+  const opacity = customization?.tokenOptions?.aoeStyleTokenOpacity?.[styleKey];
+  if (typeof opacity === "number") return opacity;
+  return customization?.tokenOptions?.aoeStyleTokenEffects?.[styleKey] === false ? 1 : undefined;
+}
+
+function get_aoe_style_token_border(style) {
+  if (typeof style !== "string") return true;
+  const styleKey = normalize_aoe_style_key(style);
+  if (!window.DM && window.AOE_STYLE?.TOKEN_BORDER) {
+    return window.AOE_STYLE.TOKEN_BORDER[styleKey] !== false;
+  }
+  return find_token_customization(ItemType.Folder, RootFolder.Aoe.id)?.tokenOptions?.aoeStyleTokenBorder?.[styleKey] !== false;
+}
+
+
+function get_aoe_style_token_video(style) {
+  if (typeof style !== "string") return false;
+  const styleKey = normalize_aoe_style_key(style);
+  const flagged = (!window.DM && window.AOE_STYLE?.TOKEN_VIDEO)
+    ? window.AOE_STYLE.TOKEN_VIDEO[styleKey]
+    : find_token_customization(ItemType.Folder, RootFolder.Aoe.id)?.tokenOptions?.aoeStyleTokenVideo?.[styleKey];
+  return flagged === true || is_aoe_video_image(get_aoe_style_token_image(style));
+}
+
+function get_aoe_style_token_darkness(style) {
+  if (typeof style !== "string") return true;
+  const styleKey = normalize_aoe_style_key(style);
+  if (!window.DM && window.AOE_STYLE?.TOKEN_DARKNESS) {
+    return window.AOE_STYLE.TOKEN_DARKNESS[styleKey] ?? styleKey == 'darkness';
+  }
+  const customization = find_token_customization(ItemType.Folder, RootFolder.Aoe.id);
+  return customization?.tokenOptions?.aoeStyleTokenDarkness?.[styleKey] ?? styleKey == 'darkness';
+}
+function get_aoe_style_order() {
+  if (!window.DM) {
+    return window.AOE_STYLE?.ORDER ?? [];
+  }
+  const order = find_token_customization(ItemType.Folder, RootFolder.Aoe.id)?.tokenOptions?.aoeStyleOrder;
+  return Array.isArray(order) ? order : [];
+}
+
+
+function sort_styles_by_saved_aoe_order(styles) {
+  const order = get_aoe_style_order();
+  if (order.length === 0) return styles;
+  return [...styles].sort(function(lhs, rhs) {
+    const lhsIndex = order.indexOf(normalize_aoe_style_key(lhs));
+    const rhsIndex = order.indexOf(normalize_aoe_style_key(rhs));
+    if (lhsIndex === -1 && rhsIndex === -1) return 0;
+    if (lhsIndex === -1) return 1;
+    if (rhsIndex === -1) return -1;
+    return lhsIndex - rhsIndex;
+  });
+}
+
+function clamp_aoe_style_opacity(value) {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? Math.min(1, Math.max(0.1, parsed)) : 0.5;
+}
+
+/**
+ * Builds the grid of display toggles shown for an AoE style.
+ * @returns {object} the wrapper element and each input so callers can read/persist them
+ */
+function build_aoe_style_toggles(settings) {
+  const { tiled, border, opacity, video, videoLocked = false, darkness } = settings;
+  const wrapper = $(`<div class="aoe-style-token-toggles"></div>`);
+  const tilingLabel = $(`<label><input type="checkbox" ${tiled ? "checked" : ""} />Tile</label>`);
+  const borderLabel = $(`<label><input type="checkbox" ${border ? "checked" : ""} />Border</label>`);
+  const videoLabel = $(`<label title="Enable for video links that have no file extension"><input type="checkbox" ${video ? "checked" : ""} />Video</label>`);
+  const opacityLabel = $(`<label>Opacity<input class="aoe-style-token-opacity" type="number" min="0.1" max="1" step="0.05" value="${opacity ?? 0.5}" title="Opacity from 0.1 to 1" /></label>`);
+  const darknessLabel = $(`<label><input type="checkbox" ${darkness ? "checked" : ""} />Darkness</label>`);
+  wrapper.append(tilingLabel, borderLabel, videoLabel, opacityLabel, darknessLabel);
+  wrapper.on("mousedown click", function(mouseEvent) {
+    mouseEvent.stopPropagation();
+  });
+
+  const controls = {
+    wrapper,
+    tiling: tilingLabel.find("input"),
+    border: borderLabel.find("input"),
+    video: videoLabel.find("input"),
+    opacity: opacityLabel.find("input"),
+    darkness: darknessLabel.find("input")
+  };
+  if (videoLocked) {
+    controls.video.prop({ checked: true, disabled: true });
+    videoLabel.addClass("disabled");
+  }
+  const syncDependentInputs = function() {
+    const isVideo = controls.video.prop("checked");
+    controls.tiling.prop("disabled", isVideo);
+    tilingLabel.toggleClass("disabled", isVideo);
+  };
+
+  controls.video.on("change", syncDependentInputs);
+  syncDependentInputs();
+  return controls;
+}
+
+/**
+ * Displays a draggable window that allows the DM to assign a token image to be used
+ * in place of the default AoE style for each available style.
+ */
+function edit_aoe_style_tokens(restoreState = {}) {
+  const { scrollTop = 0, width = '350px', height, top, left = 'calc(100% - 700px)' } = restoreState;
+  $('#aoeStyleTokenWindow .title_bar_close_button').click();
+
+  const customization = find_or_create_token_customization(ItemType.Folder, RootFolder.Aoe.id, RootFolder.Aoe.id, RootFolder.Aoe.id);
+  if (typeof customization.tokenOptions.aoeStyleTokens !== "object" || customization.tokenOptions.aoeStyleTokens === null) {
+    customization.tokenOptions.aoeStyleTokens = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenTiling !== "object" || customization.tokenOptions.aoeStyleTokenTiling === null) {
+    customization.tokenOptions.aoeStyleTokenTiling = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenOpacity !== "object" || customization.tokenOptions.aoeStyleTokenOpacity === null) {
+    customization.tokenOptions.aoeStyleTokenOpacity = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenAnimation !== "object" || customization.tokenOptions.aoeStyleTokenAnimation === null) {
+    customization.tokenOptions.aoeStyleTokenAnimation = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenBorder !== "object" || customization.tokenOptions.aoeStyleTokenBorder === null) {
+    customization.tokenOptions.aoeStyleTokenBorder = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenVideo !== "object" || customization.tokenOptions.aoeStyleTokenVideo === null) {
+    customization.tokenOptions.aoeStyleTokenVideo = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleTokenDarkness !== "object" || customization.tokenOptions.aoeStyleTokenDarkness === null) {
+    customization.tokenOptions.aoeStyleTokenDarkness = {};
+  }
+  if (typeof customization.tokenOptions.aoeStyleName !== "object" || customization.tokenOptions.aoeStyleName === null) {
+    customization.tokenOptions.aoeStyleName = {};
+  }
+  const container = find_or_create_generic_draggable_window(`aoeStyleTokenWindow`, "Adjust AoE Styles", false, false, undefined, width, height, top, left, false, 'input, button, select, option, textarea, .aoe-style-token-listing', false, true);
+
+  const body = $(`<div class="encounter-body aoe-style-token-body"></div>`);
+  const listing = $(`<div class="encounter-listing aoe-style-token-listing"></div>`);
+  body.append(`<div id='aoeStyleTokenExplanation' style='padding:5px;font-size:12px;'>Assign an image to be used instead of the default AoE style. Leave blank to use the default.</div>`);
+  body.append(listing);
+
+  const saveStyleImage = function(style, imageUrl) {
+    const styleKey = normalize_aoe_style_key(style);
+    if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      customization.tokenOptions.aoeStyleTokens[styleKey] = imageUrl;
+    } else {
+      delete customization.tokenOptions.aoeStyleTokens[styleKey];
+    }
+    customization.setTokenOption("aoeStyleTokens", customization.tokenOptions.aoeStyleTokens);
+    persist_token_customization(customization);
+    send_aoe_style_tokens_to_players();
+  };
+  const basicSettingSave = function(style, settingName, value) {
+    customization.tokenOptions[settingName][normalize_aoe_style_key(style)] = value;
+    customization.setTokenOption(settingName, customization.tokenOptions[settingName]);
+    persist_token_customization(customization);
+    send_aoe_style_tokens_to_players();
+  }
+
+  const saveStyleOrder = function(order) {
+    customization.setTokenOption("aoeStyleOrder", order);
+    persist_token_customization(customization);
+    send_aoe_style_tokens_to_players();
+    if (typeof refresh_aoe_style_menu === "function") {
+      refresh_aoe_style_menu();
+    }
+  };
+
+  get_available_styles().forEach(function(style) {
+    const styleKey = normalize_aoe_style_key(style);
+    const styleName = customization.tokenOptions.aoeStyleName?.[styleKey] || style;
+    const currentImage = customization.tokenOptions.aoeStyleTokens[styleKey] || "";
+    const currentTiling = customization.tokenOptions.aoeStyleTokenTiling[styleKey] !== false;
+    const currentOpacity = get_aoe_style_token_opacity(style);
+    const currentBorder = get_aoe_style_token_border(style);
+    const currentDarkness = get_aoe_style_token_darkness(style);
+
+    const row = $(`<div class="sidebar-list-item-row aoe-style-token-row"></div>`);
+    row.attr("data-style-key", styleKey);
+    const rowItem = $(`<div class="sidebar-list-item-row-item"></div>`);
+    const imgHolder = $(`<div class="sidebar-list-item-row-img"></div>`);
+    const isVideo = get_aoe_style_token_video(style);
+    const preview = currentImage.length === 0
+      ? $(`<div data-img="true" class="aoe-token-tileable aoe-style-${styleKey} aoe-shape-circle"></div>`)
+      : isVideo
+        ? $(`<video disableRemotePlayback autoplay loop muted data-img="true" aria-label="${style} token image" class="aoe-token-tileable aoe-shape-circle div-token-image"></video>`)
+        : $(`<div data-img="true" aria-label="${style} token image" class="aoe-token-tileable aoe-shape-circle div-token-image"></div>`);
+    if (currentImage.length > 0) {
+      updateTokenSrc(currentImage, preview, isVideo).then(function() {
+        apply_aoe_style_display(preview, { tiled: isVideo ? undefined : currentTiling, opacity: currentOpacity, darkness: currentDarkness }, "100px");
+      });
+    } else {
+      apply_aoe_style_display(preview, { opacity: currentOpacity, darkness: currentDarkness });
+    }
+    imgHolder.append(preview);
+
+    const details = $(`<div class="sidebar-list-item-row-details"></div>`);
+    details.append(`<div class="sidebar-list-item-row-details-title">${styleName}</div>`);
+    const input = $(`<input class="aoe-style-token-input" type="text" placeholder="https://..." value="${currentImage}" />`);
+    const toggles = build_aoe_style_toggles({
+      tiled: currentTiling,
+      border: currentBorder,
+      opacity: currentOpacity,
+      video: isVideo,
+      videoLocked: is_aoe_video_image(currentImage),
+      darkness: currentDarkness
+    });
+    details.append(input, toggles.wrapper);
+
+    const clearButton = $(`<button class="removeItem" title="Use default style" style="font-size:24px;"><svg class="delSVG" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#000000"><path d="M0 0h24v24H0V0z" fill="none"></path><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"></path></svg></button>`);
+
+    const commitValue = async function() {
+      const value = input.val().trim();
+      const parsed = value.length > 0 ? await parse_img(value) : "";
+      input.val(parsed);
+      saveStyleImage(style, parsed);
+      container.trigger('redrawListing');
+    };
+
+    input.on("keyup", function(keyupEvent) {
+      if (keyupEvent.key === "Enter") {
+        commitValue();
+      } else if (keyupEvent.key === "Escape") {
+        input.val(currentImage);
+        input.blur();
+      }
+    });
+    input.on("focusout", function() {
+      if (input.val().trim() !== currentImage) {
+        commitValue();
+      }
+    });
+
+    input.on("mousedown click", function(mouseEvent) {
+      mouseEvent.stopPropagation();
+    });
+    toggles.tiling.on("change", function() {
+      basicSettingSave(style, "aoeStyleTokenTiling", toggles.tiling.prop("checked"));
+    });
+
+    toggles.border.on("change", function() {
+      basicSettingSave(style, "aoeStyleTokenBorder", toggles.border.prop("checked"));
+    });
+    toggles.video.on("change", function() {
+      basicSettingSave(style, "aoeStyleTokenVideo", toggles.video.prop("checked"));
+      container.trigger('redrawListing');
+    });
+    toggles.darkness.on("change", function() {
+      basicSettingSave(style, "aoeStyleTokenDarkness", toggles.darkness.prop("checked"));
+    });
+    toggles.opacity.on("change", function() {
+      const opacity = clamp_aoe_style_opacity(toggles.opacity.val());
+      toggles.opacity.val(opacity);
+      basicSettingSave(style, "aoeStyleTokenOpacity", opacity);
+    });
+
+    clearButton.on("click", function(clickEvent) {
+      clickEvent.stopPropagation();
+      saveStyleImage(style, "");
+      container.trigger('redrawListing');
+      saveStyleOrder($("#aoeStyleTokenWindow .aoe-style-token-listing .aoe-style-token-row[data-style-key]").map(function() {
+        return $(this).attr("data-style-key");
+      }).get());
+    });
+
+    rowItem.append(imgHolder, details, clearButton);
+    row.append(rowItem);
+    listing.append(row);
+  });
+
+  const newStyleRow = $(`<div class="sidebar-list-item-row aoe-style-token-row aoe-style-token-new-row"></div>`);
+  const newStyleRowItem = $(`<div class="sidebar-list-item-row-item"></div>`);
+  const addStyleButton = $(`
+    <button class="token-row-button token-row-add aoe-style-token-add-button" type="button" title="Add custom AoE style" aria-label="Add custom AoE style">
+      <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.2 10.8V18h3.6v-7.2H18V7.2h-7.2V0H7.2v7.2H0v3.6h7.2z"></path></svg>
+    </button>
+  `);
+  newStyleRowItem.append(addStyleButton);
+  newStyleRow.append(newStyleRowItem);
+  listing.append(newStyleRow);
+
+  const buildCustomStyleInputRow = function() {
+    if (listing.find(".aoe-style-token-input-row").length > 0) {
+      listing.find(".aoe-style-token-name-input").trigger("focus");
+      return;
+    }
+
+    const inputRow = $(`<div class="sidebar-list-item-row aoe-style-token-row aoe-style-token-input-row"></div>`);
+    const inputRowItem = $(`<div class="sidebar-list-item-row-item"></div>`);
+    const inputDetails = $(`<div class="sidebar-list-item-row-details aoe-style-token-input-details"></div>`);
+    const styleNameInput = $(`<input class="aoe-style-token-input aoe-style-token-name-input" type="text" placeholder="Custom style name" />`);
+    const imageInput = $(`<input class="aoe-style-token-input aoe-style-token-image-input" type="text" placeholder="https://..." />`);
+    const toggles = build_aoe_style_toggles({ tiled: true, animated: true, border: true, opacity: 0.5, video: false });
+    const saveButton = $(`<button class="sidebar-panel-footer-button aoe-style-token-save-button" type="button" title="Save custom AoE style" aria-label="Save custom AoE style">Save</button>`);
+    inputDetails.append(styleNameInput, imageInput, toggles.wrapper);
+    inputRowItem.append(inputDetails, saveButton);
+    inputRow.append(inputRowItem);
+    inputRow.insertBefore(newStyleRow);
+
+    const addCustomStyle = async function() {
+      const styleName = styleNameInput.val().trim();
+      const styleKey = normalize_aoe_style_key(styleName);
+      const imageValue = imageInput.val().trim();
+      if (!styleKey || !imageValue) {
+        showErrorMessage("Enter a custom style name and image URL before saving the style", 'messageOnly');
+        return;
+      }
+      const existingStyleKeys = get_available_styles().map(normalize_aoe_style_key);
+      if (existingStyleKeys.includes(styleKey)) {
+        showErrorMessage("An AoE style with this name already exists", 'messageOnly', styleName);
+        return;
+      }
+      const parsedImage = await parse_img(imageValue);
+      saveStyleImage(styleKey, parsedImage);
+      basicSettingSave(styleKey, 'aoeStyleTokenTiling', toggles.tiling.prop("checked"));
+      basicSettingSave(styleKey, 'aoeStyleTokenBorder', toggles.border.prop("checked"));
+      basicSettingSave(styleKey, 'aoeStyleTokenVideo', toggles.video.prop("checked"));
+      basicSettingSave(styleKey, 'aoeStyleTokenOpacity', clamp_aoe_style_opacity(toggles.opacity.val()));
+      basicSettingSave(styleKey, 'aoeStyleName', styleName);
+      
+      if (typeof refresh_aoe_style_menu === "function") {
+        refresh_aoe_style_menu();
+      }
+      container.trigger('redrawListing');
+    };
+
+    inputRow.find("input").on("mousedown click", function(mouseEvent) {
+      mouseEvent.stopPropagation();
+    });
+    saveButton.on("click", function(clickEvent) {
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+      addCustomStyle();
+    });
+    styleNameInput.add(imageInput).on("keyup", function(keyupEvent) {
+      if (keyupEvent.key === "Enter") {
+        addCustomStyle();
+      }
+    });
+    styleNameInput.trigger("focus");
+  };
+
+  addStyleButton.on("click", function(clickEvent) {
+    clickEvent.preventDefault();
+    clickEvent.stopPropagation();
+    buildCustomStyleInputRow();
+  });
+
+  container.off('redrawListing').on('redrawListing', function() {
+    const windowStyle = container[0].style;
+    const restoreState = {
+      scrollTop: listing.scrollTop(),
+      width: windowStyle.width || undefined,
+      height: windowStyle.height || undefined,
+      top: windowStyle.top || undefined,
+      left: windowStyle.left || undefined
+    };
+    close_and_cleanup_generic_draggable_window('aoeStyleTokenWindow');
+    edit_aoe_style_tokens(restoreState);
+  });
+
+  container.append(body);
+  listing.scrollTop(scrollTop);
+  listing.sortable({
+    distance: 5,
+    items: "> .aoe-style-token-row[data-style-key]",
+    tolerance: "pointer",
+    handle: "> *",
+    forcePlaceholderSize: true,
+    update: function() {
+      saveStyleOrder(listing.find("> .aoe-style-token-row[data-style-key]").map(function() {
+        return $(this).attr("data-style-key");
+      }).get());
+    }
+  });
+}
+
+/**
  * When an AddToken (plus) button on a row in the sidebar is clicked, this handles that click based on the item represented by the row, and adds a token to the scene for that item.
  * This should only be called with someElement.on("click", did_click_add_button);
  * @param clickEvent {Event} the click event
@@ -3216,9 +3680,10 @@ function delete_folder_and_move_children_up_one_level(listItem) {
   }
 }
 
-function build_and_display_sidebar_flyout(clientY, buildFunction) {
+function build_and_display_sidebar_flyout(clientY, buildFunction, targetDocument = document) {
+  const targetWindow = targetDocument.defaultView || window;
   let flyout = $(`<div class='sidebar-flyout'></div>`);
-  $("body").append(flyout);
+  $(targetDocument.body).append(flyout);
 
   buildFunction(flyout); // we want this built here so we can position the flyout based on the height of it
 
@@ -3227,8 +3692,8 @@ function build_and_display_sidebar_flyout(clientY, buildFunction) {
   let top = clientY - halfHeight;
   if (top < 30) { // make sure it's always below the main UI buttons
     top = 30;
-  } else if (clientY + halfHeight > window.innerHeight - 30) {
-    top = window.innerHeight - height - 30;
+  } else if (clientY + halfHeight > targetWindow.innerHeight - 30) {
+    top = targetWindow.innerHeight - height - 30;
   }
 
   flyout.css({
@@ -3243,6 +3708,7 @@ async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], eve
   }
   let container = options.container;
   let currentTarget = $(event.currentTarget);
+  const targetWindow = event.currentTarget?.ownerDocument?.defaultView || window;
   currentTarget.toggleClass('loading-tooltip', true);
   if(container == undefined){
 
@@ -3251,14 +3717,17 @@ async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], eve
     if(container.find('.tooltip-header').length === 0){
       container = currentTarget.closest("#resizeDragMon");
     }
-    if (container.length === 0) {
-        container = currentTarget.closest(".token");
+    if(container.length === 0){
+      container = currentTarget.closest(".moveableWindow");
     }
     if (container.length === 0) {
-        container = currentTarget.closest(".sidebar-modal");
+      container = currentTarget.closest(".token");
     }
     if (container.length === 0) {
-        container = is_characters_page() ? $(".ct-sidebar__inner [class*='styles_content']") : $(".sidebar__pane-content");
+      container = currentTarget.closest(".sidebar-modal");
+    }
+    if (container.length === 0) {
+      container = is_characters_page() ? $(".ct-sidebar__inner [class*='styles_content']") : $(".sidebar__pane-content");
     }
   }
   const containerParentIdArray = container?.attr("data-parents-id") != undefined ? JSON.parse(container.attr("data-parents-id")) : [];
@@ -3278,6 +3747,7 @@ async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], eve
   window.JOURNAL.add_journal_tooltip_targets(tooltipHtml);
   window.JOURNAL.block_send_to_buttons(tooltipHtml);
   add_stat_block_hover(tooltipHtml);
+  window.JOURNAL.add_input_event_listeners(tooltipHtml, options.id, options.token?.options?.id);
   if(options.id != undefined || options.token != undefined)
     tooltipHtml.find('.add-input').each(function(){window.JOURNAL.addTrackedInputs($(this), {noteId: options.id, token: options.token})})
   flyout.find("a").attr("target", "_blank");
@@ -3322,15 +3792,15 @@ async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], eve
   buttonFooter.append(sendToGamelogButton);
   if(options.container == undefined){
       let flyoutLeft = event.clientX+20
-        if(flyoutLeft + 400 > window.innerWidth){
-          flyoutLeft = window.innerWidth - 420
+        if(flyoutLeft + 400 > targetWindow.innerWidth){
+          flyoutLeft = targetWindow.innerWidth - 420
         }
       flyout.css({
         left: flyoutLeft,
         width: '400px'
       })
   }else{
-    const didResize = position_flyout_on_best_side_of(container, flyout);
+    const didResize = position_flyout_on_best_side_of(container, flyout, false, event, targetWindow);
     if (didResize) {
         // only mess with the html that DDB gave us if we absolutely have to
         tooltipHtml.css({
@@ -3345,72 +3815,80 @@ async function setup_tooltip_flyout(flyout, tooltipHtmlString, classes = [], eve
   let flyoutHeight = flyout.height() + 25;
   let bottom = (event.clientY + flyoutHeight);
   
-  if (bottom > window.innerHeight) {
-    flyoutTop = flyoutTop - (bottom - window.innerHeight) - 25;
+  if (bottom > targetWindow.innerHeight) {
+    flyoutTop = flyoutTop - (bottom - targetWindow.innerHeight) - 25;
   }
   flyout.css('top', flyoutTop);
 
   flyout.hover(function (hoverEvent) {
-      remove_tooltip(500);
+      remove_tooltip(500, true, flyout[0].ownerDocument);
   });
   flyout.css("background-color", "#fff");
   currentTarget.toggleClass('loading-tooltip', false);
 }
 
-function position_flyout_on_best_side_of(container, flyout, resizeFlyoutToFit = true) {
+function position_flyout_on_best_side_of(container, flyout, resizeFlyoutToFit = true, event, targetWindow = window) {
   let didResize = false;
   if (!container || container.length === 0 || !flyout || flyout.length === 0) {
     console.warn("position_flyout_on_best_side_of received an empty object", container, flyout);
     return didResize;
   }
   const distanceFromLeft = container[0].getBoundingClientRect().left;
-  const distanceFromRight = window.innerWidth - distanceFromLeft - container.width();
+  const distanceFromRight = targetWindow.innerWidth - distanceFromLeft - container.width();
   if (distanceFromLeft > distanceFromRight) {
     if (resizeFlyoutToFit && (flyout.width() > distanceFromLeft)) {
-      flyout.css("width", distanceFromLeft);
+      flyout.css({
+        "width": distanceFromLeft,
+        "min-width": "300px"
+      });
       didResize = true;
     }
-    position_flyout_left_of(container, flyout);
+    position_flyout_left_of(container, flyout, event, targetWindow);
   } else {
     if (resizeFlyoutToFit && (flyout.width() > distanceFromRight)) {
-      flyout.css("width", distanceFromRight);
+      flyout.css({
+        "width": distanceFromRight,
+        "min-width": "300px"
+      });
       didResize = true;
     }
-    position_flyout_right_of(container, flyout);
+    position_flyout_right_of(container, flyout, event, targetWindow);
   }
   return didResize;
 }
 
-function position_flyout_left_of(container, flyout) {
+function position_flyout_left_of(container, flyout, event, targetWindow = window) {
   if (!container || container.length === 0 || !flyout || flyout.length === 0) {
     console.warn("position_flyout_left_of received an empty object", container, flyout);
     return;
   }
-  flyout.css("left", container[0].getBoundingClientRect().left - flyout.width());
+  const minLeft = event?.clientX != undefined ? Math.max(event.clientX - flyout.width(), 5) : 5;
+  flyout.css("left",  clamp(container[0].getBoundingClientRect().left - flyout.width(), minLeft, targetWindow.innerWidth - flyout.width()-5));
 }
 
-function position_flyout_right_of(container, flyout) {
+function position_flyout_right_of(container, flyout, event, targetWindow = window) {
   if (!container || container.length === 0 || !flyout || flyout.length === 0) {
     console.warn("position_flyout_right_of received an empty object", container, flyout);
     return;
   }
-  flyout.css("left", container[0].getBoundingClientRect().left + container.width());
+  const maxLeft = event?.clientX != undefined ? Math.min(event.clientX + 50, targetWindow.innerWidth - flyout.width() - 5) : targetWindow.innerWidth - flyout.width() - 5;
+  flyout.css("left", clamp(container[0].getBoundingClientRect().left + container.width(), 5, maxLeft));
 }
 
-function remove_sidebar_flyout(removeHoverNote) {
+function remove_sidebar_flyout(removeHoverNote, targetDocument = document) {
   noisy_log("remove_sidebar_flyout");
-  let flyouts = $(`.sidebar-flyout`)
+  let flyouts = $(targetDocument).find(`.sidebar-flyout`)
   
   if(removeHoverNote == false){
-    flyouts = $(`.sidebar-flyout:not('.note-flyout')`)
+    flyouts = $(targetDocument).find(`.sidebar-flyout:not('.note-flyout')`)
   }
   flyouts.each(function(i, flyout) {
     const parentsData = $(flyout).attr("data-parents-id");
     const dataId = $(flyout).attr("data-id");
     const flyoutParentsIdArray = parentsData ? JSON.parse(parentsData) : [];
     const hovered = (flyoutParentsIdArray.length == 0 
-                      ? $(`.sidebar-flyout:hover`).length>0 
-                      : $(flyout).is(":hover")) || $(`.sidebar-flyout[data-parents-id*="${dataId}"]:hover`).length>0;
+                      ? $(targetDocument).find(`.sidebar-flyout:hover`).length>0
+                      : $(flyout).is(":hover")) || $(targetDocument).find(`.sidebar-flyout[data-parents-id*="${dataId}"]:hover`).length>0;
     
     if(!hovered)
       $(flyout).remove();

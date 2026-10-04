@@ -86,6 +86,7 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
     }
     window.JOURNAL.add_journal_tooltip_targets($html);
     if(customStatBlock){
+      sync_pc_template(token, container);
       let imageUrl = parse_img(token.options.imgsrc);
 
       if(token.options.imgsrc.startsWith('above-bucket-not-a-url')){
@@ -100,36 +101,8 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
 
 
       const customStatId = token.options.statBlock;
-
-
-      container.off('focusout.editable').on('focusout.editable', '.dnd-sheet [contenteditable="true"]', (e)=>{
-        if($('[contenteditable="true"] :is(:focus, :focus-within)').length>0) return;
-        if($(e.target).is('.injected-input')) return;  
-        const note_text = container.find('.avtt-stat-block-container').first();
-        window.JOURNAL.persistStatBlockContent(customStatId, note_text, container, {tokenId, forceSave: true, rescanStatBlock: true});
-
-			});
-			container.off('change.checkbox').on('change.checkbox', 'input[type="checkbox"], .dnd-sheet input', (e)=>{
-				if (e.target && e.target.nodeName === 'INPUT' && e.target.type === 'checkbox') {				
-					if (e.target.checked) {
-						e.target.setAttribute('checked', 'checked');
-					} else {
-						e.target.removeAttribute('checked');
-					}
-				}
-        const note_text = container.find('.avtt-stat-block-container').first();
-				window.JOURNAL.persistStatBlockContent(customStatId, note_text, container, {tokenId, forceSave: true, rescanStatBlock: false});
-			})
-      container.off('pointerdown.profChange, touchstart.profChange').on('pointerdown.profChange, touchstart.profChange', '.prof-checkbox', (e)=>{
-        e.preventDefault();
-        const target = $(e.currentTarget);
-        const currentState = parseInt(target.attr('data-state'));
-        const newState = (currentState + 1) % 4;
-        target.attr('data-state', newState);
-
-        const note_text = container.find('.avtt-stat-block-container').first();
-        window.JOURNAL.persistStatBlockContent(customStatId, note_text, container, {tokenId, forceSave: true, rescanStatBlock: false});
-      })
+      window.JOURNAL.bindDndSheetTemplateEvents(customStatId, container.find('.avtt-stat-block-container').first(), container, {tokenId, showControls: false});
+      window.JOURNAL.add_input_event_listeners(container, customStatId, tokenId);
     }
     if($html.find('.dnd-sheet').length>0){
       container.css('min-width', '615px');
@@ -186,8 +159,11 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
       
     })
 
-    container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("click.roll").on("click.roll", function (e) {
+    container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("pointerdown.roll touchstart.roll").on("pointerdown.roll touchstart.roll", function (e) {
+      if (e.button === 2) return;
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       if($(e.target).text().includes('Recharge'))
         return;
       let rollButtons = $(e.currentTarget).closest('em:has(strong), strong:has(em)').nextUntil(':has(.avtt-ability-roll-button)')
@@ -227,7 +203,8 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
         
 
  
-          window.diceRoller.roll(diceRoll, true, undefined, get_avtt_setting_value('monsterCritType'), undefined, data.damageType);
+          const rollSettings = typeof get_token_roll_settings === 'function' ? get_token_roll_settings(tokenId) : {};
+          window.diceRoller.roll(diceRoll, true, rollSettings.critRange || 20, rollSettings.crit ?? get_avtt_setting_value('monsterCritType'), undefined, data.damageType);
 
         }
       }
@@ -242,120 +219,33 @@ async function display_stat_block_in_container(statBlock, container, tokenId, cu
     $("span.hideme").parent().parent().hide();
     container.find('.lockStatButton, .download_button, .upload_button, .add-table-row, .table-row-drag-handle, .header-spacer').remove();
     if(customStatBlock && container.find('.dnd-sheet').length>0){
-      container.find('a').attr('contenteditable', 'false');
-      container.find('.popout-button').remove();
-      const lockStatButton = $(`<div class='lockStatButton' style="cursor: pointer; position: absolute;
-                                              left: 2px;
-                                              top: 3px;
-                                              width: 20px;
-                                              height: 20px;
-                                              color: #ddd;">
-                                  <span title="lock buttons" class="material-symbols-outlined" style="font-size:20px;">
-                                    ${!window.lockTemplateStatBlocks ? "lock_open_right" : "lock"}
-                                  </span>
-                                </div>`)
-      lockStatButton.off('click.lockStatBlock').on('click.lockStatBlock', ()=>{
-        window.lockTemplateStatBlocks = !window.lockTemplateStatBlocks;
-        const span = lockStatButton.find('>span');
-        if(window.lockTemplateStatBlocks){
-          container.find('.dnd-sheet button').attr("contenteditable", "false");
-          span.text('lock');
-        } else{
-          container.find('.dnd-sheet [contenteditable]:not(a):not(.table-row-drag-handle)').attr("contenteditable", "true");
-          span.text('lock_open_right');
-        }
-      })
-      
-      if(window.lockTemplateStatBlocks){
-         container.find('.dnd-sheet button').attr("contenteditable", "false");
-      } else{
-        container.find('.dnd-sheet [contenteditable]:not(a):not(.table-row-drag-handle)').attr("contenteditable", "true");
-      }
-
-      const downloadStat = $(`<div class='download_button' style="cursor: pointer; position: absolute;
-                                              left: 25px;
-                                              top: 3px;
-                                              width: 20px;
-                                              height: 20px;
-                                              color: #ddd;">
-                                  <span title="Download Statblock as HTML" class="material-symbols-outlined" style="font-size:20px;">
-                                    download
-                                  </span>
-                                </div>`)
-      downloadStat.off('click.exportStatBlock').on('click.exportStatBlock', function () { 
-        window.JOURNAL.downloadStatBlock(window.TOKEN_OBJECTS[tokenId].options.statBlock);
-      });
-      const uploadStat = $(`<div class='upload_button' style="cursor: pointer; position: absolute;
-                                              left: 45px;
-                                              top: 3px;
-                                              width: 20px;
-                                              height: 20px;
-                                              color: #ddd;">
-                    <span onclick='import_open_template();' title="Upload HTML Statblock" class="material-symbols-outlined" style="font-size:20px;">
-                      upload
-                    </span>
-                    <input accept='.html' id='input_pc_template' type='file' single style='display: none' />
-                  </div>
-                  `);
-      uploadStat.find('input[type="file"]').change(function(e) {
-        import_pc_template_html(e.target.files, $html, window.TOKEN_OBJECTS[tokenId]?.options?.statBlock, tokenId);
-      });
-      container.prepend(lockStatButton, downloadStat, uploadStat);
-
-			container.find('table').each(function() {
-        const $table = $(this);
-        const rowsContainer = $table.find('tbody').length > 0 ? $table.find('tbody') : $table;
-        if (rowsContainer.find('> tr').length > 1) {
-          rowsContainer.find('> tr').each(function() {
-            const $row = $(this);
-            if ($row.find('> .table-row-drag-handle').length === 0) {
-              const $handleCell = $('<td class="table-row-drag-handle" contenteditable="false" aria-hidden="true">⋮⋮</td>');
-              $row.prepend($handleCell);
-            }
-          });
-
-          $table.sortable({
-            items: '> tbody > tr, > tr',
-            handle: '.table-row-drag-handle',
-            placeholder: 'ui-sortable-placeholder',
-            update: function() {
-              const closestNote = container.find('.avtt-stat-block-container').first();
-              const noteText = closestNote.length > 0 ? closestNote : container;
-              const noteId = window.TOKEN_OBJECTS[tokenId]?.options?.statBlock;
-              window.JOURNAL.persistStatBlockContent(noteId, noteText, container, {tokenId, forceSave: true, rescanStatBlock: false});
-            }
-          })
-          const header = $table.find('th').first().parent().parent();
-          header.find('> tr').each(function() {
-            const $row = $(this);
-            if ($row.find('> .header-spacer').length === 0) {
-              const $handleCell = $('<th class="header-spacer" aria-hidden="true"></td>');
-              $row.prepend($handleCell);
-            }
-          });
-        }
-        if($table.next('.add-table-row').length>0)
-          return;
-        const add_table_row = $(`<button class="add-table-row">+</button>`); 	
-				$table.after(add_table_row);
-
-
-			});
-  
-      container.off('pointerdown.addRow, touchstart.addRow').on('pointerdown.addRow, touchstart.addRow', '.add-table-row', function (e) {
-				e.preventDefault();
-			  const table = $(e.target).prev('table');
-				const tableBody = $(table).find('tbody');
-				const targetContainer = tableBody.length>0 ? tableBody : table;
-				const newRow = targetContainer.find('>tr:last').clone();
-				newRow.find('td:not(.table-row-drag-handle), th').html('');
-				targetContainer.append(newRow);
-			});
-		}
+			const customStatId = window.TOKEN_OBJECTS[tokenId]?.options?.statBlock;
+			window.JOURNAL.bindDndSheetTemplateEvents(customStatId, $html, container, {tokenId, showControls: true, uploadId: tokenId, downloadToken: token});
+      window.JOURNAL.ensureEnclosingZWSP($html[0]);
+    }
+    inject_statblock_buff_dropdown(container, tokenId);
 	}
 
-function import_open_template(){
-  $("#input_pc_template").trigger("click");
+/** Adds the roll buff dropdown to the top of a token's stat block and tags the block with its token
+ * id so roll buttons inside it can find the token's buffs. It lives inside the stat block container
+ * so popouts (which clone that container) get it too; `persistStatBlockContent` strips it back out
+ * before saving. */
+function inject_statblock_buff_dropdown(container, tokenId) {
+  if (tokenId == undefined || typeof build_buff_dropdown !== "function") return;
+  const statBlock = $(container).find(".avtt-stat-block-container").first();
+  if (statBlock.length === 0 || statBlock.find("#noAccessToContent").length > 0) return;
+
+  statBlock.attr("data-token-id", tokenId);
+  $(container).find(".avtt-statblock-buffs").remove();
+
+  const dropdown = build_buff_dropdown({ type: "token", tokenId }, true);
+  const rollSettings = typeof build_token_roll_settings === 'function' ? build_token_roll_settings(tokenId) : undefined;
+  if (!dropdown && !rollSettings) return;
+  statBlock.prepend($(`<div class="avtt-statblock-buffs"></div>`).append(dropdown, rollSettings));
+}
+
+function import_open_template(id){
+  $(`.import_pc_template[data-id='${id}']`).trigger("click");
 }
 function import_pc_template_html(files, parentEle, customStatId, tokenId) {
 	if (!files.length) return;
@@ -379,11 +269,17 @@ function import_pc_template_html(files, parentEle, customStatId, tokenId) {
           window.JOURNAL.track_ability(target, value, customStatId);
         }
       })
-      debounceRescanStatBlock(parentEle, customStatId, tokenId);
+      const containerInside = parentEle.find('.avtt-stat-block-container, .note-text').first();      
+      if(token){
+        setPcTemplateStats(parentEle, token.options);
+        token.place();
+      }
       window.JOURNAL.notes[customStatId].text = sanitizedHTML.replaceAll(/\[(\/)?spell\]/gi, `[$1spell]`).replaceAll(/\[(\/)?magicitem\]/gi, `[$1magicItem]`).replaceAll(/\[(\/)?item\]/gi, `[$1item]`); 
-      window.JOURNAL.notes[customStatId].plain = $(window.JOURNAL.notes[customStatId].text).text();
-      debounceSendNote(customStatId, window.JOURNAL.notes[customStatId], tokenId);
+      window.JOURNAL.notes[customStatId].plain = '';
+      const currContainer = parentEle.closest('.resize_drag_window, .moveableWindow');
+      debounceRescanStatBlock(currContainer, customStatId, tokenId);
       window.JOURNAL.setPersistTimeout();
+      debounceSendNote(customStatId, window.JOURNAL.notes[customStatId], tokenId, currContainer);
       $('.import-loading-indicator').remove();
     } catch (e) {
       console.error('Failed to import file', file.name, e);
@@ -393,20 +289,25 @@ function import_pc_template_html(files, parentEle, customStatId, tokenId) {
   };
 	reader.readAsText(file);
 }
-const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId) => {
+const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId, currScroll, force = false) => {
   const token = window.TOKEN_OBJECTS[tokenId];
-  
   let targetRescan = $(container).find('.avtt-stat-block-container, .note-text').first();
+  targetRescan.find('[style=""]').removeAttr('style');
+  targetRescan.find('[class=""]').removeAttr('class');
   if(!targetRescan.length){
     container = $(container).closest('.avtt-stat-block-container, .note-text').parent();
     targetRescan = $(container).find('.avtt-stat-block-container, .note-text').first();
   }
+  if(!force && targetRescan.find('[contenteditable="true"]:is(:focus, :focus-within)').length>0){
+    return;
+  }
+  const liveScroll = targetRescan[0]?.scrollTop;
   $(targetRescan).html(window.JOURNAL.notes[noteId].text);
   $(container).find('.injected-input, .added-input-desc').remove();
   $(container).find('.add-input:not(.avtt-custom-tracker)').replaceWith((i, innerHtml) => {
     return innerHtml;
   })
-  const currScroll = targetRescan[0].scrollTop;
+  currScroll = liveScroll || 0;
   await window.JOURNAL.translateHtmlAndBlocks(targetRescan);
   add_journal_roll_buttons(targetRescan, tokenId);
   window.JOURNAL.add_journal_tooltip_targets(targetRescan);
@@ -416,6 +317,7 @@ const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId) =>
   add_aoe_statblock_click(targetRescan, tokenId);
   targetRescan.find('a').attr('contenteditable', 'false');
   if(tokenId){
+    sync_pc_template(window.all_token_objects[tokenId], container);
     container.find("img.monster-image, .monster-image").each((i,block) => {
       createSendPlayerButton(block, "login", true).insertAfter(block);
     });
@@ -448,8 +350,11 @@ const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId) =>
       
     })
 
-    container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("click.roll").on("click.roll", function (e) {
+    container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("pointerdown.roll touchstart.roll").on("pointerdown.roll touchstart.roll", function (e) {
+      if (e.button === 2) return;
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       if($(e.target).text().includes('Recharge'))
         return;
       let rollButtons = $(e.currentTarget).closest('em:has(strong), strong:has(em)').nextUntil(':has(.avtt-ability-roll-button)')
@@ -489,7 +394,8 @@ const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId) =>
         
 
 
-          window.diceRoller.roll(diceRoll, true, undefined, get_avtt_setting_value('monsterCritType'), undefined, data.damageType);
+          const rollSettings = typeof get_token_roll_settings === 'function' ? get_token_roll_settings(tokenId) : {};
+          window.diceRoller.roll(diceRoll, true, rollSettings.critRange || 20, rollSettings.crit ?? get_avtt_setting_value('monsterCritType'), undefined, data.damageType);
 
         }
       }
@@ -502,71 +408,26 @@ const debounceRescanStatBlock = mydebounce(async (container, noteId, tokenId) =>
       }
     }
     $("span.hideme").parent().parent().hide();
-  }
-  container.find('table').each(function() {
-    const $table = $(this);
-    const rowsContainer = $table.find('tbody').length > 0 ? $table.find('tbody') : $table;
-    if (rowsContainer.find('> tr').length > 1) {
-      rowsContainer.find('> tr').each(function() {
-        const $row = $(this);
-        if ($row.find('> .table-row-drag-handle').length === 0) {
-          const $handleCell = $('<td class="table-row-drag-handle" contenteditable="false" aria-hidden="true">⋮⋮</td>');
-          $row.prepend($handleCell);
-        }
-      });
+    let imageUrl = parse_img(token.options.imgsrc);
 
-      $table.sortable({
-        items: '> tbody > tr, > tr',
-        handle: '.table-row-drag-handle',
-        placeholder: 'ui-sortable-placeholder',
-        update: function() {
-          const closestNote = container.find('.avtt-stat-block-container').first();
-          const noteText = closestNote.length > 0 ? closestNote : container;
-          window.JOURNAL.persistStatBlockContent(noteId, noteText, container, {tokenId, forceSave: true, rescanStatBlock: false});
-        }
-      })
-      const header = $table.find('th').first().parent().parent();
-      header.find('> tr').each(function() {
-        const $row = $(this);
-        if ($row.find('> .header-spacer').length === 0) {
-          const $handleCell = $('<th class="header-spacer" aria-hidden="true"></td>');
-          $row.prepend($handleCell);
-        }
-      });
+    if(token.options.imgsrc.startsWith('above-bucket-not-a-url')){
+      imageUrl = await getAvttStorageUrl(imageUrl);
     }
-    if($table.next('.add-table-row').length>0)
-      return;
-    const add_table_row = $(`<button class="add-table-row">+</button>`);	
-    $table.after(add_table_row);
-  });
-  container.off('pointerdown.profChange, touchstart.profChange').on('pointerdown.profChange, touchstart.profChange', '.prof-checkbox', (e)=>{
-    e.preventDefault();
-    const target = $(e.currentTarget);
-    const currentState = parseInt(target.attr('data-state'));
-    const newState = (currentState + 1) % 4;
-    target.attr('data-state', newState);
-    const note_text = container.find('.avtt-stat-block-container').first();
-    window.JOURNAL.persistStatBlockContent(noteId, note_text, container, {tokenId, forceSave: true, rescanStatBlock: false});
-  })
-  container.off('pointerdown.addRow, touchstart.addRow').on('pointerdown.addRow, touchstart.addRow', '.add-table-row', function (e) {
-    e.preventDefault();
-			const table = $(e.target).prev('table');
-      const tableBody = $(table).find('tbody');
-      const targetContainer = tableBody.length>0 ? tableBody : table;
-      const newRow = targetContainer.find('>tr:last').clone();
-      newRow.find('td:not(.table-row-drag-handle), th').html('');
-      targetContainer.append(newRow);
-  });
-
-  $(container).find('.avtt-stat-block-container, .note-text')[0].scrollTop = currScroll;
-
-
-  if(window.lockTemplateStatBlocks){
-    container.find('.dnd-sheet button').attr("contenteditable", "false");
-  } else{
-    container.find('.dnd-sheet [contenteditable]:not(a):not(.table-row-drag-handle)').attr("contenteditable", "true");
+    container.find('.avtt-stat-block-container').append(`<div class="image" style="display: inline-block; position: relative;"><${(token.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => token.options.imgsrc.includes(d))) ? 'video disableremoteplayback muted' : 'img'}
+      src="${imageUrl}"    
+      class="monster-image"
+      style="max-width: 100%;">
+      </div>`);   
+    container.find("img.monster-image, .monster-image").each((i,block) => {
+      createSendPlayerButton(block, "login", true).insertAfter(block);
+    });
   }
+  window.JOURNAL.bindDndSheetTemplateEvents(noteId, targetRescan, container, {tokenId, showControls: false});
+  window.JOURNAL.ensureEnclosingZWSP(targetRescan[0]);
+  inject_statblock_buff_dropdown(container, tokenId);
+  $(container).find('.avtt-stat-block-container, .note-text')[0].scrollTop = currScroll;
 }, 1000);
+
 
 
 async function build_monster_stat_block(statBlock, token) {
@@ -1812,7 +1673,7 @@ class MonsterStatBlock {
     }
 
     initiativeButton(){
-      return this.rollButton(`1d20`, this.data.initiativeBonus != null ? this.initiativeModString : this.dexModString, 'Roll', 'Initiative', false)                   
+      return this.rollButton(`1d20`, this.data.initiativeBonus != null ? this.initiativeModString : this.dexModString, 'Check', 'Initiative', false)                   
     }
 
     statButton(value, stat, parenthesis = true) {
@@ -1850,8 +1711,8 @@ class MonsterStatBlock {
             return `${statDefinition.key} ${this.rollButton("1d20", statModString, "save", statDefinition.key)}`
         }).join(", ");
     }
-
     get skillsHtml() {
+
         if (typeof this.data.skillsHtml === "string" && this.data.skillsHtml.length > 0) {
             return this.data.skillsHtml; // data.skills isn't always correct. Or at least wasn't correct for Vecna
         }
@@ -2164,7 +2025,7 @@ function getNonLegacySpellId(options){
     }
     let newSpell
     if(options.tooltipName){
-      newSpell = window.SPELLS_CACHE.filter(d=> d.definition.name.toLowerCase() == options.tooltipName && (!d.definition.isLegacy || d.definition.isHomebrew)); 
+      newSpell = window.SPELLS_CACHE.filter(d=> d.definition.name.toLowerCase() == options.tooltipName.toLowerCase() && (!d.definition.isLegacy || d.definition.isHomebrew)); 
       return newSpell[0].definition.id;
     } else if(options.id){
         const spell = window.SPELLS_CACHE.filter(d=> d.definition.id == options.id);
@@ -2176,11 +2037,11 @@ function getNonLegacySpellId(options){
         options.tooltipName = name;
     }
     if(!newSpell[0]){
-        console.warn('Legacy fallback', options)
-        newSpell = window.SPELLS_CACHE.filter(d=> d.name.toLowerCase() == options.tooltipName && d.isLegacy);
+        noisy_log('Legacy fallback', options)
+        newSpell = window.SPELLS_CACHE.filter(d=> d.definition.name.toLowerCase() == options.tooltipName.toLowerCase() && d.definition.isLegacy);
     }
     if(!newSpell[0]){
-      console.warn('Spell does not exist');
+      noisy_log('Spell does not exist');
       return false;
     }
     return newSpell[0].definition.id;
@@ -2191,20 +2052,20 @@ function getNonLegacyItemId(options){
     }
     let newItem 
     if(options.tooltipName){
-      newItem = window.ITEMS_CACHE.filter(d=> d.name.toLowerCase() == options.tooltipName && (!d.isLegacy || d.isHomebrew)); 
-      return newItem[0].id;
-    } else if(options.id){
+      newItem = window.ITEMS_CACHE.filter(d=> d.name.toLowerCase() == options.tooltipName.toLowerCase() && (!d.isLegacy || d.isHomebrew) && (!options.id || d.id == options.id));
+    } 
+    if(!newItem?.[0] && options.id){
         const item =  window.ITEMS_CACHE.filter(d=> d.id == options.id);
         const name = item[0].name.toLowerCase();
         newItem = window.ITEMS_CACHE.filter(d=> d.name.toLowerCase() == name && (!d.isLegacy || d.isHomebrew));
         options.tooltipName = name;
     }
     if(!newItem[0]){
-        console.warn('Legacy fallback', options)
-        newItem = window.ITEMS_CACHE.filter(d=> d.name.toLowerCase() == options.tooltipName && d.isLegacy);
+        noisy_log('Legacy fallback', options)
+        newItem = window.ITEMS_CACHE.filter(d=> d.name.toLowerCase() == options.tooltipName.toLowerCase() && d.isLegacy);
     }
     if(!newItem[0]){
-      console.warn('Item does not exist', options);
+      noisy_log('Item does not exist', options);
       return false;
     }
     return newItem[0].id;
@@ -2340,8 +2201,10 @@ const fetch_tooltip_immediate = async (dataTooltipHref, name, callback, callback
         if(get_avtt_setting_value('2024Tooltips')){
           if(type == 'spells')
             id= getNonLegacySpellId({id});
-          else if(type == 'magic-items' || type == 'adventuring-gear')
-            id = getNonLegacyItemId({id});
+          else if(type == 'magic-items' || type == 'adventuring-gear' || type == 'armor' || type == 'weapons'){ 
+            id = getNonLegacyItemId({id, tooltipName: name});
+          }
+
         }
         const typeAndId = `${type}/${id}`;
        
@@ -2465,9 +2328,26 @@ function add_tooltip_aoe_buttons(html, tokenId){
   }  
 }
 
+function get_tooltip_display_document(hoverEvent) {
+    const targetDocument = hoverEvent.currentTarget?.ownerDocument || document;
+    const targetWindow = targetDocument.defaultView;
+    try {
+        // A popout is its own top-level window, while an iframe should keep
+        // using the main AboveVTT window for its tooltip.
+        return targetWindow && targetWindow !== targetWindow.top ? targetWindow.top.document : targetDocument;
+    } catch (error) {
+        // Cross-origin frames cannot be inspected; retain the main document.
+        return document;
+    }
+}
+
 function display_tooltip(tooltipJson, container, hoverEvent, tokenId=undefined) {
     if (typeof tooltipJson?.Tooltip === "string") {
-        remove_tooltip(0, false);
+        // Cloned popout handlers execute in the opener, but the target belongs
+        // to the child document. Keep the flyout in that same document, unless
+        // the target is in an iframe, which displays its tooltip in the main UI.
+        const tooltipDocument = get_tooltip_display_document(hoverEvent);
+        remove_tooltip(0, false, tooltipDocument);
 
         noisy_log("container", container)
         const tooltipHtmlString = tooltipJson.Tooltip.replaceAll(/<script>[\S\s]+<\/script>/gi, '');
@@ -2476,18 +2356,18 @@ function display_tooltip(tooltipJson, container, hoverEvent, tokenId=undefined) 
         build_and_display_sidebar_flyout(hoverEvent.clientY, function (flyout) {
             setup_tooltip_flyout(flyout, tooltipHtmlString, ['tooltip-flyout'], hoverEvent, {id: tokenId, container, isRitual: tooltipJson.isRitual, componentText: tooltipJson.componentText});
             flyout.css("background-color", "#fff");
-        });
+        }, tooltipDocument);
     }
 }
 
-var removeToolTipTimer = undefined;
-function remove_tooltip(delay = 0, removeHoverNote = true) {
-    clearTimeout(removeToolTipTimer);
+function remove_tooltip(delay = 0, removeHoverNote = true, tooltipDocument = document) {
+    const tooltipWindow = tooltipDocument.defaultView || window;
+    clearTimeout(tooltipWindow.removeToolTipTimer);
     if (delay > 0) {
-      removeToolTipTimer = setTimeout(function(){remove_sidebar_flyout(removeHoverNote)}, delay);
+      tooltipWindow.removeToolTipTimer = setTimeout(function(){remove_sidebar_flyout(removeHoverNote, tooltipDocument)}, delay);
     } else {
-      removeToolTipTimer = undefined;
-      remove_sidebar_flyout(removeHoverNote);
+      tooltipWindow.removeToolTipTimer = undefined;
+      remove_sidebar_flyout(removeHoverNote, tooltipDocument);
     }
 }
 
@@ -2498,13 +2378,15 @@ function add_stat_block_hover(statBlockContainer, tokenId) {
         if(hoverEvent.target.tagName == 'INPUT')
           return;
         let currentTarget = $(hoverEvent.currentTarget);
+        const tooltipDocument = get_tooltip_display_document(hoverEvent);
+        const tooltipWindow = tooltipDocument.defaultView || window;
         let cursorOffset = {
           left : 10,
           top  : -10
         }
         if (hoverEvent.type === "mouseenter") {
-          clearTimeout(window.tooltipHoverTimeout);
-          window.tooltipHoverTimeout = setTimeout(function(){
+          clearTimeout(tooltipWindow.tooltipHoverTimeout);
+          tooltipWindow.tooltipHoverTimeout = setTimeout(function(){
             currentTarget.css({
               '--cursor-offsetX': `${(hoverEvent.clientX + cursorOffset.left)}px`,
               '--cursor-offsetY': `${(hoverEvent.clientY + cursorOffset.top)}px`
@@ -2521,13 +2403,19 @@ function add_stat_block_hover(statBlockContainer, tokenId) {
                 if(container.find('.tooltip-header').length === 0){
                   container = currentTarget.closest("#resizeDragMon");
                 }
+                if(container.length === 0){
+                  container = currentTarget.closest(".moveableWindow");
+                }
                 if (container.length === 0) {
                     container = currentTarget.closest(".sidebar-modal");
                 }
                 if (container.length === 0) {
+                    container = currentTarget.closest(".avtt-stat-block-container");
+                }
+                if (container.length === 0) {
                     container = is_characters_page() ? $(".ct-sidebar__inner [class*='styles_content']") : $(".sidebar__pane-content");
                 }
-
+                hoverEvent.clientY += 20;
                 display_tooltip(tooltipJson, container, hoverEvent, tokenId);   
             };
             if(window.tooltipCache == undefined)
@@ -2565,12 +2453,12 @@ function add_stat_block_hover(statBlockContainer, tokenId) {
         } else if (hoverEvent.type === "mousemove") {
 
           currentTarget.css({
-            '--cursor-offsetX': `${(e.clientX + cursorOffset.left)}px`,
-            '--cursor-offsetY': `${(e.clientY + cursorOffset.top)}px`
+            '--cursor-offsetX': `${(hoverEvent.clientX + cursorOffset.left)}px`,
+            '--cursor-offsetY': `${(hoverEvent.clientY + cursorOffset.top)}px`
           })
         } else if (hoverEvent.type === "mouseleave") {
-            clearTimeout(window.tooltipHoverTimeout); 
-            remove_tooltip(500);
+            clearTimeout(tooltipWindow.tooltipHoverTimeout);
+            remove_tooltip(500, true, tooltipDocument);
             currentTarget.toggleClass('loading-tooltip', false);
             currentTarget.off('mousemove.cursor');
         }

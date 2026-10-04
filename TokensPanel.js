@@ -325,7 +325,8 @@ function rebuild_token_items_list() {
                 playerCustomization.rootId = RootFolder.Players.id;
             let folderPath = playerCustomization?.folderPath();
             let parentId = playerCustomization?.parentId; 
-            return SidebarListItem.PC(pc.sheet, pc.name, pc.image, folderPath, parentId);
+            const name = playerCustomization?.name() ?? pc.name;
+            return SidebarListItem.PC(pc.sheet, name, pc.image, folderPath, parentId);
         });
     // Players Folders
     window.TOKEN_CUSTOMIZATIONS
@@ -1129,6 +1130,86 @@ function random_number_suffix(suffixNumbers = []) {
     }
     return randomNumber;
 }
+/**
+ * Processes a pc template statblock and assigns the stats to the token options
+ * @param {JQuery<HTMLElement>} container is the conainer that has the statblock in it
+ * @param {Object} options is the token options we want to update
+ */
+function setPcTemplateStats(container, options){
+    const match = {
+        0: /^str/gi,
+        1: /^dex/gi,
+        2: /^con/gi,
+        3: /^int/gi,
+        4: /^wis/gi,
+        5: /^cha/gi
+    }
+    container.find('.abilities-table-container .box-field table tr').map((i, el) => {
+        const statName = $(el).find('td.table-row-drag-handle+td, td:nth-of-type(1)').text().trim();
+        const statMod = $(el).find('td.table-row-drag-handle+td+td, td:nth-of-type(2)').text().trim().match(/([+-][0-9]+)/gi)?.[0];
+        const statSave = $(el).find('td.table-row-drag-handle+td+td+td, td:nth-of-type(3)').text().trim().match(/([+-][0-9]+)/gi)?.[0];
+        if (statName) {
+            if (!options.customStat) {
+                options.customStat = {};
+            }
+            for (let key in match) {
+                if (match[key].test(statName)) {
+                    options.customStat[key] = {
+                        mod: statMod,
+                        save: statSave
+                    }
+                }
+            } 
+        }
+    }); 
+
+    const armorText = container.find('.combat-metric>.label:contains("Armor Class")+.metric-val').text().trim().match(/([0-9]+)/gi)?.[0];
+    if (armorText) {
+        options.armorClass = armorText;
+    }
+
+    const initiativeText = container.find('.combat-metric>.label:contains("Initiative")+.metric-val').text().trim().match(/([+-][0-9]+)/gi)?.[0];
+    if (initiativeText) {
+        options.customInit = initiativeText;
+    }
+
+    const hpRow = container.find(".hp-row.hp-input .col .box-field");
+    if (hpRow.length > 0) {
+    const hpIndex = {
+        0: 'current',
+        1: 'maximum',
+        2: 'temp'
+    }
+    hpRow.map((i, el) => {
+        const hpText = $(el).text().trim().match(/([0-9]+)/gi)?.[0];
+        if (hpText) {
+            options.hitPointInfo = options.hitPointInfo || {};
+            options.hitPointInfo[hpIndex[i]] = hpText;
+        }
+    }); 
+    }
+
+    return options;
+}
+/**Syncs token data back to pc template
+ * @param {Token} token is the token we want to sync back to the pc template
+ */
+function sync_pc_template(token, container) {
+  container = container ?? $(`.custom-stat-block[data-token-id='${token.options.id}']`).parent();
+  
+  const hpRow = container.is('.dnd-sheet') ? container.find(".hp-row.hp-input .col .box-field") : container.find(".dnd-sheet .hp-row.hp-input .col .box-field");
+  if (hpRow.length > 0) {
+    const hpIndex = {
+      0: 'current',
+      1: 'maximum',
+      2: 'temp'
+    }
+    hpRow.map((i, el) => {
+      $(el).text(token.options.hitPointInfo[hpIndex[i]]);
+    }); 
+  }
+}
+
 
 /**
  * Creates a {Token} object and places it on the scene.
@@ -1140,8 +1221,6 @@ function random_number_suffix(suffixNumbers = []) {
  * @param disableSnap {boolean} if true, tokens will not snap to the grid. This is false by default and only used when placing multiple tokens
  * @param nameOverride {string} if present will override the list items name with this name. This is for dragging out player aoe tokens from sheets
  */
-
-
 async function create_and_place_token(listItem, hidden = undefined, specificImage= undefined, eventPageX = undefined, eventPageY = undefined, disableSnap = false, nameOverride = "", mapPoint=false, extraOptions=undefined) {
 
 
@@ -1657,8 +1736,10 @@ async function create_and_place_token(listItem, hidden = undefined, specificImag
                 showErrorMessage(`Failed to fetch character data from DDB for url: ${pcURL}; It's possible the url is incorrect or you do not have access to the character`);
             }
         }
-        
-        if ($(searchText).find('table.abilities-saves, table.stat-table').length > 0) {
+
+        options = setPcTemplateStats($(`<div>${searchText}</div>`), options);
+
+        if (options.customStat == undefined &&$(searchText).find('table.abilities-saves, table.stat-table').length > 0) {
             let physicalStats = $(searchText).find('table.abilities-saves.physical, table.stat-table.physical');
             let mentalStats = $(searchText).find('table.abilities-saves.mental, table.stat-table.mental');
             options.customStat = {
@@ -2993,7 +3074,7 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
         });
     }
    
-    if (listItem.isTypeMyToken()) {
+    if (listItem.isTypeMyToken() || listItem.isTypePC()) {
 
         // MyToken name
         inputWrapper.append($(`<div class="token-image-modal-footer-title" style="width:100%;padding-left:0px">Token Name</div>`));
@@ -3345,6 +3426,20 @@ function display_aoe_token_configuration_modal(listItem, placedToken = undefined
                 </div></div>`;
 
     inputWrapper.append(lightInputs);
+
+    const visionAngleInput = build_token_vision_radius_input(targetOptions.visionAngle ?? 360, function (newDeg, persist = false) {
+        customization.setTokenOption("visionAngle", newDeg);
+        if (persist)
+            persist_token_customization(customization);
+    }, 'Token Vision Angle', 'visionAngle');
+    inputWrapper.find(".token-config-aura-wrapper.light .menu-vision-aura").first().before(visionAngleInput);
+
+    const lightAngleInput = build_token_vision_radius_input(targetOptions.lightAngle ?? 360, function (newDeg, persist = false) {
+        customization.setTokenOption("lightAngle", newDeg);
+        if (persist)
+            persist_token_customization(customization);
+    }, 'Token Light Angle', 'lightAngle');
+    inputWrapper.find(".token-config-aura-wrapper.light .menu-inner-aura").first().before(lightAngleInput);
 
 
 
@@ -3814,7 +3909,13 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
         modalBody.append(tokenDiv);
     }
     if (listItem?.type === ItemType.Aoe) {
-        const withoutDefault = get_available_styles().filter(aoeStyle => aoeStyle !== "Default")
+        const configuredStyles = typeof get_aoe_style_tokens === "function"
+            ? Object.keys(get_aoe_style_tokens())
+            : [];
+        const withoutDefault = [...new Set([
+            ...get_available_styles(),
+            ...configuredStyles
+        ])].filter(aoeStyle => aoeStyle.toLowerCase() !== "default");
         alternativeImages = withoutDefault.map(aoeStyle => {
           return `class=aoe-token-tileable aoe-style-${aoeStyle.toLowerCase()} aoe-shape-${listItem.shape}`
         })
@@ -3828,6 +3929,21 @@ function redraw_token_images_in_modal(sidebarPanel, listItem, placedToken, drawI
 
         batch.forEach(imageUrl => {
             const tokenDiv = build_token_div_for_sidebar_modal(imageUrl, listItem, placedToken);
+            if (listItem?.isTypeAoe()) {
+                const styleKey = tokenDiv.attr("data-style");
+                const aoeImage = get_aoe_style_token_image(styleKey);
+                const aoeImageTarget = tokenDiv.find(".div-token-image");
+                if (aoeImage && aoeImageTarget.length > 0) {
+                    const isVideo = get_aoe_style_token_video(styleKey);
+                    updateTokenSrc(aoeImage, aoeImageTarget, isVideo).then(function() {
+                        apply_aoe_style_display(aoeImageTarget, {
+                            tiled: isVideo ? undefined : get_aoe_style_token_tiling(styleKey),
+                            opacity: get_aoe_style_token_opacity(styleKey),
+                            animated: get_aoe_style_token_animation(styleKey)
+                        });
+                    });
+                }
+            }
             const image = parse_img(imageUrl);
             if ((currentlySelectedToken && image === currentlySelectedToken) || (selectedTokenImage && image === selectedTokenImage)) {
                 tokenDiv.toggleClass('selected', true);
@@ -3876,7 +3992,9 @@ function build_alternative_image_for_modal(image, options, placedToken, listItem
         mergedOptions = $.extend(true, {}, mergedOptions, placedToken.options);
     }
     if (listItem?.isTypeAoe()) {
-        mergedOptions = $.extend(true, {}, mergedOptions, build_aoe_token_options(listItem.style, listItem.shape, listItem.size, listItem.name));
+        const styleMatch = typeof image === "string" ? image.match(/(?:^|\s)aoe-style-([\w-]+)/i) : undefined;
+        const aoeStyle = styleMatch ? styleMatch[1] : listItem.style;
+        mergedOptions = $.extend(true, {}, mergedOptions, build_aoe_token_options(aoeStyle, listItem.shape, listItem.size, listItem.name));
     }
     mergedOptions.imgsrc = image;
     let tokenDiv = build_example_token(mergedOptions);
@@ -3892,7 +4010,10 @@ function build_alternative_image_for_modal(image, options, placedToken, listItem
     }
     if (listItem?.isTypeAoe()) {
         tokenDiv.attr("data-img", true);
-        tokenDiv.attr("data-style", image.match(/aoe-style-\w+/gm)[0].replace(" aoe-style-",""));
+        const styleMatch = image.match(/(?:^|\s)aoe-style-([\w-]+)/i);
+        if (styleMatch) {
+            tokenDiv.attr("data-style", styleMatch[1]);
+        }
         tokenDiv.attr("data-size", listItem.size);
         tokenDiv.attr("data-shape", listItem.shape);
     }
@@ -4658,7 +4779,7 @@ function register_custom_token_image_context_menu() {
                         if(placedToken !== undefined){
                             for(id of allTokenIds){
                                 const token = window.TOKEN_OBJECTS[id];
-                                if(!token)
+                                if(!token || token.isAoe())
                                     continue;
                                 token.removeAlternativeImage(imgSrc);
 
@@ -4671,7 +4792,7 @@ function register_custom_token_image_context_menu() {
                             }
                             for (id of allTokenIds) {
                                 const token = window.TOKEN_OBJECTS[id];
-                                if (!token)
+                                if (!token || token.isAoe())
                                     continue;
                                 token.options.imgsrc = "";
                                 token.place_sync_persist();
@@ -4707,7 +4828,7 @@ function register_custom_token_image_context_menu() {
                         
                         for(id of allTokenIds){
                             const token = window.TOKEN_OBJECTS[id];
-                            if (!token)
+                            if (!token || token.isAoe())
                                 continue;
                             let listItem = list_item_from_token(token);
                             persistListItem(listItem);  
@@ -4893,7 +5014,7 @@ function display_change_image_modal(placedToken) {
     /// draw tokens in the body
     for (id of allTokenIds){
         const token = window.TOKEN_OBJECTS[id];
-        if(!token)
+        if(!token || token.isAoe())
             continue;
         let listItem = list_item_from_token(token);
         let alternativeImages = token.options.imgsrc != '' ? [token.options.imgsrc] : [];
@@ -4931,8 +5052,11 @@ function display_change_image_modal(placedToken) {
                 const tokenMultiplierAdjustment = (!window.CURRENT_SCENE_DATA.scaleAdjustment) ? 1 : (window.CURRENT_SCENE_DATA.scaleAdjustment.x > window.CURRENT_SCENE_DATA.scaleAdjustment.y) ? window.CURRENT_SCENE_DATA.scaleAdjustment.x : window.CURRENT_SCENE_DATA.scaleAdjustment.y;
                 const hpps = window.CURRENT_SCENE_DATA.hpps * tokenMultiplierAdjustment;
                 for (id of allTokenIds) {
+
                     const token = window.TOKEN_OBJECTS[id];
-                    if(token){ 
+                    if(token?.isAoe())
+                        continue;
+                    if(token){
                         
                         if (token.options.alternativeImagesCustomizations != undefined) {
                             token.options = $.extend(true, {}, 
@@ -4951,7 +5075,8 @@ function display_change_image_modal(placedToken) {
 
 
                     const allToken = window.all_token_objects[id];
-                    if (allToken) {
+                    
+                    if (allToken && !allToken.isAoe()) {
                         allToken.options = {
                             ...token.options
                         }
@@ -4973,7 +5098,7 @@ function display_change_image_modal(placedToken) {
         }
         for (id of allTokenIds){
             const token = window.TOKEN_OBJECTS[id];
-            if(!token)
+            if(!token || token.isAoe())
                 continue;
             if (!token.options.alternativeImages) {
                 token.options.alternativeImages = [];
@@ -5001,7 +5126,7 @@ function display_change_image_modal(placedToken) {
         for (let i = 0; i < links.length; i++) {
             for (id of allTokenIds) {
                 const token = window.TOKEN_OBJECTS[id];
-                if (!token)
+                if (!token || token.isAoe())
                     continue;
                 if (!token.options.alternativeImages) {
                     token.options.alternativeImages = [];
@@ -5026,7 +5151,7 @@ function display_change_image_modal(placedToken) {
         for (let i = 0; i < links.length; i++) {
             for (id of allTokenIds) {
                 const token = window.TOKEN_OBJECTS[id];
-                if (!token)
+                if (!token || token.isAoe())
                     continue;
                 if (!token.options.alternativeImages) {
                     token.options.alternativeImages = [];
@@ -5052,7 +5177,7 @@ function display_change_image_modal(placedToken) {
         for (let i = 0; i < links.length; i++) {  
             for (id of allTokenIds) {
                 const token = window.TOKEN_OBJECTS[id];
-                if (!token)
+                if (!token || token.isAoe())
                     continue;
                 if (!token.options.alternativeImages) {
                     token.options.alternativeImages = [];
@@ -5130,6 +5255,11 @@ const fetch_and_cache_scene_monster_items = mydebounce( () => {
 });
 
 const fetch_and_cache_monsters = mydebounce( (monsterIds, callback=()=>{}, open5e) => {
+    if(monsterIds.length === 0) {
+        noisy_log("fetch_and_cache_monsters no monsters to fetch");
+        callback();
+        return;
+    }
     if(open5e){
         const cachedIds = Object.keys(cached_open5e_items);
         const monstersToFetch = monsterIds.filter(id => !cachedIds.includes(id) && id != 'customStat');
@@ -5209,7 +5339,7 @@ function convert_open5e_monsterData(monsterData){
         {
             "statId": 6,
             "name": null,
-            "value": monsterData.charisma
+            "value": monsterData.ability_scores?.charisma
         }];
 
         monsterData.passivePerception = monsterData.passive_perception || monsterData.skill_bonuses_all?.perception + 10;
@@ -5387,7 +5517,10 @@ function convert_open5e_monsterData(monsterData){
 
         monsterData.savingThrows = [];
         Object.entries(monsterData.saving_throws).forEach(([key, value]) => {
-            if(key == "strength"){
+            const abilityMod = monsterData.ability_scores?.[key] ? Math.floor((monsterData.ability_scores[key] - 10) / 2) : 0;
+            const proficiencyBonus = monsterData.proficiency_bonus ?? window.ddbConfigJson["challengeRatings"]?.find(obj => obj.id === monsterData.challengeRatingId)?.proficiencyBonus ?? 2;
+            value = value - abilityMod - proficiencyBonus;
+            if(key == "strength"){      
                 monsterData.savingThrows.push({statId: 1, bonusModifier: value})
             }
             else if(key == "dexterity"){

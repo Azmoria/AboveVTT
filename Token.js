@@ -21,6 +21,41 @@ const availableToAoe = [
 //reused transform definition
 const imageTransform = 'scale(var(--token-scale)) rotate(calc(var(--token-rotation) + var(--token-heading))) scaleX(var(--token-flip-x, 1))';
 function tokenFlipX(token) { return ((token.options.tokenFlip || 0) & 1) ? -1 : 1; }
+
+// Local cone clips travel with the aura; the parent retains the stationary wall clip.
+function tokenConeClipPath(width, height, angle, rotation = 0) {
+	const parsedAngle = Number.parseFloat(angle);
+	if(!Number.isFinite(parsedAngle) || parsedAngle >= 360) return 'none';
+	const coneWidth = Math.max(0, parsedAngle);
+	const center = 90 + (Number.parseFloat(rotation) || 0);
+	const start = center - coneWidth / 2;
+	const outerRadius = Math.hypot(width, height) / 2 + 1;
+	const centerRadius = Math.min(3, outerRadius);
+	const angles = [];
+	for(let offset = 0; offset < 360; offset += 5) angles.push(offset);
+	angles.push(coneWidth);
+	const points = [];
+	const addPoint = (offset, radius) => {
+		const radians = (start + offset) * Math.PI / 180;
+		points.push(`${width / 2 + Math.cos(radians) * radius}px ${height / 2 + Math.sin(radians) * radius}px`);
+	};
+	if(coneWidth > 0) addPoint(0, centerRadius);
+	for(const offset of [...new Set(angles)].sort((a, b) => a - b)){
+		addPoint(offset, coneWidth > 0 && offset <= coneWidth ? outerRadius : centerRadius);
+		if(coneWidth > 0 && offset === coneWidth) addPoint(offset, centerRadius);
+	}
+	return `polygon(${points.join(', ')})`;
+}
+
+function updateTokenConeClips(options) {
+	document.querySelectorAll(`.aura-element-container-clip[id='${options.id}'] .aura-element`).forEach(element => {
+		const angle = element.parentElement.classList.contains('light') ? options.lightAngle : options.visionAngle;
+		// Round auras already rotate in CSS; square auras explicitly disable that rotation.
+		const cssRotation = Number.parseFloat(getComputedStyle(element).rotate) || 0;
+		const localRotation = (Number.parseFloat(options.rotation) || 0) - cssRotation;
+		element.style.clipPath = tokenConeClipPath(parseFloat(element.style.width), parseFloat(element.style.height), angle, localRotation);
+	});
+}
 let lightFrameQueued = false;
 let pendingLightDarknessMoved = false;
 const throttleLight = throttle((darknessMoved = false) => {
@@ -113,12 +148,24 @@ var longDebounceLightChecks = mydebounce((darknessMoved = false) => {
 		debounceAudioChecks();
 }, 300);
 
-
+function get_token_by_id(tokenId){
+  return window.TOKEN_OBJECTS?.[tokenId] || window.all_token_objects?.[tokenId];
+}
 function random_token_color() {
 	const randomColorIndex = getRandomInt(0, TOKEN_COLORS.length);
 	return "#" + TOKEN_COLORS[randomColorIndex];
 }
-
+function update_boss_hp_bars(){
+	const bossHpBars = $(".boss-hp-bar");
+	for(let i = 0; i < bossHpBars.length; i++){
+		const bossHpBar = bossHpBars[i];
+		const tokenId = $(bossHpBar).attr("data-id");
+		const token = tokenId ? window.TOKEN_OBJECTS[tokenId] : null;
+		if(token){
+			token.update_health_aura();
+		}
+	}
+}
 class Token {
 
 	// Defines how many token-sizes a token is allowed to be moved outside of the scene.
@@ -159,6 +206,32 @@ class Token {
 	set hp(newValue) {
 		this.baseHp = newValue;
 	}
+	set totalHp(newValue) {
+		if(newValue > this.maxHp){
+			if(this.tempHp > 0){
+				if(newValue < this.hp){
+					this.tempHp = Math.max(0, this.tempHp - (this.hp - newValue));
+					this.baseHp = (newValue - this.tempHp);
+				} else if(this.baseHp < this.maxHp){
+					this.baseHp = newValue - this.tempHp < this.maxHp ? newValue - this.tempHp : this.maxHp;
+				} else{
+					this.tempHp = newValue - this.maxHp; // assume if full health they are adding temp hp.
+				}
+			} else {
+				if(newValue > this.hp && this.baseHp < this.maxHp){
+					this.baseHp = this.maxHp;
+				}
+				else{
+					this.tempHp = newValue - this.maxHp;
+				}
+			}
+		} else if(this.tempHp > 0 && newValue < this.hp){
+			this.tempHp = Math.max(0, this.tempHp - (this.hp - newValue));
+			this.baseHp = (newValue - this.tempHp);
+		} else{
+			this.baseHp = newValue - this.tempHp;
+		}
+	}
 
 	/** @return {number} the percentage of this token's base HP divided by it's max hp */
 	get hpPercentage() {
@@ -174,13 +247,13 @@ class Token {
 		return 0;
 	}
 	set baseHp(newValue) {
-		let currentHP = this.hp
+		let currentHP = this.baseHp;
 		if (this.options.hitPointInfo) {
-			this.options.hitPointInfo.current = newValue;
+			this.options.hitPointInfo.current = Math.min(this.maxHp, newValue);
 		} else {
 			this.options.hitPointInfo = {
 				maximum: this.maxHp,
-				current: newValue,
+				current: Math.min(this.maxHp, newValue),
 				temp: this.tempHp
 			};
 		}
@@ -600,27 +673,22 @@ class Token {
 		$("#aura_" + id.replaceAll("/", "")).remove();
 		$(`.aura-element-container-clip[id='${id}']`).parent().remove()
 		$(`[data-darkness='darkness_${id}']`).remove();
-		$(`[data-notatoken='notatoken_${id}']`).remove()
-
+		$(`[data-notatoken='notatoken_${id}']`).remove();
+		$(`.boss-hp-bar[data-id='${id}']`).remove();
 		if(this.options?.audioChannel?.audioId != undefined){
 			window.MIXER.deleteChannel(this.options.audioChannel.audioId)
 		}
 		if(removeFromCombatTracker == true){
 			if(this.options.combatGroupToken && window.DM){
-				for(let i in window.TOKEN_OBJECTS){
+				for(let i in window.all_token_objects){
 					if(i == this.options.combatGroupToken)
 						continue;
-
-					
-					if(window.TOKEN_OBJECTS[i].options.combatGroup == this.options.combatGroupToken){
-						delete window.TOKEN_OBJECTS[i].options.combatGroup;
-						delete window.TOKEN_OBJECTS[i].options.ct_show;
-						if(window.all_token_objects[i] != undefined){
-							delete window.all_token_objects[i].options.combatGroup;
-							delete window.all_token_objects[i].options.ct_show;
-						}
-						ct_remove_token(window.TOKEN_OBJECTS[i], false);
-						window.TOKEN_OBJECTS[i].update_and_sync();
+			
+					if(window.all_token_objects[i].options.combatGroup == this.options.combatGroupToken){
+						delete window.all_token_objects[i].options.combatGroup;
+						delete window.all_token_objects[i].options.ct_show;
+						ct_remove_token(window.all_token_objects[i], false);
+						window.all_token_objects[i].update_and_sync();
 					}
 				}
 			}
@@ -631,7 +699,7 @@ class Token {
 						count++;
 					}
 				}
-				if(count == 1){
+				if(count == 0){
 					window.TOKEN_OBJECTS[this.options.combatGroup].delete();
 				}
 			}
@@ -690,6 +758,11 @@ class Token {
 		tokenElement.css("--token-flip-x", tokenFlipX(this));		
 		tokenElement.find(".token-image").css("transform", imageTransform);
 		$(`.aura-element-container-clip[id='${this.options.id}'] .aura-element, .aura-element[data-id='${this.options.id}']`).css('--rotation', newRotation%360 + "deg");
+		updateTokenConeClips(this.options);
+		if (window.EXPERIMENTAL_SETTINGS.dragLight == true && (this.options.visionAngle < 360 || this.options.lightAngle < 360)){
+			throttleLight();
+		}
+
 	}
 	moveUp()        { this.moveDirection(-1,  0); }
 	moveDown()      { this.moveDirection( 1,  0); }
@@ -710,8 +783,15 @@ class Token {
 			// when a move "lands on" an edge (arbitrarily go either direction)
 			// todo: there is some small bug with this mechanism (it's not 100% consistent)
 			const halfTokenSize = this.options.size / 2;
-			tmpx += (Math.round(tmpx / grsize[0]) % 2 ? 1 : -1) + halfTokenSize;
-			tmpy += (Math.round(tmpy / grsize[1]) % 2 ? 1 : -1) + halfTokenSize;
+			tmpx += (Math.round(tmpx / grsize[0]) % 2 ? 1 : -1) + (halfTokenSize) - dx*5;
+			tmpy += (Math.round(tmpy / grsize[1]) % 2 ? 1 : -1) + (halfTokenSize) - dy*5;
+			if(this.options.gridSquares % 2 == 0) {
+				if (gridType == 2) {
+					dx *= Math.abs(dx+dy) % 2 == 0 ? 0.5 : 1;
+				} else {
+					dy *= Math.abs(dx+dy) % 2 == 0 ? 0.5 : 1;
+				}
+			}
 		} else{
 			tmpx += 5; // +5 makes sure it doesn't land on a grid intersection which can prevent tokens from moving or skip squares
 			tmpy += 5;
@@ -887,14 +967,19 @@ class Token {
 
                 const copyImage = tokenClone.find('.token-image');
 
-				if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
-					const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-					if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))){
-						updateTokenSrc(this.options.imgsrc, copyImage, this.options.videoToken)
+				if(!this.isAoe()){
+					const imageSrc = this.options.imgsrc;	
+					if(imageSrc.startsWith('above-bucket-not-a-url')){
+						const fileSrc = imageSrc.replace('above-bucket-not-a-url', '');
+						if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))){
+							updateTokenSrc(imageSrc, copyImage, this.options.videoToken)
+						}
 					}
-				}
-				else if (copyImage.attr('src') != parse_img(this.options.imgsrc)){
-					updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken)
+					else if (copyImage.attr('src') != parse_img(imageSrc)){
+						updateTokenSrc(parse_img(imageSrc), copyImage, this.options.videoToken)
+					}
+				}else{
+					copyImage.replaceWith(build_aoe_token_image(this));
 				}
 			}
 
@@ -1022,19 +1107,19 @@ class Token {
 		
 		}
 	}
-
+	
 	/**
 	 * updates the color of the health aura if enabled
 	 * @param token jquery selected div with the class "token"
 	 */
-	update_health_aura(token){
+	update_health_aura(token, forceBossUpdate=false){
 		// set token data to the player if this token is a player token, otherwise just use this tokens data
 		if($(`.token[data-id='${this.options.id}']>.hpvisualbar`).length<1){
 			let hpvisualbar = $(`<div class='hpvisualbar'></div>`);
 			$(`.token[data-id='${this.options.id}']`).append(hpvisualbar);
 		}
 
-
+		const bossHealthBar = this.options.healthauratype == "boss";
 		if(this.options.healthauratype == undefined){
 			if(this.options.disableaura){
 				this.options.healthauratype = "none"
@@ -1056,19 +1141,193 @@ class Token {
 			} else if(this.options.healthauratype == "aura-bloodied-50"){
 				this.options.disableaura = false;
 				this.options.enablepercenthpbar = false;
+			} else if(bossHealthBar){
+				this.options.disableaura = true;
+				this.options.enablepercenthpbar = false;
 			}
 		}
-
+		
+		token.toggleClass("boss", bossHealthBar);
+		
 		if (this.maxHp > 0) {
 			token.css('--hp-percentage', `${this.hpPercentage}%`);
 			token.css('--temp-hp-percentage', `${this.tempHpPercentage}%`);
 			token.css('--total-percentage', `${this.tempHpPercentage + this.hpPercentage}%`)
 		}
+		if(bossHealthBar){
+			
+			const body = $(`body`);
+			const visibleSidebarWidth = is_sidebar_visible() ? get_sidebar_width() : 0;
+			let hpBar = $(`.boss-hp-bar[data-id='${this.options.id}']`);
+			if (hpBar.length < 1) {
+				hpBar = $(`
+					<div class='boss-hp-bar' style="--sidebar-width: ${visibleSidebarWidth}px;" data-id='${this.options.id}'>
+						<div class="hp-bar-track">
+							<div class="hp-base">
+								<div class="hp-temp-layer1"></div>
+							</div>
+							<div class="hp-temp-layer2"></div>
+						</div>
+						<span class="token-name"></span>
+						<span class="token-hp"></span>
+					</div>
+				`);
+				
+				const positionAdjust = body.find('.boss-hp-bar').length * 60;
+				hpBar.css('--bottom-adjust', `${positionAdjust}px`);
+				body.append(hpBar);
+			}
+			const tokenName = `${this.options.revealname || window.DM ? this.options.name : ""}`;
+			const tokenHpText = `${window.DM || this.options.player_owned ? `${this.baseHp}${this.tempHp > 0 ? ` (+${this.tempHp})` : ""} / ${this.maxHp}` : ""}`;
+			hpBar.find('.token-name').text(tokenName);
+			hpBar.find('.token-hp').text(tokenHpText);
+						
+			const animateBossHealthBar = () => {		
+				const hpBase = hpBar.find('.hp-base');
+				const hpTemp1 = hpBar.find('.hp-temp-layer1');
+				const hpTemp2 = hpBar.find('.hp-temp-layer2');
 
+				const newHpPct = Math.min(100, Math.max(0, Math.round(this.hpPercentage)));
+				const rawTotal = Math.round(this.hpPercentage + this.tempHpPercentage);
+				const temp1RawPct = Math.min(100 - newHpPct, Math.round(this.tempHpPercentage));
+				const newTemp1Pct = newHpPct > 0 ? Math.round((temp1RawPct / newHpPct) * 100) : 0;
+				const newTemp2Pct = Math.max(0, rawTotal - 100);
+
+
+				const oldHpPct = Math.round(parseFloat(hpBase.css('--hp-percentage'))) || 0;
+				const oldTemp1Pct = Math.round(parseFloat(hpTemp1.css('--temp-hp1-percentage'))) || 0;
+				const oldTemp2Pct = Math.round(parseFloat(hpTemp2.css('--temp-hp2-percentage'))) || 0;
+
+
+				const oldTemp1Raw = Math.round((oldTemp1Pct / 100) * oldHpPct);
+
+
+				const startHp = oldHpPct;
+				const startTemp1Raw = oldTemp1Raw;
+				const startTemp2 = oldTemp2Pct;
+
+				const targetHp = newHpPct;
+				const targetTemp1Raw = temp1RawPct;
+				const targetTemp2 = newTemp2Pct;
+
+
+				const distHp = Math.abs(targetHp - startHp);
+				const distTemp1 = Math.abs(targetTemp1Raw - startTemp1Raw);
+				const distTemp2 = Math.abs(targetTemp2 - startTemp2);
+				const totalDist = distHp + distTemp1 + distTemp2;
+
+				if (!forceBossUpdate && totalDist == 0) return;
+
+				const MAX_BUDGET = 5.5; 
+				const MIN_BUDGET = 3.0; 
+
+				let duration = 0;
+				if (totalDist < 5) {
+					duration = Math.max(0.8, (totalDist / 100) * MAX_BUDGET * 2.5);
+				} else {
+					duration = Math.max(MIN_BUDGET, (totalDist / 100) * MAX_BUDGET);
+				}
+				function easeBossCinematic(x) {
+					return 1 - Math.pow(1 - x, 4); 
+				}
+
+				if (this.bossAnimation) cancelAnimationFrame(this.bossAnimation);
+
+				function setBorderTip(currentHp, currentTemp1, currentTemp2) {
+					hpBase.css('border-right-color', 'transparent');
+					hpTemp1.css('border-right-color', 'transparent');
+					hpTemp2.css('border-right-color', 'transparent');
+
+					if (currentTemp2 > 0) {
+						hpTemp2.css('border-right-color', '#ffffff');
+					} else if (currentTemp1 > 0) {
+						hpTemp1.css('border-right-color', '#ffffff');
+					} else if (currentHp > 0) {
+						hpBase.css('border-right-color', '#ffffff');
+					}
+				}
+
+				const startTime = performance.now();
+				const durationMs = duration * 1000;
+				const isDamage = (startHp + startTemp1Raw + startTemp2) > (targetHp + targetTemp1Raw + targetTemp2);
+				const self = this;
+				function animateStep(currentTime) {
+					const elapsed = currentTime - startTime;
+					const progress = Math.min(1, elapsed / durationMs);
+					
+					const easedProgress = easeBossCinematic(progress);		
+					const currentDistanceTraveled = totalDist * easedProgress;
+
+					let currentHp = startHp;
+					let currentTemp1Raw = startTemp1Raw;
+					let currentTemp2 = startTemp2;
+
+					if (isDamage) {
+						let remainingDist = currentDistanceTraveled;
+
+						const drainTemp2 = Math.min(remainingDist, distTemp2);
+						currentTemp2 = startTemp2 - drainTemp2;
+						remainingDist -= drainTemp2;
+
+						if (remainingDist > 0) {
+							const drainTemp1 = Math.min(remainingDist, distTemp1);
+							currentTemp1Raw = startTemp1Raw - drainTemp1;
+							remainingDist -= drainTemp1;
+						}
+						if (remainingDist > 0) {
+							const drainHp = Math.min(remainingDist, distHp);
+							currentHp = startHp - drainHp;
+						}
+					} else {
+						let remainingDist = currentDistanceTraveled;
+
+						const fillHp = Math.min(remainingDist, distHp);
+						currentHp = startHp + fillHp;
+						remainingDist -= fillHp;
+
+						if (remainingDist > 0) {
+							const fillTemp1 = Math.min(remainingDist, distTemp1);
+							currentTemp1Raw = startTemp1Raw + fillTemp1;
+							remainingDist -= fillTemp1;
+						}
+						if (remainingDist > 0) {
+							const fillTemp2 = Math.min(remainingDist, distTemp2);
+							currentTemp2 = startTemp2 + fillTemp2;
+						}
+					}
+
+					const currentTemp1Pct = currentHp > 0 ? (currentTemp1Raw / currentHp) * 100 : 0;
+
+					hpBase.css({
+						'transition': 'none',
+						'--hp-percentage': `${currentHp.toFixed(2)}%`
+					});
+					hpTemp1.css({
+						'transition': 'none',
+						'--temp-hp1-percentage': `${currentTemp1Pct.toFixed(2)}%`
+					});
+					hpTemp2.css({
+						'transition': 'none',
+						'--temp-hp2-percentage': `${currentTemp2.toFixed(2)}%`
+					});
+
+					setBorderTip(currentHp, currentTemp1Pct, currentTemp2);
+					if (progress < 1) {
+						self.bossAnimation = requestAnimationFrame(animateStep);
+					}
+				}
+
+				self.bossAnimation = requestAnimationFrame(animateStep);
+			}
+			animateBossHealthBar();
+		}else{
+			$(`.boss-hp-bar[data-id='${this.options.id}']`).remove();
+		}
 		const tokenHpAuraColor = token_health_aura(this.hpPercentage, this.options.healthauratype);
 		let paddingX = 0;
 		let paddingY = 0;
-		
+		const paddingBaseX = !token.is('.example-token, [data-id^="exampleToken"]') ? window.CURRENT_SCENE_DATA.hpps : token.width();
+		const paddingBaseY = !token.is('.example-token, [data-id^="exampleToken"]') ? window.CURRENT_SCENE_DATA.vpps : token.height();
 		if(this.options.tokenStyleSelect == "undefined")// I believe this only happens in the sidepanel
 			delete this.options.tokenStyleSelect;
 			
@@ -1080,8 +1339,8 @@ class Token {
 		} 
 		else {
 			if(tokenStyle === "circle" || tokenStyle === "square"){
-				paddingX += window.CURRENT_SCENE_DATA.hpps/10;
-				paddingY += window.CURRENT_SCENE_DATA.vpps/10;
+				paddingX += paddingBaseX/10;
+				paddingY += paddingBaseY/10;
 			}
 			token.css('--token-hp-aura-color', tokenHpAuraColor);
 			if(this.tempHp) {
@@ -1096,8 +1355,8 @@ class Token {
 		} 
 		else {
 			if(tokenStyle === "circle" || tokenStyle === "square"){
-				paddingX += Math.min(1, window.CURRENT_SCENE_DATA.hpps/40);
-				paddingY += Math.min(1, window.CURRENT_SCENE_DATA.vpps/40);
+				paddingX += Math.min(1, paddingBaseX/40);
+				paddingY += Math.min(1, paddingBaseY/40);
 			}
 			token.css('--token-border-color', this.options.color);
 			$("#combat_area tr[data-target='" + this.options.id + "'] img[class*='Avatar']").css("border-color", this.options.color);
@@ -1107,8 +1366,8 @@ class Token {
 		}
 		else {
 			if(tokenStyle === "circle" || tokenStyle === "square"){
-				paddingX += window.CURRENT_SCENE_DATA.hpps/10;
-				paddingY += window.CURRENT_SCENE_DATA.vpps/10;
+				paddingX += paddingBaseX/10;
+				paddingY += paddingBaseY/10;
 			}
 			token.css('--token-hpbar-aura-color', tokenHpAuraColor);
 			if(this.tempHp) {
@@ -1226,45 +1485,21 @@ class Token {
 		let selector = "div[data-id='" + this.options.id + "']";
 		let old = $("#tokens").find(selector);
 
-		if(old.is(':animated')){	
-			this.stopAnimation(); // stop the animation and jump to the end.	
-		}
-
 		this.options.left = old.css("left");
 		this.options.top = old.css("top");
 		this.options.scaleCreated = window.CURRENT_SCENE_DATA.scale_factor;
 
-		
-		// one of either
-		// is a monster?
-		// is the DM
-		// not the DM and player controlled
-		// AND stats aren't disabled and has hp bar
-		if ( ( (!(this.options.monster > 0)) || window.DM || (!window.DM && this.options.player_owned)) && old.has(".hp").length > 0) {
-			if (old.find(".hp").val().trim().startsWith("+") || old.find(".hp").val().trim().startsWith("-")) {
-				old.find(".hp").val(Math.max(0, this.hp + parseInt(old.find(".hp").val())));
-			}else{
-				const sanitizedString = old.find(".hp").val().replaceAll(/[^\d+-/*().]/gi, '');
-				const value = eval(sanitizedString);
-				old.find(".hp").val(Math.max(0, parseInt(value)));
-			}
-			if (old.find(".max_hp").val().trim().startsWith("+") || old.find(".max_hp").val().trim().startsWith("-")) {
-				old.find(".max_hp").val(Math.max(0, this.maxHp + parseInt(old.find(".max_hp").val())));
-			}else{
-				const sanitizedString = old.find(".max_hp").val().replaceAll(/[^\d+-/*().]/gi, '');
-				const value = eval(sanitizedString);
-				old.find(".max_hp").val(Math.max(0, parseInt(value)));
-			}
-			this.hp = parseInt(old.find(".hp").val()) - this.tempHp;
-			this.maxHp = parseInt(old.find(".max_hp").val());
-			
-			this.update_dead_cross(old)
-			this.update_health_aura(old)
-		}
+		this.update_dead_cross(old);
+		this.update_health_aura(old);
+
+		const hpbar = old.find(".hpbar");
+		hpbar.css({
+			"--base-hp": this.baseHp ?? 0,
+			"--temp-hp": this.tempHp ?? 0
+		});
 
 		this.update_condition_timers();
 		this.update_age();
-
 		toggle_player_selectable(this, old)
 	}
 
@@ -1377,8 +1612,8 @@ class Token {
 		hpbar.append(divider);
 		hpbar.append(maxhp_input);
 		if (!this.isPlayer()) {
-			const debounceChange = mydebounce(() => {
-				self.sync()
+			const debounceTriggerEvent = mydebounce((input) => {
+				input.trigger('change');
 			}, 1500)
 			hp_input.on('wheel', function(e) {
 				const input = $(this);
@@ -1386,9 +1621,9 @@ class Token {
 					return;
 				e.preventDefault();
 				const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
-				const current = parseInt(self.hp) || 0;
+				const current = parseInt(input.val()) || 0;
 				input.val(Math.max(0, current + delta));
-				input.trigger('change');
+				debounceTriggerEvent(input);
 			});
 			maxhp_input.on('wheel', function(e) {
 				const input = $(this);
@@ -1396,32 +1631,31 @@ class Token {
 					return;
 				e.preventDefault();
 				const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
-				const current = parseInt(self.maxHp) || 0;
+				const current = parseInt(input.val()) || 0;
 				input.val(Math.max(1, current + delta));
-				input.trigger('change');
+				debounceTriggerEvent(input);
 			});
 			hp_input.change(function(e) {
-				let tokenID = $(this).parent().parent().attr("data-id");
+				let tokenID = self.options.id;
 				let value = $(this).val().trim();	
-				if (value.startsWith("+") || value.startsWith("-")) {
-					value = Math.max(0, parseInt(window.all_token_objects[tokenID].hp) + parseInt(value));
-					$(this).val(value);
-				} else{
-					const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
-					value = Math.max(0, parseInt(eval(sanitizedString)));
-					$(this).val(value);
-				}
+
+				value = calculate_hp(value, self.hp);
+				if (value === undefined)
+					return;
+				
 				
 				if(window.all_token_objects[tokenID] != undefined){
-					window.all_token_objects[tokenID].hp = value;
+					window.all_token_objects[tokenID].totalHp = value;
 				}			
 				if(window.TOKEN_OBJECTS[tokenID] != undefined){		
-					window.TOKEN_OBJECTS[tokenID].hp = value;
-					window.TOKEN_OBJECTS[tokenID].update_from_page();
+					self.totalHp = value;
+					$(this).val(self.hp);
+					self.place();
 				}
-				window.all_token_objects[tokenID].update_combat_tracker()
-				window.all_token_objects[tokenID].update_quick_roll();
-				debounceChange();
+				
+				self.update_combat_tracker()
+				self.update_quick_roll();
+				self.sync();
 			});
 			hp_input.on('mouseup', function(e) {
 				e.preventDefault();
@@ -1429,26 +1663,24 @@ class Token {
 				$(e.target).select();
 			});
 			maxhp_input.change(function(e) {
-				let tokenID = $(this).parent().parent().attr("data-id");
+				let tokenID = self.options.id;
 				let value = $(this).val().trim();
-				if (value.startsWith("+") || value.startsWith("-")) {
-					value = Math.max(0, parseInt(window.all_token_objects[tokenID].maxHp) + parseInt(value))
-					$(this).val(value);
-				} else{
-					const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
-					value = Math.max(0, parseInt(eval(sanitizedString)));
-					$(this).val(value);
-				}
+		
+				value = calculate_hp(value, self.maxHp);
+				if (value === undefined)
+					return;
+				$(this).val(value);
+
 				if(window.all_token_objects[tokenID] != undefined){
 					window.all_token_objects[tokenID].maxHp = value;
 				}
 				if(window.TOKEN_OBJECTS[tokenID] != undefined){		
-					window.TOKEN_OBJECTS[tokenID].maxHp = value;
-					window.TOKEN_OBJECTS[tokenID].update_from_page();;
+					self.maxHp = value;
+					self.place();
 				}
-				window.all_token_objects[tokenID].update_combat_tracker()
-				window.all_token_objects[tokenID].update_quick_roll();
-				debounceChange();
+				self.update_combat_tracker()
+				self.update_quick_roll();
+				self.sync();
 			});
 			maxhp_input.on('mouseup', function(e) {
 				e.preventDefault();
@@ -1460,8 +1692,8 @@ class Token {
 			hpbar.off('click.message').on('click.message', 'input' ,function(){
 				showTempMessage('Player HP must be adjusted on the character sheet.')
 			})
-			hp_input.keydown(function(e) { if (e.keyCode == '13') self.update_from_page(); e.preventDefault(); }); // DISABLE WITHOUT MAKING IT LOOK UGLY
-			maxhp_input.keydown(function(e) { if (e.keyCode == '13') self.update_from_page(); e.preventDefault(); });
+			hp_input.keydown(function(e) { if (e.keyCode == '13') e.preventDefault(); }); // DISABLE WITHOUT MAKING IT LOOK UGLY
+			maxhp_input.keydown(function(e) { if (e.keyCode == '13') e.preventDefault(); });
 		}
 
 		if(this.options.hidehpbar) {
@@ -1588,8 +1820,8 @@ class Token {
 				token.find(".hpbar").css("visibility", "hidden");
 			} else {
 				token.find(".hpbar").css("visibility", "visible");
+				token.find(".hpbar").css("--base-hp", this.baseHp);
 				if(this.tempHp >= 0){
-					token.find(".hpbar").css("--base-hp", this.baseHp);
 					token.find(".hpbar").css("--temp-hp", this.tempHp);
 				}
 			}
@@ -1623,8 +1855,8 @@ class Token {
 			tok = $(`#tokens div[data-id="${this.options.id}"]`);
 		}
 
-		if (!tok) {
-			console.log("update_opacity failed to find an html element", this);
+		if (!tok || !window.TOKEN_OBJECTS[this.options.id]) {
+			noisy_log(2, "update_opacity failed to find an html element or token objects on the scene", this);
 			return;
 		}
 		let fogContext = $('#fog_overlay')[0].getContext('2d');
@@ -1950,7 +2182,7 @@ class Token {
 						clearTimeout(hoverNoteTimer);
 						hoverNoteTimer = setTimeout(function () {
 			            	build_and_display_sidebar_flyout(e.clientY, async function (flyout) {
-					            setup_tooltip_flyout(flyout, noteHover, ['note-flyout'], e, {id:noteId, token:self});
+					            setup_tooltip_flyout(flyout, noteHover, ['note-flyout'], e, {id:noteId});
 					        });
 			        	}, 500);		
 					
@@ -2064,7 +2296,7 @@ class Token {
 			notATokenEls.forEach((selEl) => {
 				selEl.style.left = `${parseFloat(token.options.left) / window.CURRENT_SCENE_DATA.scale_factor}px`,
 				selEl.style.top = `${parseFloat(token.options.top) / window.CURRENT_SCENE_DATA.scale_factor}px`
-			})	
+			})
 			return canMove;
 		} catch(error){
 			showError(error);
@@ -2160,6 +2392,16 @@ class Token {
 			return;
 		}
 		try{
+			let selector = "div[data-id='" + this.options.id + "']";
+			let old = $("#tokens").find(selector);
+			let self = this;
+
+			if(old.hasClass('pause_click')) {
+				setTimeout(() => {
+					this.throttlePlace(animationDuration, sceneId, callback);
+				}, 1000);
+				return;
+			}
 			if(!this.options.id.includes('exampleToken') && (isNaN(parseFloat(this.options.left)) || isNaN(parseInt(this.options.top)))){// prevent errors with NaN positioned tokens - delete them as catch all. 
 				this.options.deleteableByPlayers = true;
 				this.delete();
@@ -2175,13 +2417,6 @@ class Token {
 			if (animationDuration == undefined || parseFloat(animationDuration) == NaN) {
 				animationDuration = 1000;
 			}
-
-			let selector = "div[data-id='" + this.options.id + "']";
-			let old = $("#tokens").find(selector);
-			let self = this;
-
-			if(old.hasClass('pause_click'))//we're currently or just dragged this token ignore this place
-				return;
 
 			/* UPDATE COMBAT TRACKER */
 			this.update_combat_tracker()
@@ -2339,7 +2574,7 @@ class Token {
 				let zindexdiff=(typeof this.options.zindexdiff == 'number') ? this.options.zindexdiff : Math.round(17/(this.sizeWidth()/window.CURRENT_SCENE_DATA.hpps));
 				this.options.zindexdiff = Math.max(zindexdiff, -5000);
 				let zConstant = this.options.underDarkness || this.options.tokenStyleSelect == 'definitelyNotAToken' ? 5000 : 10000;
-				old.css("z-index", `calc(${zConstant} + var(--z-index-diff))`);
+				old.css("z-index", this.options.tokenStyleSelect == 'roof' ? 2147483647 : `calc(${zConstant} + var(--z-index-diff))`);
 				old.css("--z-index-diff", zindexdiff);
 
 				this.update_opacity(old);
@@ -2350,11 +2585,6 @@ class Token {
 						this.build_conditions($(`#combat_area tr[data-target='${this.options.id}']`), true);
 					}
 				}
-
-				
-
-				
-
 				if (this.selected) {
 					old.addClass("tokenselected");
 					toggle_player_selectable(this, old)
@@ -2365,23 +2595,24 @@ class Token {
 					old.removeClass("tokenselected");
 					$(`:is(#combat_area, #combat_area_carousel) tr[data-target='${this.options.id}']`).toggleClass('selected-token', false);
 				}
-				let oldImage =  old.find(".token-image,[data-img]")
-				// token uses an image for it's image
-				if (!this.options.imgsrc.startsWith("class")){
-					if(this.options.imgsrc.startsWith('above-bucket-not-a-url')){
+				const dataImg = old.find(".token-image>[data-img]");
+				let oldImage =  dataImg.length > 0 ? dataImg : old.find(".token-image");
+				const imageSrc = this.options.imgsrc;
+				if (!imageSrc.startsWith("class")){
+					if(imageSrc.startsWith('above-bucket-not-a-url')){
 						
-						const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
+						const fileSrc = imageSrc.replace('above-bucket-not-a-url', '');
 						if (!oldImage.attr('src')?.includes(encodeURI(fileSrc))) {
-							getAvttStorageUrl(this.options.imgsrc, true).then((url) => {
+							getAvttStorageUrl(imageSrc, true).then((url) => {
 								let oldFileExtension = oldImage.attr("src").split('.')[oldImage.attr("src").length - 1]
-								let newFileExtention = parse_img(this.options.imgsrc.split('.')[this.options.imgsrc.split('.').length - 1]);
+								let newFileExtention = parse_img(imageSrc.split('.')[imageSrc.split('.').length - 1]);
 								let imgClass = oldImage.attr('class')?.replaceAll('div-token-image', '');
 								let video = false;
 								if (oldFileExtension !== newFileExtention || window.videoTokenOld[this.options.id] != this.options.videoToken) {
 									oldImage.remove();
 									
 									let tokenImage;
-									if (this.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => this.options.imgsrc.includes(d))) {
+									if (this.options.videoToken == true || ['.mp4', '.webm', '.m4v'].some(d => imageSrc.includes(d))) {
 										tokenImage = $("<video disableRemotePlayback autoplay loop muted style='transform:" + imageTransform + "' class='" + imgClass + " div-token-image'/>");
 										video = true;
 									}
@@ -2450,16 +2681,16 @@ class Token {
 						}
 						
 					}
-					else if(oldImage.attr("src")!=parse_img(this.options.imgsrc) || window.videoTokenOld[this.options.id] != this.options.videoToken){
+					else if(oldImage.attr("src")!=parse_img(imageSrc) || window.videoTokenOld[this.options.id] != this.options.videoToken){
 						let oldFileExtension = oldImage.attr("src")?.split('.')[oldImage.attr("src").length-1]
-						let newFileExtention = parse_img(this.options.imgsrc.split('.')[this.options.imgsrc.split('.').length-1]);
+						let newFileExtention = parse_img(imageSrc.split('.')[imageSrc.split('.').length-1]);
 						let imgClass = oldImage.attr('class')?.replaceAll('div-token-image', '');
 						let video = false;
 						if(oldFileExtension !== newFileExtention || window.videoTokenOld[this.options.id] != this.options.videoToken){
 							oldImage.remove();
 							
 							let tokenImage;
-							if(this.options.videoToken == true || ['.mp4', '.webm','.m4v'].some(d => this.options.imgsrc.includes(d))){
+							if(this.options.videoToken == true || ['.mp4', '.webm','.m4v'].some(d => imageSrc.includes(d))){
 								tokenImage = $("<video disableRemotePlayback autoplay loop muted style='transform:"+imageTransform+"' class='"+imgClass+" div-token-image'/>");			
 								video = true;
 							} 
@@ -2475,12 +2706,12 @@ class Token {
 								const underDarkImage = tokenImage.clone();
 								underDarkImage.find('.token-image ~ .token-image').remove();
 								underDarkToken.append(underDarkImage);
-								updateTokenSrc(this.options.imgsrc, underDarkImage, video)
+								updateTokenSrc(imageSrc, underDarkImage, video)
 							}
 						}
 						window.videoTokenOld[this.options.id] = this.options.videoToken;
 						
-						updateTokenSrc(this.options.imgsrc, oldImage, video)
+						updateTokenSrc(imageSrc, oldImage, video)
 						$(`#combat_area tr[data-target='${this.options.id}'] img[class*='Avatar']`).attr("src", parse_img(this.options.imgsrc));
 						oldImage.off('dblclick.highlightToken').on('dblclick.highlightToken', function(e) {
 							self.highlight(true); // dont scroll
@@ -2519,7 +2750,7 @@ class Token {
 						});
 					}
 
-					if(this.options.disableborder){
+					if(this.options.disableborder && !this.options.aoeImageBorder){
 						oldImage.css("border-width","0");
 					}
 					else{
@@ -2734,16 +2965,19 @@ class Token {
 						let oldImage = $(`#tokens div[data-id='${this.options.id}'] .token-image`);
 						const copyImage = oldImage.clone();
 						underDarkToken.append(copyImage);
-						
-						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
-							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
-								updateTokenSrc(this.options.imgsrc, copyImage, this.options.videoToken);
+						if(!this.isAoe()){
+							const imageSrc = this.options.imgsrc;
+							if (imageSrc.startsWith('above-bucket-not-a-url')) {
+								const fileSrc = imageSrc.replace('above-bucket-not-a-url', '');
+								if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
+									updateTokenSrc(imageSrc, copyImage, this.options.videoToken);
+								}
+							}
+							else if(copyImage.attr('src') != parse_img(imageSrc)){
+								updateTokenSrc(parse_img(imageSrc), copyImage, this.options.videoToken);
 							}
 						}
-						else if(copyImage.attr('src') != parse_img(this.options.imgsrc)){
-							updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
-						}
+						
 				}  	
 				else{
 		    		$(`[data-notatoken='notatoken_${this.options.id}']`).remove();
@@ -2855,7 +3089,7 @@ class Token {
 					tok.toggleClass('lineAoe', false);
 
 				} else {
-					tokenImage = build_aoe_token_image(this, imageScale, rotation)
+					tokenImage = build_aoe_token_image(this)
 
 					tok.css({
 						"--token-scale": imageScale,
@@ -2928,7 +3162,7 @@ class Token {
 
 				tok.addClass("VTTToken");
 
-				this.update_health_aura(tok);
+				this.update_health_aura(tok, true);
 				let currentSceneScale = parseFloat(window.CURRENT_SCENE_DATA.scale_factor) ? parseFloat(window.CURRENT_SCENE_DATA.scale_factor) : 1
 				
 				if(this.options.scaleCreated){
@@ -2958,7 +3192,7 @@ class Token {
 				}
 
 				const zConstant = this.options.underDarkness || this.options.tokenStyleSelect == 'definitelyNotAToken'  ? 5000 : 10000;
-				tok.css("z-index", `calc(${zConstant} + var(--z-index-diff))`);
+				tok.css("z-index", this.options.tokenStyleSelect == 'roof' ? 2147483647 : `calc(${zConstant} + var(--z-index-diff))`);
 
 
 				if (typeof this.options.monster !== "undefined")
@@ -3023,9 +3257,9 @@ class Token {
 						dragFrameRequest = null;
 						pendingDragState = null;
 
-						delete window.tokenVisionQuery;
-						ctxImageData = null;
+						
 						if(window.TOKEN_OBJECTS[self.options.id] != undefined){
+							self.setTokenDragPos(parseFloat(self.options.left), parseFloat(self.options.top), tok[0], ctxImageData);
 							self.sync();
 						}
 						if (window.CURRENT_SCENE_DATA.disableSceneVision == 1 && !window.DM)
@@ -3039,6 +3273,7 @@ class Token {
 									continue;
 								let curr = window.TOKEN_OBJECTS[id];
 								if (curr != undefined){
+									curr.setTokenDragPos(parseFloat(curr.options.left), parseFloat(curr.options.top), tok, ctxImageData);
 									curr.sync();
 									if (curr.options?.darkness === true || curr.options.tokenWall)
 										darknessMoved = true;
@@ -3047,9 +3282,14 @@ class Token {
 								}									
 							}												
 						}
+						ctxImageData = null;
+						delete window.tokenVisionQuery;
 						if(darknessMoved){
 							redraw_drawn_light(darknessMoved);
 							redraw_light(darknessMoved);
+						}
+						else {
+							debounceLightChecks();
 						}
 						//remove cover for smooth drag
 						$('.iframeResizeCover').remove();
@@ -3061,7 +3301,7 @@ class Token {
 				
 						// finish measuring
 						// drop the temp overlay back down so selection works correctly
-						$("#temp_overlay").css("z-index", "25")
+						$("#capture_mouse").css("z-index", "25")
 						if (get_avtt_setting_value("allowTokenMeasurement")){
 							WaypointManager.fadeoutMeasuring(window.PLAYER_ID)
 						}	
@@ -3085,7 +3325,7 @@ class Token {
 							window.disable_window_mouse_handlers();
 							pauseCursorEventListener = true; // we're going to send events from drag, so we don't need the eventListener sending events, too
 							if (get_avtt_setting_value("allowTokenMeasurement")) {
-								$("#temp_overlay").css("z-index", "50");
+								$("#capture_mouse").css("z-index", "50");
 							}
 							window.DRAWFUNCTION = "select"
 							window.DRAGGING = true;
@@ -3333,6 +3573,7 @@ class Token {
 		
 				if(this.options.darkness){
 					let tokenClone = tok.clone();
+					tokenClone.find('.token-image').replaceWith(build_aoe_token_image(this, 1))
 					tokenClone.css({
 						left: parseFloat(this.options.left) / window.CURRENT_SCENE_DATA.scale_factor,
 						top: parseFloat(this.options.top) / window.CURRENT_SCENE_DATA.scale_factor,
@@ -3342,6 +3583,7 @@ class Token {
 			        tokenClone.attr('data-darkness', `darkness_${this.options.id}`);
 			        tokenClone.find('.conditions').remove();
 			        tokenClone.removeClass(['token', 'VTTToken']);
+					tokenClone.find('.token-image>*').css('opacity', '1');
 			        if($(`[data-darkness='darkness_${this.options.id}]'`).length == 0)
 			        	$('#light_container').append(tokenClone);
 			        redraw_drawn_light();
@@ -3472,15 +3714,21 @@ class Token {
 						window.ON_SCREEN_TOKENS[this.options.id].onScreenDarknessToken = tokenClone;
 
 						let copyImage = tokenClone.find('.token-image')
-
-						if (this.options.imgsrc.startsWith('above-bucket-not-a-url')) {
-							const fileSrc = this.options.imgsrc.replace('above-bucket-not-a-url', '');
-							if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
-								updateTokenSrc(this.options.imgsrc, copyImage, this.options.videoToken);
+						
+						
+						if(!this.isAoe()){
+							const imageSrc = this.options.imgsrc;
+							if (imageSrc.startsWith('above-bucket-not-a-url')) {
+								const fileSrc = imageSrc.replace('above-bucket-not-a-url', '');
+								if (!copyImage.attr('src')?.includes(encodeURI(fileSrc))) {
+									updateTokenSrc(imageSrc, copyImage, this.options.videoToken);
+								}
 							}
-						}
-						else if (copyImage.attr('src') != parse_img(this.options.imgsrc)) {
-							updateTokenSrc(parse_img(this.options.imgsrc), copyImage, this.options.videoToken);
+							else if (copyImage.attr('src') != parse_img(imageSrc)) {
+								updateTokenSrc(parse_img(imageSrc), copyImage, this.options.videoToken);
+							}
+						} else{
+							copyImage.replaceWith(build_aoe_token_image(this))
 						}
 					}	
 			    }
@@ -3515,6 +3763,7 @@ class Token {
 						draw_selected_token_bounding_box();
 					}, animationDuration)
 				}),
+				new Promise(() => {sync_pc_template(this)})
 			]).catch((error) => {
 		        showError(error, `Failed to start AboveVTT on ${window.location.href}`);
 		    });  
@@ -4188,8 +4437,8 @@ function setTokenAuras (token, options) {
 		// use sizeWidth and sizeHeight???
 		
 		const auraRadius = innerAuraSize ? (innerAuraSize + (options.size/window.CURRENT_SCENE_DATA.scale_factor / 2)) : 0;
-		const totalAura = auraRadius + outerAuraSize;
-		const auraBg = `radial-gradient(${options.aura1.color} ${auraRadius}px, ${options.aura2.color} ${auraRadius}px ${totalAura}px);`;
+		const totalAura = auraRadius + outerAuraSize + (innerAuraSize ? 0 : (options.size/window.CURRENT_SCENE_DATA.scale_factor / 2));
+		const auraBg = `radial-gradient(${innerAuraSize == 0 ? 'transparent' : options.aura1.color} ${auraRadius}px, ${outerAuraSize == 0 ? 'transparent' : options.aura2.color} ${auraRadius}px ${totalAura}px);`;
 		const totalSize = (2 * totalAura);
 		const absPosOffset = (options.size/window.CURRENT_SCENE_DATA.scale_factor - totalSize) / 2;
 		
@@ -4212,8 +4461,8 @@ function setTokenAuras (token, options) {
 							display:${showAura};
 							--color1: ${color1Values};
 							--color2: ${color2Values};	
-							--opacity1: ${opacity1Value};
-							--opacity2: ${opacity2Value};
+							--opacity1: ${innerAuraSize == 0 ? 0 : opacity1Value};
+							--opacity2: ${outerAuraSize == 0 ? 0 : opacity2Value};
 							--gradient: ${auraBg};
 							--animation-width: ${totalSize < 150 ? `${totalSize * 3}px, ${totalSize * 3}px` : `cover`};
 							--radius1: ${auraRadius}px;
@@ -4327,7 +4576,7 @@ function setTokenLight (token, options) {
 		
 		const lightRadius = innerlightSize ? (innerlightSize + (optionsSize / 2)) : 0;
 		const totallight = innerlightSize ? lightRadius + outerlightSize : outerlightSize ? outerlightSize + (optionsSize / 2) : 0;
-		const lightBg = `radial-gradient(${options.light1.daylight ? 'var(--daylight-color)' : options.light1.color} ${lightRadius}px, ${options.light2.daylight ? 'var(--daylight-color)' : options.light2.color} ${lightRadius}px ${totallight}px);`;
+		const lightBg = `radial-gradient(${innerlightSize == 0 ? 'transparent' : (options.light1.daylight ? 'var(--daylight-color)' : options.light1.color)} ${lightRadius}px, ${outerlightSize == 0 ? 'transparent' : (options.light2.daylight ? 'var(--daylight-color)' : options.light2.color)} ${lightRadius}px ${totallight}px);`;
 		const totalSize = (totallight == 0) ? 0 : (2 * totallight);
 		const absPosOffset = (optionsSize - totalSize) / 2;
 		
@@ -4338,9 +4587,10 @@ function setTokenLight (token, options) {
 		const opacity2Value = options?.light2?.color ? options.light2.color.replace(/[a-zA-Z\(\)\s]/g, '').split(',').splice(3, 1) : 1;
 		const daylightOpacityValue = window.CURRENT_SCENE_DATA?.daylight ? window.CURRENT_SCENE_DATA.daylight.replace(/[a-zA-Z\(\)\s]/g, '').split(',').splice(3, 1) : 1;
 
-		let clippath = window.lineOfSightPolygons?.[options.id]?.clippath !== undefined ? `polygon(${window.lineOfSightPolygons[options.id]?.clippath})` : undefined;
-		let devilsightClip = window.lineOfSightPolygons?.[options.id]?.devilsightClip !== undefined ? `polygon(${window.lineOfSightPolygons[options.id]?.devilsightClip})` : undefined;
-
+		let clippath = window.lineOfSightPolygons?.[options.id]?.wallClippath !== undefined ? `polygon(${window.lineOfSightPolygons[options.id].wallClippath})` : undefined;
+		let devilsightClip = window.lineOfSightPolygons?.[options.id]?.wallDevilsightClip !== undefined ? `polygon(${window.lineOfSightPolygons[options.id].wallDevilsightClip})` : undefined;
+		const lightClippath = clippath;
+		
 		const lightStyles = `width:${totalSize }px;
 							height:${totalSize }px;
 							background-image:${lightBg};
@@ -4348,8 +4598,8 @@ function setTokenLight (token, options) {
 							top:${optionsTop+ absPosOffset}px;
 							--color1: ${options.light1.daylight ? daylightValues : color1Values};
 							--color2: ${options.light2.daylight ? daylightValues : color2Values};
-							--opacity1: ${options.light1.daylight ? daylightOpacityValue : opacity1Value};
-							--opacity2: ${options.light2.daylight ? daylightOpacityValue : opacity2Value};
+							--opacity1: ${innerlightSize == 0 ? 0 : (options.light1.daylight ? daylightOpacityValue : opacity1Value)};
+							--opacity2: ${outerlightSize == 0 ? 0 : (options.light2.daylight ? daylightOpacityValue : opacity2Value)};
 							--gradient: ${lightBg};
 							--animation-width: ${totalSize < 150 ? `${totalSize * 3}px, ${totalSize * 3}px` : `cover`};
 							--radius1: ${lightRadius}px;
@@ -4415,7 +4665,7 @@ function setTokenLight (token, options) {
 
 		const lightElement = $(`
 			<div class='aura-clip-container'>
-				<div class='aura-element-container-clip light' style='clip-path: ${clippath};' id='${options.id}'>
+				<div class='aura-element-container-clip light' style='clip-path: ${lightClippath};' id='${options.id}'>
 					<div class='aura-element ${options.squareLight ? 'square-aura-element' : ''}' id="light_${tokenId}" data-id='${options.id}' style='${lightStyles}'></div>
 				</div>
 				
@@ -4504,6 +4754,7 @@ function setTokenLight (token, options) {
 
 	tokenVisionLightContainer = tokenGrandparent.find(".aura-element-container-clip[id='" + options.id +"']");
 		
+	updateTokenConeClips(options);
 	if (!window.DM && playerNoVision){
 		tokenVisionLightContainer.find('[id^="vision_"]').toggleClass("notVisible", true);
 	}		
@@ -4569,11 +4820,11 @@ function setTokenBase(token, options) {
 		token.children(".token-image").removeClass("preserve-aspect-ratio");
 		token.toggleClass("square", true);
 	}
-	else if(options.tokenStyleSelect === "noConstraint" || options.tokenStyleSelect === "definitelyNotAToken" || options.tokenStyleSelect === "labelToken" ) {
+	else if(options.tokenStyleSelect === "noConstraint" || options.tokenStyleSelect === "definitelyNotAToken" || options.tokenStyleSelect === "labelToken" || options.tokenStyleSelect === "roof") {
 		//Freeform
 		options.square = true;
 		options.legacyaspectratio = false;
-		if(options.tokenStyleSelect === "definitelyNotAToken" || options.tokenStyleSelect === "labelToken"){
+		if(options.tokenStyleSelect === "definitelyNotAToken" || options.tokenStyleSelect === "labelToken" || options.tokenStyleSelect === "roof"){
 			options.disablestat = true;
 			options.disableborder = true;
 			options.disableaura = true;
@@ -4582,10 +4833,13 @@ function setTokenBase(token, options) {
 				token.toggleClass('definitelyNotAToken', true);
 				options.underDarkness = true;
 			}
-			else{
+			else if(options.tokenStyleSelect === "labelToken"){
 				token.toggleClass('labelToken', true);
 				options.revealname = true;
 				options.alwaysshowname = true;
+			} else if(options.tokenStyleSelect === "roof"){
+				options.underDarkness = false;
+				token.toggleClass('roof', true);
 			}
 		}
 
@@ -4713,7 +4967,11 @@ function rotation_towards_cursor(token, mousex, mousey, largerSnapAngle) {
 function rotation_towards_cursor_from_point(pointX, pointY, mousex, mousey, largerSnapAngle) {
 	const target = Math.atan2(mousey - pointY, mousex - pointX) + Math.PI * 3 / 2; // down = 0
 	const degrees = target * radToDeg;
-	const snap = (largerSnapAngle == true) ? 45 : 1; // if we ever allow hex, use 45 for square and 60 for hex
+	const snap = (largerSnapAngle == true) ? 
+					['3', '2'].includes(window.CURRENT_SCENE_DATA.gridType) ? 
+						30 : 
+						45 : 
+					1;
 	return (Math.round(degrees / snap) * snap + 360.0) % 360.0;
 }
 /// rotates all selected tokens to the specified newRotation
@@ -5028,12 +5286,19 @@ function install_grabbers() {
 			remove_selected_token_bounding_box(false, true);
 		},
 		drag: function(d,e) {
-			const mouseAngle = Math.atan2(d.y - d.centerPointRotateOrigin.y, d.x - d.centerPointRotateOrigin.x) * (180 / Math.PI);
+			let mouseAngle = Math.atan2(d.y - d.centerPointRotateOrigin.y, d.x - d.centerPointRotateOrigin.x) * (180 / Math.PI);
+			const snap = (shiftHeld == true) ? 
+				['3', '2'].includes(window.CURRENT_SCENE_DATA.gridType) ? 
+					30 : 
+					45 : 
+				1;
+		
 			d.angle = (360 + mouseAngle - d.startAngle) % 360;
+			d.angle = (Math.round(d.angle / snap) * snap + 360.0) % 360.0;
 			if(window.CURRENTLY_SELECTED_TOKENS.length == 1 &&
 			   window.TOKEN_OBJECTS[window.CURRENTLY_SELECTED_TOKENS[0]].isAoe()){
 				d.angle = rotation_towards_cursor_from_point(d.centerPointRotateOrigin.x, d.centerPointRotateOrigin.y,
-									     d.x, d.y);
+									     d.x, d.y, e.shiftKey);
 				// account for group rotation grabber being at corner
 				d.angle -= parseFloat($(`.token[data-id='${window.CURRENTLY_SELECTED_TOKENS[0]}']`).css('--token-rotation')); 
 			}

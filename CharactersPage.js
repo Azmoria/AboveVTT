@@ -100,990 +100,7 @@ function getPB(){
   return parseInt($(".ct-proficiency-bonus-box__value").text());
 }
 
-const buffsDebuffs = {
-  "Bane": {
-      "tohit": "-d4",
-      "dmg": "0",
-      "save": "-d4",
-      "check": "0",
-      "type": "spell",
-	  "condition": "Baned",
-  },
-  "Bless": {
-      "tohit": "+d4",
-      "dmg": "0",
-      "save": "+d4",
-      "check": "0",
-      "type": "spell",
-	  "condition": "Blessed",
-  },
-  
-  "Exhaustion": {
-    "condition": "Exhaustion",
-    "multiOptions": {
-      "-2": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "newRoll": '1d20-2',
-      },
-      "-4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "newRoll": '1d20-4',
-      },
-      "-6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "newRoll": '1d20-6',
-      },
-      "-8": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "newRoll": '1d20-8',
-      },
-      "-10": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "newRoll": '1d20-10',
-      }
-    },
-    "type": "2024condition",
-  },
-  "Blinded": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Blinded",
-  },
-  "Frightened": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-      "check": "button",
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Frightened",
-  },
-  "Invisible": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-      "check": ".ct-combat__summary-group--initiative button",
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Invisible"
-  },
-  "Poisoned": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-      "check": "button",
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Poisoned",
-  },
-  "Prone": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Prone",
-  },
-  "Restrained" :{
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "tohit": "button",
-      "save": '.ddbc-saving-throws-summary__ability--dex' 
-    },
-    "newRoll": '2d20kl1',
-    "type": "2024condition",
-	"condition": "Restrained",
-  },
-  "Rage": {
-    "multiOptions": {
-      "+2": {
-        "tohit": "0",
-        "dmg": "+2",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "replaceType": {
-          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
-          "save": '.ddbc-saving-throws-summary__ability--str' 
-        },
-        "newRoll": '2d20kh1',
-      },
-      "+3": {
-        "tohit": "0",
-        "dmg": "+3",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "replaceType": {
-          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
-          "save": '.ddbc-saving-throws-summary__ability--str' 
-        },
-        "newRoll": '2d20kh1',
-      },
-      "+4": {
-        "tohit": "0",
-        "dmg": "+4",
-        "save": "0",
-        "check": "0",
-        "replace": /^1d20/gi,
-        "replaceType": {
-          "check": '.ct-skills__item:has(.ct-skills__col--stat:contains("STR")), .ddbc-ability-summary .ddbc-ability-summary__abbr:contains("str")', 
-          "save": '.ddbc-saving-throws-summary__ability--str' 
-        },
-        "newRoll": '2d20kh1',
-      },
-    },
-    "type": "class",
-    "class": "barbarian",
-    "condition": "Rage",
-  },
-  "Elemental Cleaver": {
-    "multiOptions": {
-      "1d6": {
-        "tohit": "0",
-        "dmg": "+d6",
-        "save": "0",
-        "check": "0"
-      },
-      "2d6": {
-        "tohit": "0",
-        "dmg": "+2d6",
-        "save": "0",
-        "check": "0"
-      },
-    },
-    "type": "class",
-    "class": "barbarian",
-  },
-  "Luck": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /1d20/gi,
-    "newRoll": '1d20ro=1',
-    "type": "species",
-    "species": "halfling",
-  },
-  "Great Weapon Master (2024)": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "type": "feat",
-    "replace": /(.)$/gi,//last character
-    "replaceType": {
-      "dmg": '[class*="styles_attack"]:has(.ddbc-note-components__component:contains("Heavy"))' //looks for Heavy trait in item note
-    },
-    "newRoll": '$1+PB', //add proficiency
-  },
-  "Reroll damage 1's": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /(\d+d\d+)/gi,
-    "replaceType": {
-      "dmg": 'button' 
-    },
-    "newRoll": '$1ro<2',//reroll 1
-    "type": "feat",
-  },
-  "Healer (2024) reroll 1's": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /(\d+d\d+)/gi,
-    "replaceType": {
-      "heal": 'button'
-    },
-    "newRoll": '$1ro<2',//reroll 1
-    "type": "feat",
-  },
-  "Triage Expert": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /(\d+)(d\d+)/i,
-    "replaceType": {
-      "heal": 'button'
-    },
-    "newRoll": function(m){
-      const match = m.match(/(\d+)(d\d+)/i)
-      return `${1+parseInt(match[1])}${match[2]}kh${parseInt(match[1])}`
-    },
-    "type": "feat",
- 
-  },
-  "Call the Hunt": {
-    "tohit": "0",
-    "dmg": "+d6",
-    "save": "0",
-    "check": "0",
-    "type": "class",
-    "class": "barbarian",
-  },
-  "Cosmic Omen":{
-    "multiOptions": {
-      "Weal": {
-        "tohit": "+d6",
-        "dmg": "0",
-        "save": "+d6",
-        "check": "+d6"
-      },
-      "Woe": {
-        "tohit": "+d6",
-        "dmg": "0",
-        "save": "+d6",
-        "check": "+d6"
-      },
-    },
-    "type": "class",
-    "class": "druid",
-  },
-  "Giant’s Might": {
-    "multiOptions": {
-      "1d6": {
-        "tohit": "0",
-        "dmg": "+d6",
-        "save": "0",
-        "check": "0"
-      },
-      "1d8": {
-        "tohit": "0",
-        "dmg": "+d8",
-        "save": "0",
-        "check": "0"
-      },
-      "1d10": {
-        "tohit": "0",
-        "dmg": "+1d10",
-        "save": "0",
-        "check": "0"
-      },
-    },
-    "type": "class",
-    "class": "fighter",
-  },
-  "-5 to hit, +10 damage":  {
-    "tohit": "-5",
-    "dmg": "+10",
-    "save": "0",
-    "check": "0",
-    "type": "feat"
-  },
-  "Guidance": {
-      "tohit": "0",
-      "dmg": "0",
-      "save": "0",
-      "check": "+d4",
-      "type": "spell"
-  },
-  "Enlarge": {
-      "tohit": "0",
-      "dmg": "+d4",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Reduce": {
-      "tohit": "0",
-      "dmg": "-d4",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Magic Weapon": {
-    "multiOptions": {
-      "+1": {
-        "tohit": "+1",
-        "dmg": "+1",
-        "save": "0",
-        "check": "0"
-      },
-      "+2": {
-        "tohit": "+2",
-        "dmg": "+2",
-        "save": "0",
-        "check": "0"
-      },
-      "+3": {
-        "tohit": "+3",
-        "dmg": "+3",
-        "save": "0",
-        "check": "0"
-      },
-    },
-    "type": "spell"
-  },
-  "Hunter's Mark": {
-    "multiOptions": {
-	  "+6": {
-        "tohit": "0",
-        "dmg": "+d6",
-        "save": "0",
-        "check": "0"
-	  },
-	  "+10": {
-        "tohit": "0",
-        "dmg": "+d10",
-        "save": "0",
-        "check": "0"
-	  },
-	},
-    "type": "spell"
-  },
-  "Hex": {
-      "tohit": "0",
-      "dmg": "+d6",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Foresight": {
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "newRoll": '2d20kh1',
-    "type": "spell"
-  },
-  "Hexblade's Curse": {
-      "tohit": "0",
-      "dmg": "+PB",
-      "save": "0",
-      "check": "0",
-      "type": "class",
-      "class": "warlock"
-  },
-  "Symbiotic Entity": {
-      "tohit": "0",
-      "dmg": "+d6",
-      "save": "0",
-      "check": "0",
-      "type": "class",
-      "class": "druid"
-  },
-  "Strike of the Giants": {
-    "multiOptions": {
-      "Cloud": {
-        "tohit": "0",
-        "dmg": "+1d4",
-        "save": "0",
-        "check": "0"
-      },
-      "Fire": {
-        "tohit": "0",
-        "dmg": "+1d10",
-        "save": "0",
-        "check": "0"
-      },
-      "Other": {
-        "tohit": "0",
-        "dmg": "+1d6",
-        "save": "0",
-        "check": "0"
-      },
-    },
-    "type": "feat"
-  },
-  "Gift of the Chromatic Dragon": {
-    "tohit": "0",
-    "dmg": "+d4",
-    "save": "0",
-    "check": "0",
-    "type": "feat"
-  },
-  "Emboldening Bond": {
-    "tohit": "+d4",
-    "dmg": "0",
-    "save": "+d4",
-    "check": "+d4",
-    "type": "class",
-    "class": "cleric"
-  },
-  "Divine Strike": {
-    "multiOptions": {
-      "1d8": {
-        "tohit": "0",
-        "dmg": "+1d8",
-        "save": "0",
-        "check": "0"
-      },
-      "2d8": {
-        "tohit": "0",
-        "dmg": "+2d8",
-        "save": "0",
-        "check": "0"
-      },
-    },
-    "type": "class",
-    "class": "cleric"
-  },
-  "Divine Favor": {
-      "tohit": "0",
-      "dmg": "+d4",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Radiant Strikes (Improved Divine Smite)": {
-    "tohit": "0",
-    "dmg": "+d8",
-    "save": "0",
-    "check": "0",
-    "type": "class",
-    "class": "paladin"
-  },
-  "Crusader's Mantle": {
-      "tohit": "0",
-      "dmg": "+d4",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Holy Weapon": {
-      "tohit": "0",
-      "dmg": "+2d8",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Tenser's Transformation": {
-      "tohit": "0",
-      "dmg": "+2d12",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Fount of Moonlight": {
-      "tohit": "0",
-      "dmg": "+2d6",
-      "save": "0",
-      "check": "0",
-      "type": "spell"
-  },
-  "Spirit Shroud": {
-      "multiOptions": {
-		  "1d8": {
-			"tohit": "0",
-			"dmg": "+1d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "2d8": {
-			"tohit": "0",
-			"dmg": "+2d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "3d8": {
-			"tohit": "0",
-			"dmg": "+3d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "4d8": {
-			"tohit": "0",
-			"dmg": "+4d8",
-			"save": "0",
-			"check": "0",
-		  },
-  	  },
-      "type": "spell"
-  },
-  "Conjure Minor Elementals": {
-      "multiOptions": {
-		  "2d8": {
-			"tohit": "0",
-			"dmg": "+2d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "3d8": {
-			"tohit": "0",
-			"dmg": "+3d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "4d8": {
-			"tohit": "0",
-			"dmg": "+4d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "5d8": {
-			"tohit": "0",
-			"dmg": "+5d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "6d8": {
-			"tohit": "0",
-			"dmg": "+6d8",
-			"save": "0",
-			"check": "0",
-		  },
-		  "7d8": {
-			"tohit": "0",
-			"dmg": "+7d8",
-			"save": "0",
-			"check": "0",
-		  },
-  	  },
-      "type": "spell"
-  },
-  "Synaptic Static": {
-      "tohit": "-d6",
-      "dmg": "0",
-      "save": "0",
-      "check": "-d6",
-      "type": "spell"
-  },
-  "Trance of Order": {
-      "tohit": "0",
-      "dmg": "0",
-      "save": "0",
-      "check": "0",
-      "replace": /1d20/gi,
-      "newRoll": '1d20min10',
-      "type": "sorcerer"
-  },
-  "Reliable Talent": {
-      "tohit": "0",
-      "dmg": "0",
-      "save": "0",
-      "check": "0",
-      "replace": /1d20/gi,
-      "replaceType": {
-        "check": '.ct-skills__item:has(.ct-skills__col--proficiency>:is([aria-label="Expert"], [aria-label="Proficient"]))' //looks for proficient or expertise class before a check
-      },
-      "newRoll": '1d20min10',
-      "type": "class",
-      "class": "rogue",
-  },
-  "Pass Without a Trace":{
-    "tohit": "0",
-    "dmg": "0",
-    "save": "0",
-    "check": "0",
-    "replace": /^1d20/gi,
-    "replaceType": {
-      "check": '.ct-skills__item:contains("Stealth")' //looks for stealth
-    },
-    "newRoll": '1d20+10',
-    "type": "spell",
-  },
-  "Mark of Detection":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Insight")' 
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Finding":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Perception"), .ct-skills__item:contains("Survival")' 
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Handling":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Nature"), .ct-skills__item:contains("Animal Handling")' 
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Healing":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": '.ct-skills__item:contains("Medicine"), .ct-skills__item:contains("Herbalism Kit")' 
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Hospitality":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Persuasion"), .ct-skills__item:contains("Brewer's Supplies"), .ct-skills__item:contains("Cook's Utensils")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Making":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Arcana"), .ct-skills__item:contains("Artisan's Tools")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Passage":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Athletics"), .ct-skills__item:contains("Acrobatics")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Scribing":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Intelligence"), .ct-skills__item:contains("Calligrapher's Supplies")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Sentinel":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Insight"), .ct-skills__item:contains("Perception")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Shadow":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Stealth"), .ct-skills__item:contains("Performance")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Storm":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Acrobatics"), .ct-skills__item:contains("Navigator's Tools")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Mark of Warding":{
-    "multiOptions": {
-      "d4": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")` 
-        },
-        "newRoll": '$1+1d4',
-      },
-      "d6": {
-        "tohit": "0",
-        "dmg": "0", 
-        "save": "0",
-        "check": "0",
-        "replace": /(.)$/gi,//last character
-        "replaceType": {
-          "check": `.ct-skills__item:contains("Investigation"), .ct-skills__item:contains("Thieves' Tools")`
-        },
-        "newRoll": '$1+1d6',
-      }
-    },
-    "type": "feat",
-  },
-  "Great Weapon Fighting": {
-    "multiOptions": {
-      "2024": { 
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^(\d+d\d+)/gi,//find first roll
-        "replaceType": {
-          "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
-        },
-        "newRoll": '$1min3',//replace with original roll with minimum roll of 3
-      },
-      "Legacy": {
-        "tohit": "0",
-        "dmg": "0",
-        "save": "0",
-        "check": "0",
-        "replace": /^(\d+d\d+)/gi,//find first roll
-        "replaceType": {
-            "dmg": 'button:has(.ddbc-damage--versatile), .ddbc-combat-item-attack--melee:has(.ddbc-note-components__component:contains("Two-Handed"))' //looks for versatile 2 hand button or two-handed trait in item note
-        },
-        "newRoll": '$1ro<3',//reroll 1 & 2
-      },
-    },
-    "type": "feat",
-  },  
-}
-var rollBuffFavorites = [];
-var rollBuffContext = [];
-var rollBuffPins = [];
+
 
 /** @param changes {object} the changes that were observed. EX: {hp: 20} */
 function character_sheet_changed(changes) {
@@ -1367,7 +384,6 @@ function read_inspiration(container = $(document)) {
 
 // Good canidate for service worker
 async function init_characters_pages(container = $(document)) {
-
   // this is injected on Main.js when avtt is running. Make sure we set it when avtt is not running
   if (typeof window.EXTENSION_PATH !== "string" || window.EXTENSION_PATH.length <= 1) {
     window.EXTENSION_PATH = container.find("#extensionpath").attr('data-path');
@@ -1434,7 +450,6 @@ function convertToRPGRoller(){
           const button = $(this);
           if(button.hasClass('avtt-roll-formula-button')){
              rollData = DiceRoll.fromSlashCommand(button.attr('data-slash-command'))
-             rollData.modifier = `${Math.sign(rollData.calculatedConstant) == 1 ? '+' : ''}${rollData.calculatedConstant}`
           }
           else{
             rollData = getRollData(button[0])
@@ -1443,7 +458,7 @@ function convertToRPGRoller(){
           e.stopPropagation();
           e.preventDefault();
 
-          if (rollData.rollType === "damage") {
+          if (rollData.rollType === "damage" || (rollData.expression !== "1d20" && !/^1d20/gi.test(rollData.expression))) {
             damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
               .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
           } else {
@@ -1498,7 +513,11 @@ async function init_character_sheet_page() {
       }
     });
   });
-
+  $('.ct-character-sheet__inner').off('click.stopPropagation').on('click.stopPropagation', '.integrated-dice__container, .avtt-roll-button, .ddbc-combat-attack__icon.above-vtt-visited, .ct-spells-spell__action.above-vtt-visited .ct-spells-spell__at-will, .ddb-note-roll', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  });
   // observe window resizing and injeect our join/exit button if necessary
   window.addEventListener('resize', function(event) {
     inject_join_exit_abovevtt_button();
@@ -1651,9 +670,11 @@ function inject_dice_roll(element, clear=true) {
   }
 
 
-  element.find(".integrated-dice__container, .ddb-note-roll").off('click.avttRoll').on('click.avttRoll', function(clickEvent) {
+  element.find(".integrated-dice__container, .ddb-note-roll").off('pointerdown.avttRoll touchstart.avttRoll').on('pointerdown.avttRoll touchstart.avttRoll', function(clickEvent) {
+    if (clickEvent.button === 2) return;
+    clickEvent.preventDefault();
     clickEvent.stopPropagation();
-    
+    clickEvent.stopImmediatePropagation();
     if($(this).hasClass('avtt-roll-formula-button')){
       const slashCommand = $(clickEvent.currentTarget).attr("data-slash-command");
       const diceRoll = DiceRoll.fromSlashCommand(slashCommand, window.PLAYER_NAME, window.PLAYER_IMG, "character", window.PLAYER_ID); // TODO: add gamelog_send_to_text() once that's available on the characters page without avtt running
@@ -1672,15 +693,14 @@ function inject_dice_roll(element, clear=true) {
       e.preventDefault();
       let rollData = {}
       if($(this).hasClass('avtt-roll-formula-button')){
-         rollData = DiceRoll.fromSlashCommand($(this).attr('data-slash-command'))
-         rollData.modifier = `${Math.sign(rollData.calculatedConstant) == 1 ? '+' : ''}${rollData.calculatedConstant}`
+        rollData = DiceRoll.fromSlashCommand($(this).attr('data-slash-command'))
       }
       else{
-         rollData = getRollData(this)
+        rollData = getRollData(this)
       }
       
       
-      if (rollData.rollType === "damage") {
+      if (rollData.rollType === "damage" || (rollData.expression !== "1d20" && !/^1d20/gi.test(rollData.expression))) {
         damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
           .present(e.clientY, e.clientX) // TODO: convert from iframe to main window
       } else {
@@ -1689,64 +709,7 @@ function inject_dice_roll(element, clear=true) {
       }
   })
 }
-function register_buff_row_context_menu() {
-  $.contextMenu({
-    selector: ".dropdown-check-list li",
-    build: function(element, e) {
 
-      let menuItems = {};
-
-      let rowHtml = $(element);
-      let rowBuff = rowHtml.find('[data-buff]').attr('data-buff');
-
-      menuItems["favorite"] = {
-        name: rollBuffFavorites.includes(rowBuff) ? "Remove From Favorites" : "Move to Favorites",
-        callback: function(itemKey, opt, originalEvent) {
-            if(rollBuffFavorites.includes(rowBuff)){
-              rollBuffFavorites = rollBuffFavorites.filter(d=> d != rowBuff)
-            }
-            else{
-              rollBuffFavorites.push(rowBuff)
-            }
-            localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-            rebuild_buffs();
-
-        }
-      };
-      menuItems["pin"] = {
-        name: rollBuffPins.includes(rowBuff) ? "Unpin from Sheet" : "Pin to Sheet",
-        callback: function(itemKey, opt, originalEvent) {
-            if(rollBuffPins.includes(rowBuff)){
-              rollBuffPins = rollBuffPins.filter(d=> d != rowBuff)
-            }
-            else{
-              rollBuffPins.push(rowBuff)
-            }
-            localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-            rebuild_buffs();
-
-        }
-      };
-      /**** To do: Allow select menus to be added to roll context menus for this to work. Checkbox inputs can just be added as list items ****/
-      /*
-      menuItems["addToContext"] = {
-        name: rollBuffContext.includes(rowBuff) ? "Remove from Roll Context Menu" : "Add to Roll Context Menu",
-        callback: function(itemKey, opt, originalEvent) {
-          if(rollBuffContext.includes(rowBuff)){
-            rollBuffContext = rollBuffContext.filter(d=> d != rowBuff)
-          }
-          else{
-            rollBuffContext.push(rowBuff)
-          }
-          rebuild_buffs();
-        }
-      };
-      */
-      return { items: menuItems };
-    }
-
-  })
-}
 function click_condition(conditionName, setToggle = true, callback, addtionalCSS = ''){
   $('body').append(`<style id='condition-click'>.ct-condition-manage-pane{visibility:hidden !important;}${addtionalCSS}</style>`);
   $('.ct-combat__statuses-group--conditions .ct-combat__summary-label:contains("Conditions"), .ct-combat-tablet__cta-button:contains("Conditions"), .ct-combat-mobile__cta-button:contains("Conditions")').click();
@@ -1766,311 +729,6 @@ function click_condition(conditionName, setToggle = true, callback, addtionalCSS
     $('#condition-click').remove();
   }, 40)	
 }
-function rebuild_buffs(fullBuild = false){
-  window.rollBuffs = JSON.parse(localStorage.getItem('rollBuffs' + window.PLAYER_ID)) || [];
-  const buffDebuffKeys=Object.keys(buffsDebuffs);
-  const originalLength = window.rollBuffs.length;
-  window.rollBuffs = window.rollBuffs.filter(buff =>
-    Array.isArray(buff) ? buffDebuffKeys.includes(buff[0]) : buffDebuffKeys.includes(buff)
-  );
-  if(window.rollBuffs.length !== originalLength)
-    localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-  rollBuffFavorites = JSON.parse(localStorage.getItem('rollFavoriteBuffs' + window.PLAYER_ID)) || [];
-  rollBuffPins = JSON.parse(localStorage.getItem('rollBuffPins' + window.PLAYER_ID)) || [];
-  let avttBuffSelect;
-  const innerBuffHtml = `
-    <ul id='favoriteBuffs'><li>Favorite</li></ul>
-    <ul id='classBuffs'><li>Class</li>
-      <ul id='barbarianBuffs'><li>Barbarian</li></ul>
-      <ul id='bardBuffs'><li>Bard</li></ul>
-      <ul id='clericBuffs'><li>Cleric</li></ul>
-      <ul id='druidBuffs'><li>Druid</li></ul>
-      <ul id='fighterBuffs'><li>Fighter</li></ul>
-      <ul id='monkBuffs'><li>Monk</li></ul>
-      <ul id='paladinBuffs'><li>Paladin</li></ul>
-      <ul id='rangerBuffs'><li>Ranger</li></ul>
-      <ul id='rogueBuffs'><li>Rogue</li></ul>
-      <ul id='sorcererBuffs'><li>Sorcerer</li></ul>
-      <ul id='warlockBuffs'><li>Warlock</li></ul>
-      <ul id='wizardBuffs'><li>Wizard</li></ul>
-    </ul>
-    <ul id='speciesBuffs'><li>Species</li>
-      <ul id='halflingBuffs'><li>Halfling</li></ul>
-    </ul>      
-    <ul id='spellBuffs'><li>Spells</li></ul>
-    <ul id='featBuffs'><li>Feats</li></ul>
-    <ul id='2024conditionBuffs'><li>Conditions</li></ul>
-  `
-  if(fullBuild){
-    avttBuffSelect = $(`<div id="avtt-buff-options" class="dropdown-check-list">
-      <span class="clickHandle">Roll Buff/Debuffs</span>
-      <ul class="avttBuffItems">
-        ${innerBuffHtml}      
-      </ul>
-    </div>`)
-  }
-  else{
-    avttBuffSelect = $(`#avtt-buff-options`);
-    avttBuffSelect.find('.avttBuffItems').html(innerBuffHtml)
-  }
-  const toggleBuffMenuVisiblity = function(){
-    avttBuffSelect.toggleClass('visible')
-    if(avttBuffSelect.hasClass('visible')){
-      //set a timeout here to allow other automated clicks such as clicking the gamelog after setting a condition to finish before adding the close event
-      setTimeout(function(){
-        $(document).on('click.blurHandle', function(e){
-          if($(e.target).closest('#avtt-buff-options, .context-menu-list').length == 0){
-            avttBuffSelect.toggleClass('visible', false)
-            $(document).off('click.blurHandle');
-          }
-        })
-      }, 250)
-    }
-  }
-  const avttBuffItems = avttBuffSelect.find('.avttBuffItems')
-  avttBuffSelect.off('click.clickHandle').on('click.clickHandle', '.clickHandle', function(){
-    toggleBuffMenuVisiblity();
-  })
-  avttBuffSelect.off('click.headers').on('click.headers', 'ul>ul', function(e){
-    e.stopPropagation();
-    if($(e.target).is('li:first-of-type'))
-      $(e.target).closest('ul').toggleClass('collapsed');
-  })
-  const sortedBuffs = Object.keys(buffsDebuffs).sort().reduce(
-    (obj, key) => { 
-      obj[key] = buffsDebuffs[key]; 
-      return obj;
-    }, 
-    {}
-  );
-  const pinWrapper = $(`<div id='avttBuffSheetPins'></div>`);
-  $('#avttBuffSheetPins').remove()
- 
-  for(let i in sortedBuffs){
-    const headerRow = avttBuffItems.find(`ul#${buffsDebuffs[i].type == 'class' ? buffsDebuffs[i].class : buffsDebuffs[i].type == 'species' ? buffsDebuffs[i].species : buffsDebuffs[i].type}Buffs`);
-    const replacedName = i.replace("'", '');
-    const addToFavorite = rollBuffFavorites.includes(replacedName);
-    const addToPins = rollBuffPins.includes(replacedName);
-
-    if(buffsDebuffs[i]['multiOptions'] != undefined){
-      const row = $(`<li>
-        <select id='buff_${replacedName}' data-buff='${replacedName}'/>
-          <option value='0'></option>
-        </select>
-        <label for='buff_${replacedName}'>${i}</label>
-        <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
-          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
-        </div>
-      </li>`)
-      const select = row.find('select');
-      const currentSelected = window.rollBuffs.find(d => d.includes(i));
-
-      for(let j in buffsDebuffs[i]['multiOptions']){
-        const option = $(`<option value='${j}'>${j}</option>`);
-        select.append(option)
-      }
-      if(currentSelected != undefined){
-        select.val(currentSelected[1])
-      }
-      row.find('select').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).val() != '0'){
-          window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-          window.rollBuffs.push([i, $(this).val()])
-        }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => !d.includes(i)); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-        $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          const value = $(this).val();
-          if( value != '0'){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-              click_condition(condition, value, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          }
-          else if (is_abovevtt_page()) {        
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
-      })
-      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffFavorites.includes(replacedName)){
-          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffFavorites.push(replacedName)
-        }
-        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
-      })
-      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffPins.includes(replacedName)){
-          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffPins.push(replacedName)
-        }
-        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
-      })
-      if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);  
-      else    
-        headerRow.append(row);
-
-      if(addToPins){
-        const cloneRow = row.clone(true, true);
-        const cloneSelect = cloneRow.find('select');
-        if(currentSelected != undefined){
-          cloneSelect.val(currentSelected[1])
-        }
-        cloneSelect.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-          row.find('select').val($(this).val())
-        })
-        select.off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-          cloneRow.find('select').val($(this).val());
-        })
-        pinWrapper.append(cloneRow);
-      }
-    }else{
-      const row = $(`<li>
-        <input type="checkbox" id='buff_${replacedName}' data-buff='${replacedName}'/>
-        <label for='buff_${replacedName}'>${i}</label>
-        <div class='iconButtons'>
-          <span title='Pin to sheet' class="material-symbols-outlined pinToSheet ${rollBuffPins.includes(replacedName) ? 'enabled' : ''}"> </span>
-          <span title='Favorite' class="material-symbols-outlined favorite ${rollBuffFavorites.includes(replacedName) ? 'enabled' : ''}"> </span>
-        </div>
-      </li>`)
-      if(window.rollBuffs.includes(i))
-        row.find('input').prop('checked', true);
-      row.find('input').off('change.setRollBuff').on('change.setRollBuff', function(e){
-        if(typeof window.rollBuffs == 'undefined')
-          window.rollBuffs =[];
-        if($(this).is(':checked')){
-          window.rollBuffs.push(i)
-        }
-        else{
-         window.rollBuffs = window.rollBuffs.filter(d => d != i); 
-        }
-        localStorage.setItem('rollBuffs' + window.PLAYER_ID, JSON.stringify(window.rollBuffs));
-        $(this).blur();
-        if(buffsDebuffs[i].condition != undefined) { // Allow buffsDebuffs with conditions to update player tokens
-          let setOnOff = 'removeCondition';
-          let condition = buffsDebuffs[i].condition;
-          if($(this).is(':checked')){
-            setOnOff = 'addCondition';
-          }
-          const menuOpen = avttBuffSelect.hasClass('visible');
-          const additionalCSS = menuOpen ? `.dropdown-check-list .avttBuffItems {
-                  display: block !important;
-                  position: absolute !important;
-                  background: var(--theme-background-solid) !important;
-                  z-index: 200 !important;
-              }` : '';
-          if(STANDARD_CONDITIONS.includes(condition)){
-            click_condition(condition, setOnOff == 'addCondition' ? true : false, menuOpen ? toggleBuffMenuVisiblity : undefined, additionalCSS);
-          } else if (is_abovevtt_page()) {
-            const pc = find_pc_by_player_id(window.PLAYER_ID, false);
-            if (!pc) return;
-            const token = window.all_token_objects[pc.sheet];
-            if (!token) return;
-
-            token[setOnOff](condition);
-            token.place_sync_persist();
-          } else {
-            tabCommunicationChannel.postMessage({
-              msgType: setOnOff, 
-              characterId: window.PLAYER_ID,
-              text: condition, 
-              sendTo: window.sendToTab
-            })
-          }
-        }
-      })
-      row.find('span.favorite').off('click.favorite').on('click.favorite', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffFavorites.includes(replacedName)){
-          rollBuffFavorites = rollBuffFavorites.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffFavorites.push(replacedName)
-        }
-        localStorage.setItem('rollFavoriteBuffs' + window.PLAYER_ID, JSON.stringify(rollBuffFavorites));
-        rebuild_buffs();
-      })
-      row.find('span.pinToSheet').off('click.pinToSheet').on('click.pinToSheet', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(rollBuffPins.includes(replacedName)){
-          rollBuffPins = rollBuffPins.filter(d=> d != replacedName)
-        }
-        else{
-          rollBuffPins.push(replacedName)
-        }
-        localStorage.setItem('rollBuffPins' + window.PLAYER_ID, JSON.stringify(rollBuffPins));
-        rebuild_buffs();
-      })
-      if(addToFavorite)
-        avttBuffItems.find(`ul#favoriteBuffs`).append(row);
-      else   
-        headerRow.append(row);
-
-      if(addToPins){
-        const cloneRow = row.clone(true, true);
-         cloneRow.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-            row.find('input').prop('checked', $(this).is(':checked'));
-         })
-         row.find('input').off('change.syncRollBuff').on('change.syncRollBuff', function(e){
-            cloneRow.find('input').prop('checked', $(this).is(':checked'));
-         })
-        pinWrapper.append(cloneRow);
-      }
-    }
-
-  }
-  avttBuffItems.find(`ul>ul`).each(function(){
-    if($(this).find('li').length < 2)
-      $(this).hide();
-  })
-
-  if(fullBuild)
-    $('.ct-primary-box__tab--actions .ct-actions h2, .ct-actions-mobile .ct-actions h2, .ct-actions-tablet .ct-tablet-box__header').after(avttBuffSelect)
-  
-  const tabContent = $(`#avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_content'], #avtt-buff-options~.ct-tablet-box__content [class*='styles_tabFilter']>[class*='styles_content']`);
-  tabContent.prepend(pinWrapper);
-  register_buff_row_context_menu();
-}
 
 /**
  * Observes character sheet changes and:
@@ -2087,41 +745,6 @@ function observe_character_sheet_changes(documentToObserve) {
     localStorage.setItem(`${window.gameId != undefined ? window.gameId : window.myUser}-sendToDefault`, gamelog_send_to_text());
   })
 
- if(window.charWatchForNewDicePanel)
-    window.charWatchForNewDicePanel.disconnect();
-  window.charWatchForNewDicePanel = new MutationObserver((mutations) => {
-    mutations.every(async (mutation) => {
-      if (!mutation.addedNodes) return
-
-      for (let i = 0; i < mutation.addedNodes.length; i++) {
-        if (window.charWatchForNewDicePanel.done)
-          continue;
-        let node = mutation.addedNodes[i]
-        if ((node.className == 'dice-rolling-panel' || $('.dice-rolling-panel').length > 0)) {
-          if ($('[data-floating-ui-portal]').length>0){
-            window.charWatchForNewDicePanel.done = 1;
-            window.charWatchForNewDicePanel.disconnect();
-            $('[data-floating-ui-portal], .roll-mod-container').addClass('hidden');
-            await $("[class*='DiceContainer_button']").click(); // initialize dice panel so first roll doesn't fail
-            setTimeout(async () => {
-              $("[class*='DiceContainer_button']").click();//close dice panel
-              setTimeout(() => {
-                $('[data-floating-ui-portal], .roll-mod-container').removeClass('hidden');
-                $('[data-floating-ui-portal]').off('click.waiting').on('click.waiting', `[data-dd-action-name="Roll Dice Popup > Roll Dice"]`, function () {
-                  window.diceRoller.setWaitingForRoll();
-                })
-              }, 200)
-            }, 200);
-            window.charWatchForNewDicePanel.disconnect();
-            return false;
-          }
-        }
-      }
-      return true // must return true if doesn't break
-    })
-  });
-  window.charWatchForNewDicePanel.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
-  
   if(window.charGamelogObserver)
     window.charGamelogObserver.disconnect();
   window.charGamelogObserver = new MutationObserver((mutations) => {
@@ -2149,8 +772,8 @@ function observe_character_sheet_changes(documentToObserve) {
     if(window.DRAGGING || (typeof arrowKeysHeld !== 'undefined' && (arrowKeysHeld[0] || arrowKeysHeld[1] || arrowKeysHeld[2] || arrowKeysHeld[3])))
       return;
 
-      //support DDB character sheet overhaul
-
+    noisy_log(2, "character_sheet_observer", mutationList);
+    //support DDB character sheet overhaul
     const overhaul_iframe = $("#ddbfix-vtt-iframe[src*='abovevtt=true']:not(.abovevtt-visited)")
     overhaul_iframe.each(function(){
       const iframe = $(this);
@@ -2180,9 +803,6 @@ function observe_character_sheet_changes(documentToObserve) {
      
      
     })
-    noisy_log("character_sheet_observer", mutationList);
-
-
 
     if(is_abovevtt_page()){
       if($('.dice-rolling-panel, [data-floating-ui-portal]').length == 0 && window.diceWarning == undefined){
@@ -2212,6 +832,7 @@ function observe_character_sheet_changes(documentToObserve) {
             </span>`
       button.html(newHtml);
       const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg:not(.avtt-checkbox-fix)')
+      checkbox.css('visibility', 'hidden');
       const newCheckbox = $('.avtt-checkbox-fix').length > 0 ? $('.avtt-checkbox-fix') : checkbox.clone().addClass('avtt-checkbox-fix');
       self.find('div:last-of-type').append(newCheckbox);
       setTimeout(() => { self.closest('[role="presentation"]').find('[class*="MuiBackdrop-invisible"]').click() }, 250);
@@ -2222,6 +843,7 @@ function observe_character_sheet_changes(documentToObserve) {
       const row = rollMenu.find(`li:contains(${sendTo})`);
       const checkbox = rollMenu.find('[d="M9.00016 16.17L4.83016 12L3.41016 13.41L9.00016 19L21.0002 7.00003L19.5902 5.59003L9.00016 16.17Z"]').closest('svg:not(.avtt-checkbox-fix)')
       const newCheckbox = $('.avtt-checkbox-fix').length > 0 ? $('.avtt-checkbox-fix') : checkbox.clone().addClass('avtt-checkbox-fix');
+      checkbox.css('visibility', 'hidden');
       row.find('div:last-of-type').append(newCheckbox);
     }
     rollMenu = $("ul[role='menu']:has(div:contains('DM')):not(:has([value='trueSelf']))");
@@ -2369,13 +991,13 @@ function observe_character_sheet_changes(documentToObserve) {
           || curr.closest('.ct-spell-manage-pane').length > 0 
           || curr.closest('[class*="styles_mark__"]').length>0)
           return; // do not adjust side bar when it includes a search such as adding extras as it causes crashing
-        add_journal_roll_buttons(curr, `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
+          add_journal_roll_buttons(curr, `/profile/${window.myUser}/characters/${window.PLAYER_ID}`);
+          add_aoe_statblock_click(curr);
       })
     } 
      // initial injection of our buttons
     const notes = documentToObserve.find(".ddbc-note-components__component:not('.above-vtt-dice-visited')");
     notes.each(function() {
-      noisy_log("character_sheet_observer iterating", mutationList);
       try {
         inject_dice_roll($(this));
         $(this).addClass("above-vtt-dice-visited"); // make sure we only parse this element once
@@ -2384,15 +1006,18 @@ function observe_character_sheet_changes(documentToObserve) {
       }
     });
 
-    // for buttons text that changes based on input, such as damage change from adjusting spell level in the sidebar
-    const manualSetRollbuttons = documentToObserve.find(`.ct-spell-caster__modifier-amount:not(.above-vtt-visited)`) 
+    // for buttons text that changes based on input, such as damage change from adjusting spell level in the sidebar. Also includes special targets not otherwise scanned
+    const manualSetRollbuttons = documentToObserve.find(`.ct-spell-caster__modifier-amount:not(.above-vtt-visited), .ct-spells-level-casting__info-item [class*='styles_signed']:not(.above-vtt-visited)`); 
     if(manualSetRollbuttons.length > 0){
       manualSetRollbuttons.addClass("above-vtt-visited");
       const rollImage = window.PLAYER_IMG
       const rollName = window.PLAYER_NAME
 
       const clickHandler = function(e) {
-
+        if (e.button === 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         let rollData = {} 
         rollData = getRollData(this);
 
@@ -2406,7 +1031,7 @@ function observe_character_sheet_changes(documentToObserve) {
         let rollData = {} 
         if($(this).hasClass('avtt-roll-formula-button')){
            rollData = DiceRoll.fromSlashCommand($(this).attr('data-slash-command'))
-           rollData.modifier = `${Math.sign(rollData.calculatedConstant) == 1 ? '+' : ''}${rollData.calculatedConstant}`
+
         }
         else{
            rollData = getRollData(this)
@@ -2417,7 +1042,7 @@ function observe_character_sheet_changes(documentToObserve) {
 
         
         
-        if (rollData.rollType === "damage") {
+        if (rollData.rollType === "damage" || (rollData.expression !== "1d20" && !/^1d20/gi.test(rollData.expression))) {
           damage_dice_context_menu(rollData.expression, rollData.modifier, rollData.rollTitle, rollData.rollType, window.PLAYER_NAME, window.PLAYER_IMG, undefined, undefined, rollData.damageType, rollData.spellSave)
             .present(e.clientY, e.clientX) 
         } else {
@@ -2427,7 +1052,7 @@ function observe_character_sheet_changes(documentToObserve) {
       }
       manualSetRollbuttons.each(function(){
         const button = $(`<button class='avtt-roll-button'></button>`)
-        button.click(clickHandler);
+        button.off('pointerdown.click touchstart.click').on('pointerdown.click touchstart.click', clickHandler);
         button.on("contextmenu", rightClickHandler);
         $(this).wrap(button);
       })
@@ -2463,11 +1088,12 @@ function observe_character_sheet_changes(documentToObserve) {
         $(this).toggleClass('advantageHover', false)
         $(this).toggleClass('disadvantageHover', false)
       })
-      spells.off('click.multiroll').on('click.multiroll', function(e) {
+      
+      spells.off('pointerdown.multiroll touchstart.multiroll').on('pointerdown.multiroll touchstart.multiroll', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
 
-        if($(this).children('button').length == 0){
-          e.stopPropagation();
-        }
         let rollButtons = $(this).parent().find(`.integrated-dice__container:not('.avtt-roll-formula-button'):not('.above-vtt-visited'):not('.above-vtt-dice-visited'):not('.above-aoe'), .integrated-dice__container.abovevtt-icon-roll`);  
         let spellSave = $(this).parent().find(`.ct-spells-spell__save`);   
         let spellSaveText;
@@ -2624,10 +1250,10 @@ function observe_character_sheet_changes(documentToObserve) {
               top: 50%;
               transform: translate(-50%, -50%);
               background: var(--theme-background-solid);
+              color: var(--theme-contrast, #242528);
               box-shadow: 0px 0px 4px var(--theme-contrast);
               border-radius: 15px;
               border: 1px solid var(--theme-contrast);
-              color: var(--theme-contrast);
               overflow:hidden;'>  
               </div>`)
         let optionsContents = $(`<div style='overflow: auto; max-height:100%;'></div>`);
@@ -2736,8 +1362,9 @@ function observe_character_sheet_changes(documentToObserve) {
         $(this).toggleClass('advantageHover', false)
         $(this).toggleClass('disadvantageHover', false)
       })
-      attackIcons.off('click.multiroll contextmenu.multiroll').on('click.multiroll contextmenu.multiroll', function(e) {
+      attackIcons.off('pointerdown.multiroll touchstart.multiroll').on('pointerdown.multiroll touchstart.multiroll', function(e) {
         e.preventDefault();
+        e.stopPropagation();
         e.stopImmediatePropagation();
         let versatileRoll = window.CHARACTER_AVTT_SETTINGS.versatile;
                      
@@ -2813,12 +1440,6 @@ function observe_character_sheet_changes(documentToObserve) {
       if($(`style#advantageHover`).length == 0){
           $('body').append(`
             <style id='advantageHover'>
-              #avtt-buff-options span.material-symbols-outlined {
-                  opacity: 0.2;
-                  font-size:16px;
-                  margin-right: 2px;
-                  cursor: pointer;
-              }
               body {
                   --crit-success: #0a0;
                   --crit-fail: #a00;
@@ -2827,6 +1448,297 @@ function observe_character_sheet_changes(documentToObserve) {
 
               body.color-blind-avtt {
                   --crit-success: #ffff00;
+              }
+              .dropdown-check-list {
+                display: inline-block;
+                position: absolute;
+                left: 130px;
+                font-size: 10px;
+                width: 250px;
+              }
+
+              .ct-tablet-box__header ~ .dropdown-check-list {
+                left: unset;
+              }
+
+              .dropdown-check-list .clickHandle {
+                position: relative;
+                cursor: pointer;
+                display: inline-block;
+                padding: 0px 50px 0px 10px;
+                border: 1px solid #ccc;
+                border-radius: 5px 5px 0px 0px;
+                width: 250px;
+              }
+
+              .dropdown-check-list .clickHandle:after {
+                position: absolute;
+                content: "";
+                border-left: 2px solid var(--theme-contrast, #242528);
+                border-top: 2px solid var(--theme-contrast, #242528);
+                padding: 3px;
+                right: 10px;
+                top: 0px;
+                -moz-transform: rotate(-135deg);
+                -ms-transform: rotate(-135deg);
+                -o-transform: rotate(-135deg);
+                -webkit-transform: rotate(-135deg);
+                transform: rotate(-135deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems {
+                padding: 2px;
+                display: none;
+                margin: 0;
+                border: 1px solid #ccc;
+                border-top: none;
+                border-radius: 0px 0px 5px 5px;
+                height: 300px;
+                overflow: auto;
+                scrollbar-width: thin;
+                width: 250px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul.collapsed,
+              .dropdown-check-list ul.avttBuffItems > ul > ul.collapsed {
+                height: 22px;
+                overflow: hidden;
+                background: none;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li {
+                list-style: none;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                padding: 3px;
+                font-weight: normal;
+                margin-left: 2px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type {
+                font-size: 12px;
+                font-weight: bold;
+                position: relative;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type {
+                font-size: 10px;
+                margin-left: 5px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li {
+                margin-left: 7px;
+              }
+
+              .dropdown-check-list.visible .clickHandle {
+                color: #0094ff;
+              }
+
+              .dropdown-check-list .avttBuffItems {
+                display: none;
+              }
+
+              .dropdown-check-list.visible .avttBuffItems {
+                display: block;
+                position: absolute;
+                background: var(--theme-background-solid, #fff);
+                color: var(--theme-contrast, #242528);
+                z-index: 200;
+              }
+
+              .avttBuffItems li input {
+                margin-right: 4px;
+                width: 16px;
+                height: 16px;
+                min-width: 16px;
+                min-height: 16px;
+              }
+
+              .avttBuffItems li label {
+                font-size: 12px;
+                padding: 3px;
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:after,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type:after {
+                position: absolute;
+                content: "";
+                border-left: 2px solid var(--theme-contrast, #242528);
+                border-top: 2px solid var(--theme-contrast, #242528);
+                padding: 3px;
+                right: 3px;
+                top: 9px;
+                transform-origin: center;
+                -moz-transform: rotate(45deg);
+                -ms-transform: rotate(45deg);
+                -o-transform: rotate(45deg);
+                -webkit-transform: rotate(45deg);
+                transform: rotate(45deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul.collapsed > li:first-of-type:after,
+              .dropdown-check-list ul.avttBuffItems > ul > ul.collapsed > li:first-of-type:after {
+                top: 5px;
+                -webkit-transform: rotate(-135deg);
+                transform: rotate(-135deg);
+              }
+
+              .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:hover,
+              .dropdown-check-list ul.avttBuffItems > ul > ul > li:first-of-type:hover {
+                backdrop-filter: brightness(0.9);
+                border-radius: 5px;
+              }
+
+              .ct-character-sheet--dark-mode .dropdown-check-list ul.avttBuffItems > ul > li:first-of-type:hover {
+                backdrop-filter: brightness(3);
+              }
+
+              ul.avttBuffItems select,
+              .avttBuffSheetPins select {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+                text-indent: 1px;
+                text-overflow: '';
+                margin-right: 5px;
+                border-color: #7d7d7d;
+                padding: 0px;
+                width: 16px;
+                height: 16px;
+                border-radius: 3px;
+                background: #fff;
+                color: var(--theme-contrast, #242528);
+                text-shadow: none !important;
+                font-weight: bold;
+              }
+
+              .ct-character-sheet--dark-mode ul.avttBuffItems select,
+              .ct-character-sheet--dark-mode .avttBuffSheetPins select {
+                background: #363636 !important;
+              }
+
+              .avttBuffSheetPins select {
+                font-size: 10px;
+              }
+
+              .dropdown-check-list span.material-symbols-outlined {
+                opacity: 0.2;
+                font-size: 16px;
+                margin-right: 2px;
+                cursor: pointer;
+              }
+
+              .dropdown-check-list span.material-symbols-outlined.enabled {
+                opacity: 1;
+              }
+
+              .pinToSheet.material-symbols-outlined:before {
+                content: "\\f3ab";
+              }
+
+              .favorite.material-symbols-outlined:before {
+                content: "\\e8d0";
+              }
+
+              .avttBuffSheetPins div.iconButtons {
+                display: none;
+              }
+
+              .dropdown-check-list .iconButtons {
+                position: absolute;
+                display: flex;
+                right: 0px;
+              }
+
+              .dropdown-check-list .collapsed .iconButtons {
+                display: none;
+              }
+
+              .dropdown-check-list li:has(label) {
+                width: calc(100% - 30px);
+              }
+
+              #avtt-buff-options ~ [class*='styles_tabFilter'] > [class*='styles_buttons'] {
+                margin-bottom: 2px;
+              }
+
+              .avttBuffSheetPins {
+                display: flex;
+                flex-wrap: wrap;
+                margin: 5px 0px;
+                flex-direction: row;
+              }
+
+              .avttBuffSheetPins li {
+                list-style: none;
+                display: flex;
+                align-items: center;
+                margin-right: 20px;
+              }
+
+              .avttBuffSheetPins li input {
+                margin-right: 5px;
+                width: 16px;
+                height: 16px;
+              }
+
+              /* Stat block variant: sits at the top of the block. Sticky so it stays reachable while the
+                block scrolls. */
+              .avtt-statblock-buffs {
+                position: relative;
+                top: 0;
+                z-index: 5;
+                padding: 2px 6px;
+                background: var(--theme-background-solid, #fff);
+                color: var(--theme-contrast, #242528);
+                border-bottom: 1px solid #ddd;
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list {
+                position: relative;
+                left: unset;
+                width: 100%;
+                color: var(--theme-contrast, #242528);
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list .clickHandle {
+                line-height: 16px;
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list .clickHandle,
+              .avtt-statblock-buffs .dropdown-check-list ul.avttBuffItems {
+                width: 100%;
+                max-width:240px; 
+                box-sizing: border-box;
+                background: var(--theme-background-solid, #fff);
+                color: var(--theme-contrast, #242528);
+              }
+
+              .avtt-statblock-buffs .dropdown-check-list.readonly .clickHandle {
+                opacity: 0.6;
+                cursor: not-allowed;
+              }
+
+              /* Pins sit directly under the handle. The open menu is absolutely positioned, so it
+                overlays them rather than pushing them down. */
+              .avtt-statblock-buffs .avttBuffSheetPins {
+                margin: 3px 0px 0px 0px;
+                font-size: 10px;
+                row-gap: 2px;
+              }
+
+              .avtt-statblock-buffs .avttBuffSheetPins li {
+                margin-right: 10px;
+                flex:1;
+              }
+
+              .avtt-statblock-buffs .avttBuffSheetPins label {
+                font-size: 11px;
+                padding: 0px;
+                text-wrap: nowrap;
               }
 
                 [class*="glc-game-log"] .crit-success div[class*="TotalContainer-Flex"] span,
@@ -2900,50 +1812,6 @@ function observe_character_sheet_changes(documentToObserve) {
               .roll-mod-container.hidden{
                   visibility:hidden;
               }
-              #avtt-buff-options span.material-symbols-outlined.enabled {
-                  opacity: 1;
-              }
-              .pinToSheet.material-symbols-outlined:before{
-                   content:"\\f3ab";
-              }
-              .favorite.material-symbols-outlined:before{
-                  content:"\\e8d0";
-              }
-              #avttBuffSheetPins div.iconButtons{
-                display:none;
-              }
-              #avtt-buff-options .iconButtons {
-                  position:absolute;
-                  display:flex;
-                  right:0px;
-              }
-              #avtt-buff-options .collapsed .iconButtons {
-                  display: none;
-              }
-              #avtt-buff-options li:has(label) {
-                  width:calc(100% - 30px);
-              }
-              #avtt-buff-options~[class*='styles_tabFilter']>[class*='styles_buttons']{
-                margin-bottom:2px;
-              }
-              div#avttBuffSheetPins {
-                display: flex;
-                flex-wrap: wrap;
-                margin: 5px 0px;
-              }
-              div#avttBuffSheetPins li {
-                list-style: none; 
-                display: flex;
-                align-items: center;
-              }
-              div#avttBuffSheetPins li input {
-                margin-right: 5px;
-                width: 16px;
-                height: 16px;
-              }
-              div#avttBuffSheetPins li {
-                  margin-right: 20px;
-              }
               .avtt-ability-roll-button{
                   color: #b43c35;
                   border: 1px solid #b43c35;
@@ -2957,157 +1825,6 @@ function observe_character_sheet_changes(documentToObserve) {
                   letter-spacing: 1px;
                   padding: 1px 4px 0;
                   cursor: pointer;
-              }
-              ul.avttBuffItems select,
-              div#avttBuffSheetPins select {
-                -webkit-appearance: none;
-                -moz-appearance: none;
-                text-indent: 1px;
-                text-overflow: '';
-                margin-right: 5px;
-                border-color: #7d7d7d;
-                padding:0px;
-                width:16px;
-                height:16px;
-                border-radius:3px;
-                background: #fff;
-                color: var(--theme-contrast);
-                text-shadow: none !important;
-                font-weight: bold; 
-              }
-              .ct-character-sheet--dark-mode ul.avttBuffItems select,
-              .ct-character-sheet--dark-mode div#avttBuffSheetPins select {
-                background: #363636 !important;
-              }
-              div#avttBuffSheetPins select{
-                font-size: 10px;
-              }
-              .ct-character-sheet--dark-mode .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(3);
-              }
-              .dropdown-check-list {
-                display: inline-block;
-                position: absolute;
-                left: 130px;
-                font-size: 10px;
-                width: 250px;
-              }
-              .ct-tablet-box__header ~ .dropdown-check-list {
-                left: unset;
-              }
-              .dropdown-check-list .clickHandle {
-                position: relative;
-                cursor: pointer;
-                display: inline-block;
-                padding: 0px 50px 0px 10px;
-                border: 1px solid #ccc;
-                border-radius: 5px 5px 0px 0px;
-                width: 250px;
-              }
-
-              .dropdown-check-list .clickHandle:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 10px;
-                top: 0px;
-                -moz-transform: rotate(-135deg);
-                -ms-transform: rotate(-135deg);
-                -o-transform: rotate(-135deg);
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems {
-                padding: 2px;
-                display: none;
-                margin: 0;
-                border: 1px solid #ccc;
-                border-top: none;
-                border-radius: 0px 0px 5px 5px;
-                height: 300px;
-                overflow: auto;
-                scrollbar-width: thin;
-                width: 250px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed {
-                height: 22px;
-                overflow: hidden;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li {  
-                list-style: none;
-                display: flex;
-                align-items: center;
-                justify-content: flex-start;
-                padding: 3px;
-                font-weight: normal;
-                margin-left:2px
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type {
-                font-size: 12px;
-                font-weight: bold;
-                position: relative;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type{
-                  font-size:10px;
-                  margin-left:5px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li{
-                  margin-left: 7px;
-              }
-              .dropdown-check-list.visible .clickHandle {
-                color: #0094ff;
-              }
-              .dropdown-check-list .avttBuffItems {
-                display: none;
-              }
-              .dropdown-check-list.visible .avttBuffItems {
-                display: block;
-                position: absolute;
-                background: var(--theme-background-solid);
-                z-index: 200;
-              }
-              .avttBuffItems li input{
-                margin-right: 4px;
-                width: 16px;
-                height: 16px;
-                min-width: 16px;
-                min-height: 16px;
-              }
-              .avttBuffItems li label{
-                font-size:12px;
-                padding: 3px;
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:after {
-                position: absolute;
-                content: "";
-                border-left: 2px solid var(--theme-contrast);
-                border-top: 2px solid var(--theme-contrast);
-                padding: 3px;
-                right: 3px;
-                top: 9px;
-                transform-origin:center;
-                -moz-transform: rotate(45deg);
-                -ms-transform: rotate(45deg);
-                -o-transform: rotate(45deg);
-                -webkit-transform: rotate(45deg);
-                transform: rotate(45deg);       
-              }
-              .dropdown-check-list ul.avttBuffItems>ul.collapsed>li:first-of-type:after,
-              .dropdown-check-list ul.avttBuffItems>ul>ul.collapsed>li:first-of-type:after {
-                top: 5px;
-                -webkit-transform: rotate(-135deg);
-                transform: rotate(-135deg);
-              }
-              .dropdown-check-list ul.avttBuffItems>ul>li:first-of-type:hover,
-              .dropdown-check-list ul.avttBuffItems>ul>ul>li:first-of-type:hover{
-                  backdrop-filter:brightness(0.9);
-                  border-radius:5px;
               }
               div#icon-roll-options input,
               div#icon-roll-options select{
@@ -3133,12 +1850,16 @@ function observe_character_sheet_changes(documentToObserve) {
                   /* lifted from DDB encounter stat blocks  */
                   color: var(--theme-contrast, #b43c35) !important;
                   background: transparent !important;
-                  border: 1px solid var(--theme-color, #b43c35) !important;
+                  border:none !important;
+                  outline: 1px solid var(--theme-color, #b43c35) !important;
                   border-radius: 4px !important;
                   white-space: nowrap;
                   font-family: Roboto Condensed,Open Sans,Helvetica,sans-serif;
                   letter-spacing: 1px;
                   padding: 1px 4px 0;  
+              }
+              .ct-sidebar__inner [class*="GameLogEntries"] [class*="Message-Collapsed-Other-Flex"] .avtt-roll-button{
+                color: #3f3f3f !important;
               }
               .ct-character-sheet__inner button.avtt-roll-button:hover,
               .ct-sidebar__inner .integrated-dice__container:hover,
@@ -3305,7 +2026,8 @@ function observe_character_sheet_changes(documentToObserve) {
           if (is_abovevtt_page()) {
             inject_chat_buttons();
           }
-          window.MB.reprocess_chat_message_history();
+          if(typeof window.MB?.reprocess_chat_message_history === 'function')
+            window.MB.reprocess_chat_message_history();
         }
 
         if(is_abovevtt_page()){
@@ -3384,7 +2106,10 @@ function observe_character_sheet_changes(documentToObserve) {
               send_movement_speeds(documentToObserve, mutationTarget);
             } else if(firstAddedNode.hasClass('ct-extra-row') || (firstAddedNode.hasClass('ct-content-group') && $('.ct-extra-row').length>0)){
               debounce_add_extras();
-            } else if (firstAddedNode.is('[class*="-Line-Notation"]') && mutationTarget.closest("[data-avtt-expression]").length>0){
+            } else if (mutationTarget.closest("[data-avtt-expression]").length>0 && (mutation.addedNodes.length > 0 && Array.from(mutation.addedNodes).some(node => {
+              const addedNode = $(node);
+              return addedNode.is('[class*="-Line-Notation"]') || addedNode.find('[class*="-Line-Notation"]').length > 0;
+            }))){
               replace_gamelog_message_expressions(mutationTarget.closest("[data-avtt-expression]"))
             }
 
@@ -3441,7 +2166,7 @@ function observe_character_sheet_changes(documentToObserve) {
                 } catch (error) {
                   console.log("inject_dice_roll failed to process element", error);
                 }
-              } else if (mutationParent.is("[class*='styles_characterName']") || mutation.target.parentElement.classList.contains("ddb-character-app-sn0l9p") || (mutationParent.attr('class').includes('ddb-character-app') && mutationParent.parent().hasClass('ddbc-character-tidbits__heading'))) {
+              } else if (mutationParent.is("[class*='styles_characterName']") || mutation.target.parentElement.classList.contains("ddb-character-app-sn0l9p") || (mutationParent.attr('class')?.includes('ddb-character-app') && mutationParent.parent().hasClass('ddbc-character-tidbits__heading'))) {
                 window.PLAYER_NAME = mutation.target.data;
                 character_sheet_changed({name: mutation.target.data});
               }
@@ -3482,8 +2207,8 @@ function observe_non_sheet_changes(documentToObserve) {
             }
             gameLogButton.click();
           }
-          
-          window.MB.reprocess_chat_message_history();
+          if(typeof window.MB?.reprocess_chat_message_history === 'function')
+            window.MB.reprocess_chat_message_history();
           return false;
         }
         return true;
@@ -3648,7 +2373,25 @@ function inject_join_button_on_character_list_page() {
   const characterCards = list.find(".ddb-campaigns-character-card-campaign-links");
   characterCards.each((_, campaignLink) => {
     const cardFooter = $(campaignLink).siblings(".ddb-campaigns-character-card-footer").find(".ddb-campaigns-character-card-footer-links");
-    const joinButton = $(`<a href='#' class='button ddb-campaigns-character-card-footer-links-item' style='color:white;background: #1b9af0;text-align: center;border-radius: 2px;box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 5%);background-repeat: repeat-x;border: 1px solid #070707;border-color: rgba(0,0,0,0.1) rgba(0,0,0,0.1) rgba(0,0,0,0.25);margin-top: 5px;padding-left: 4px;padding-right: 4px;'>JOIN AboveVTT</a>`);
+    cardFooter.parent().css("padding", "5px");
+    const joinButton = $(`<a href='#' class='button ddb-campaigns-character-card-footer-links-item' style='background: #600606 !important;
+                              padding: 3px;
+                              filter: drop-shadow(1px 1px 1px black);
+                              border-radius: 5px;
+                              box-shadow: inset 0px 0px 20px -10px #F00;
+                              top: -2px;
+                              position: relative;
+                              text-wrap: nowrap;
+                              text-shadow: 1px 1px 1px #000;
+                              color: #FFF !important;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              flex-direction: row;
+                              line-height: normal;'> 
+                            <img style="height:17px;filter: drop-shadow(1px 1px 0px black) drop-shadow(1px 0px 0px black);" src="${window.EXTENSION_PATH}assets/avtt-logo.png" title="AboveVTT Logo">
+                            JOIN AboveVTT
+                          </a>`);
     cardFooter.prepend(joinButton);
     joinButton.click(function(e) {
       e.preventDefault();

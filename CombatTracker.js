@@ -125,6 +125,29 @@ function init_combat_tracker(){
 			});
 		}
 	});
+
+	ct_inside.off('contextmenu').on('contextmenu', 'tr[data-target]', function(e){	
+		noisy_log("context_menu_flyout contextmenu event", e);
+		e.preventDefault();
+		e.stopPropagation();
+		if (window.DRAGGING || $(".pause_click").length > 0) {
+			clearTimeout(contextMenuLongPressTimer);
+			return;
+		}
+		const target = $(e.currentTarget);
+		const ctContainer = target.closest('#combat_tracker_inside');
+		const position = ctContainer.position();
+		let newLeft = position.left + ctContainer.width() + 230;
+		if(newLeft + 230 > window.innerWidth) {
+			newLeft = position.left;
+		}
+		e.clientX = newLeft;
+		if(e.touches && e.touches.length > 0) {
+			e.touches[0].clientX = newLeft;
+		}
+		token_context_menu_expanded([target.attr("data-target")], e);
+	});
+
 	ct_title_bar_settings.click(function(){openCombatTrackerSettings()});
 	ct_title_bar.append(ct_title_bar_settings);
 	ct_title_bar.append(ct_title_bar_exit);
@@ -201,7 +224,7 @@ function init_combat_tracker(){
 		let tokenID = $("#combat_area tr[data-current]").attr('data-target');
 		if(window.TOKEN_OBJECTS[tokenID] != undefined){
 			window.TOKEN_OBJECTS[tokenID].options.round = window.ROUND_NUMBER;
-			window.TOKEN_OBJECTS[tokenID].update_and_sync();
+			window.TOKEN_OBJECTS[tokenID].place_sync_persist();
 		}
 	});
 	
@@ -355,7 +378,7 @@ function init_combat_tracker(){
 			if(window.TOKEN_OBJECTS[currentTarget] != undefined){
 				delete window.TOKEN_OBJECTS[currentTarget].options.current;
 				delete window.TOKEN_OBJECTS[currentTarget].options.round;
-				window.TOKEN_OBJECTS[currentTarget].place_sync_persist();;
+				window.TOKEN_OBJECTS[currentTarget].place_sync_persist();
 			}
 			if(window.TOKEN_OBJECTS[newTarget] != undefined){
 				adjust_age(window.TOKEN_OBJECTS[newTarget], 1)
@@ -388,7 +411,7 @@ function init_combat_tracker(){
 	});
 	let rollplayerinit=$('<button id="rollplayerinit" class="roll-init-button">Roll Initiative</button>');
 	rollplayerinit.click(function(){
-		$(`.ct-combat__summary-group--initiative button.integrated-dice__container`).click();
+		$(`.ct-combat__summary-group--initiative button.integrated-dice__container`)[0].dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
 	});
 	
 	
@@ -444,6 +467,23 @@ function init_combat_tracker(){
 		init_carousel_combat_tracker()
 	}
 }
+const debounceNextSelect = mydebounce(async (token, domToken) => {
+	$(`.tokenselected`).removeClass('tokenselected');
+	$(`:is(#combat_area, #combat_area_carousel) tr.selected-token`).removeClass('selected-token');		
+	const promise = new Promise(async (resolve) => {
+		await forSelTokensAsync((t) => {
+			t.selected = false;
+		});
+		window.CURRENTLY_SELECTED_TOKENS = []
+		resolve();
+	});
+	promise.then(() => {
+		$(`:is(#combat_area, #combat_area_carousel) tr[data-target='${token.options.id}']`).addClass('selected-token');		
+		token.selected = true;
+		domToken.addClass('tokenselected');
+		do_draw_selected_token_bounding_box();
+	});
+}, 100);
 function highlight_scroll_next(currentTarget){
 	let combatSettingData = getCombatTrackerSettings();
 	if(combatSettingData['scroll_to_next'] != '1' && combatSettingData['select_next'] != '1')
@@ -462,8 +502,8 @@ function highlight_scroll_next(currentTarget){
 	const tokenOwned = window.DM || isPlayerToken || targetToken.options.player_owned == true;
 	const tokenShared = tokenOwned || window.TOKEN_OBJECTS[tokenId].options.share_vision == true || window.TOKEN_OBJECTS[tokenId].options.share_vision == window.myUser || (window.TOKEN_OBJECTS[tokenId].options.share_vision && is_spectator_page()) 
 
-	if(combatSettingData['select_next'] == '1' && targetToken.selected == false && (tokenShared || tokenOwned)){
-		domToken.click();
+	if(combatSettingData['select_next'] == '1' && (tokenShared || tokenOwned)){
+		debounceNextSelect(targetToken, domToken);
 	}
 	if(combatSettingData['scroll_to_next'] == '1' && tokenVisible){	
 		targetToken.highlight();			
@@ -536,10 +576,14 @@ function init_carousel_combat_tracker(){
       #combat_carousel_container.tracker-list.sidebarClosed{
     		left: 50%;
       }
-     #combat_carousel_container tr {
-          display: flex;
-  				min-height:105px !important;
-      }
+	#combat_carousel_container tr{
+		display: flex;
+		min-height:85px !important;
+	}
+	#combat_carousel_container tr[data-current="1"] {
+		display: flex;
+		min-height:105px !important;
+	}
       #combat_carousel_container tr :is(img, video) {
           width:80px;
           height: 80px;   
@@ -574,13 +618,11 @@ function init_carousel_combat_tracker(){
       #combat_carousel_container .selected-token td:first-of-type:before {
           width:78px;
           height: 78px;
-          top: 3px;
           left: 3px;
       }
       #combat_carousel_container .selected-token[data-current='1'] td:first-of-type:before {
           width:98px;
           height: 98px;
-          top: 3px;
           left: 3px;
       }
       #combat_carousel_container #combat_area_carousel tr[data-current]{
@@ -1121,9 +1163,15 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 	entry.attr("data-target",token.options.id);	
 	entry.attr("ishidden", token.options.hidden);
 	if(token.options.combatGroup && !token.options.combatGroupToken){
-		entry.attr("skipTurn", token.options.combatGroup);
-		if(window.expandedGroupIds != undefined && window.expandedGroupIds.includes(token.options.combatGroup))
-			entry.toggleClass('showGroupTokens', true)	
+		if(window.all_token_objects[token.options.combatGroup] === undefined){
+			delete token.options.combatGroup;
+		}
+		else{
+			entry.attr("skipTurn", token.options.combatGroup);
+			if(window.expandedGroupIds != undefined && window.expandedGroupIds.includes(token.options.combatGroup))
+				entry.toggleClass('showGroupTokens', true)	
+		}
+
 	}
 	entry.addClass("CTToken");
 	if(window.DM && !token.options.combatGroupToken){
@@ -1319,30 +1367,22 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
 			let value = $(this).val().trim();
-			if (value.startsWith("+") || value.startsWith("-")) {
-				value = Math.max(0, parseInt(token.hp) + parseInt(value));
-				$(this).val(value);
-			} else{
-				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
-				value = Math.max(0, parseInt(eval(sanitizedString)));
-				$(this).val(value);
-			}
+			value = calculate_hp(value, token.hp);
+			if (value === undefined)
+				return;
 
-			old.find(".hp").val(value);	
-
-			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].hp = value;
-
-				debounceChange(window.all_token_objects[token.options.id]);
-			}			
+			const tokenObj = window.all_token_objects[token.options.id];
+			window.all_token_objects[token.options.id].totalHp = value;
+			
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
-				window.TOKEN_OBJECTS[token.options.id].hp = value;
-				window.TOKEN_OBJECTS[token.options.id].update_from_page();
-				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
-			}							
-				
-			window.all_token_objects[token.options.id].update_combat_tracker()
-			window.all_token_objects[token.options.id].update_quick_roll();	
+				window.TOKEN_OBJECTS[token.options.id].totalHp = value;
+				token.place();
+			}		
+			
+			$(this).val(tokenObj.hp);
+			tokenObj.sync();
+			tokenObj.update_combat_tracker()
+			tokenObj.update_quick_roll();	
 		});
 		hp_input.click(function(e) {
 			$(e.target).select();
@@ -1351,41 +1391,38 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 			let selector = "div[data-id='" + token.options.id + "']";
 			let old = $("#tokens").find(selector);
 			let value = $(this).val().trim();
-			if (value.startsWith("+") || value.startsWith("-")) {
-				value = Math.max(0, token.maxHp + parseInt(value));
-				$(this).val(value);
-			} else{
-				const sanitizedString = value.replaceAll(/[^\d+-/*().]/gi, '');
-				value = Math.max(0, parseInt(eval(sanitizedString)));
-				$(this).val(value)
-			}
+			
+			value = calculate_hp(value, token.maxHp);
+			if (value === undefined)
+				return;
+			$(this).val(value)
 
-			old.find(".max_hp").val(value);
-			if(window.all_token_objects[token.options.id] != undefined){
-				window.all_token_objects[token.options.id].maxHp = value;
-				debounceChange(window.all_token_objects[token.options.id]);
-			}
+			const tokenObj = window.all_token_objects[token.options.id];
+			tokenObj.maxHp = value;	
 			if(window.TOKEN_OBJECTS[token.options.id] != undefined){		
 				window.TOKEN_OBJECTS[token.options.id].maxHp = value;
-				window.TOKEN_OBJECTS[token.options.id].update_from_page();
-				debounceChange(window.TOKEN_OBJECTS[token.options.id]);
-			}							
-			window.all_token_objects[token.options.id].update_combat_tracker()
-			window.all_token_objects[token.options.id].update_quick_roll();		
+				token.place();
+			}
+									
+			tokenObj.sync();
+			tokenObj.update_combat_tracker()
+			tokenObj.update_quick_roll();		
 		});
 		maxhp_input.click(function(e) {
 			$(e.target).select();
 		});
-
+		const debounceTriggerChange = mydebounce(function(input) {
+			input.trigger('change');
+		}, 1500);
 		hp_input.on('wheel', function(e) {
 			const input = $(this);
 			if(!input.is(':focus'))
 				return;
 			e.preventDefault();
 			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
-			const current = parseInt(token.hp) || 0;
+			const current = parseInt(input.val()) || 0;
 			input.val(Math.max(0, current + delta));
-			input.trigger('change');
+			debounceTriggerChange(input);
 		});
 		maxhp_input.on('wheel', function(e) {
 			const input = $(this);
@@ -1393,9 +1430,9 @@ function ct_add_token(token,persist=true,disablerolling=false, adv=false, dis=fa
 				return;
 			e.preventDefault();
 			const delta = e.originalEvent.deltaY < 0 ? 1 : -1;
-			const current = parseInt(token.maxHp) || 0;
+			const current = parseInt(input.val()) || 0;
 			input.val(Math.max(1, current + delta));
-			input.trigger('change');
+			debounceTriggerChange(input);
 		});
 	}
 	else {

@@ -21,6 +21,10 @@ function scan_monster(target, stats, tokenId) {
 	const creatureAvatar = window.TOKEN_OBJECTS[tokenId]?.options.imgsrc || stats.data.avatarUrl;
 
 	function clickHandler(clickEvent) {
+		if(clickEvent.button === 2) return;
+		clickEvent.preventDefault();
+		clickEvent.stopPropagation();
+		clickEvent.stopImmediatePropagation();
 		roll_button_clicked(clickEvent, displayName, creatureAvatar, "monster", tokenId)
 	};
 
@@ -47,7 +51,7 @@ function scan_monster(target, stats, tokenId) {
 				const followingText = $(this)[0].nextSibling?.textContent?.trim()?.split(' ')[0]
 
 				const button = `<button data-exp='${dice}' data-mod='${modifier}' data-rolltype='${rollType}' ${followingText && window.ddbConfigJson.damageTypes.some(d => d.name.toLowerCase() == followingText.toLowerCase()) ? `data-damagetype='${followingText}'` : ''} data-actiontype='${actionType}' class='avtt-roll-button' title="${actionType} ${rollType}">${text}</button>`
-				const targetTitle = 	$(this).closest('p').length > 0 ? $(this).closest('p>strong:first-of-type:has(em), p>em:first-of-type:has(strong)') : $(this).closest('strong:first-of-type:has(em), em:first-of-type:has(strong)')
+				const targetTitle = $(this).closest('p').length > 0 ? $(this).closest('p>strong:first-of-type:has(em), p>em:first-of-type:has(strong)') : $(this).closest('strong:first-of-type:has(em), em:first-of-type:has(strong)')
 					
 				if(rollType == 'recharge' && targetTitle.length > 0){
 					const rechargeRegEx = /(Recharge [0-6]?\s?[—–-]?\s?[0-6])/gi
@@ -85,7 +89,7 @@ function scan_monster(target, stats, tokenId) {
 	)
 
 
-	$(target).find(".avtt-roll-button").click(clickHandler);
+	$(target).find(".avtt-roll-button").off('pointerdown.click touchstart.click').on('pointerdown.click touchstart.click', clickHandler);
 	$(target).find(".avtt-roll-button").on("contextmenu", rightClickHandler);
 	add_ability_tracker_inputs(target, tokenId)
 	
@@ -101,11 +105,11 @@ function add_ability_tracker_inputs_on_each(target, tokenId){
 	const token = window.TOKEN_OBJECTS[tokenId];
 	if(target.find('.add-input').length)
 		return;
-	if(target.find('strong:first-of-type').text().match(/at will:|\/day each/gi)){
+	if(target.find('strong:first-of-type').text().match(/\/day each/gi)){
 		target.find('strong').each(function(){
 			let currentElement = $(this).nextUntil('strong').addBack();
 			if (currentElement.find(".injected-input").length == 0) {
-				const matchForEachSlot = currentElement.text().match(/([0-9]+)\/Day each:|([0-9]+)\/Day:/gi)
+				const matchForEachSlot = currentElement.text().match(/([0-9]+)\/Day each:/gi)
 
 				if (matchForEachSlot){
 					let numberFound = parseInt(matchForEachSlot[0]);
@@ -145,14 +149,17 @@ function add_ability_tracker_inputs_on_each(target, tokenId){
 				if (matchForEachSlot){
 					let numberFound = parseInt(matchForEachSlot[1]);
 					$(this).children().each(function (indexInArray, valueOfElement) { 
-						let spellName = $(valueOfElement).clone().text().replace(/\s/g, "")
+						const $element = $(valueOfElement);
+						if($element.is('button'))
+							return;
+						let spellName =  $element.clone().text().replace(/\s/g, "")
 						// token already has this ability tracked
 						if (token.options.abilityTracker?.[spellName] >= 0){
 							numberFound = token.options.abilityTracker[spellName]
 						}else{
 							token.track_ability(spellName, numberFound)
 						}
-						$(valueOfElement).after(
+						 $element.after(
 							createCountTracker(
 								token,
 								spellName, 
@@ -187,7 +194,7 @@ function rebuild_ability_trackers(target, tokenId){
  * @returns 
  */
 function createCountTracker(token, key, remaining, foundDescription, descriptionPostfix, callback, noteId) {
-	const input = $(`<input class="injected-input" data-token-id="${token?.options?.id}" data-tracker-key="${key}" type="number" value="${remaining}"></input><span class='added-input-desc'> ${foundDescription} ${descriptionPostfix}</span>`);
+	const input = $(`<input class="injected-input" contenteditable="false" data-token-id="${token?.options?.id}" data-tracker-key="${key}" type="number" value="${remaining}"></input><span class='added-input-desc' contenteditable="false"> ${foundDescription} ${descriptionPostfix}</span>`);
 	input.off('input').on('input', function(){
 		resizeInput(input[0]);
 	})
@@ -224,35 +231,39 @@ function add_ability_tracker_inputs(target, tokenId) {
 
 	const processInput = function(element, regex, descriptionPostfix, includeMatchingDescription = true) {
 		
-		const foundMatches = element.clone().text().match(regex); // matches `(1 slot)`, `(4 slots)`, etc
-		if (foundMatches !== undefined && foundMatches != null && foundMatches.length > 1) {
-			let numberFound = parseInt(foundMatches[1]);
-			if (!isNaN(numberFound)) {
-				const foundDescription = includeMatchingDescription ? foundMatches.input.substring(0, foundMatches.index) : ''; // `1st level `, `2nd level `, etc.
-				const key = foundDescription.replace(/\s/g, ""); // `1stlevel`, `2ndlevel`, etc.
-				// token already has this ability tracked, update the input
-				if (token.options.abilityTracker?.[key] >= 0){
-					numberFound = token.options.abilityTracker[key]
-				} else{
-					token.track_ability(key, numberFound)
+		const splitHtml = element.clone().html().split(/<br[\s/]?>|<\/?p>|\n/g);
+		splitHtml.forEach((splitElement) => {
+			const foundMatches = splitElement.match(regex); // matches `(1 slot)`, `(4 slots)`, etc
+			if (foundMatches !== undefined && foundMatches != null && foundMatches.length > 1) {
+				let numberFound = parseInt(foundMatches[1]);
+				if (!isNaN(numberFound)) {
+					const foundDescription = includeMatchingDescription ? foundMatches.input.substring(0, foundMatches.index) : ''; // `1st level `, `2nd level `, etc.
+					const key = foundDescription != '' ? foundDescription.replace(/\s/g, "") : /day/i.test(foundMatches[0]) ? `spellPerDay${numberFound}` : ''; // `1stlevel`, `2ndlevel`, etc.
+					// token already has this ability tracked, update the input
+					if (token.options.abilityTracker?.[key] >= 0){
+						numberFound = token.options.abilityTracker[key]
+					} else{
+						token.track_ability(key, numberFound)
+					}
+					const input = createCountTracker(token, key, numberFound, foundDescription, descriptionPostfix)
+					element.append(`<br>`);
+					element.append(input);
 				}
-				const input = createCountTracker(token, key, numberFound, foundDescription, descriptionPostfix)
-				element.append(`<br>`);
-				element.append(input);
 			}
-		}
+		})
+		
 		
 	}
 
-	// //Spell Slots, or technically anything with 'slot'... might be able to refine the regex a bit better...
+
 	target.find("p").each(function() {
 		let element = $(this);
-		if(element.find('strong').text().match(/at will|day each/gi) || element.find('.add-input').length)
+		if(element.find('strong').text().match(/at will|day each/gi) || element.find('.add-input').length || element.text().match(/^\d+\/day each/gi))
 			return;
 
 		if ($(this).find(".injected-input").length === 0) {
 			processInput(element, /\(?([0-9]+) slots?\)?/, "slots remaining")
-			processInput(element, /\(?([0-9]+)\/Day\)?/i, "remaining")
+			processInput(element, /\(?([0-9]+)\/Day\)?/i, " uses remaining")
 			processInput(element, /can take ([0-9]+) legendary actions/i, "Legendary Actions remaining", false)
 		}
 		element = null
@@ -402,8 +413,12 @@ function scan_player_creature_pane(target) {
     
   })
 
-  container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("click.roll").on("click.roll", function (e) {
-    e.preventDefault();
+  container.find("p>em>strong, p>strong>em, div>strong>em, div>em>strong, p>span>em>strong, p>span>strong>em").off("pointerdown.roll touchstart.roll").on("pointerdown.roll touchstart.roll", function (e) {
+	if (e.button === 2) return;
+	e.preventDefault();
+	e.stopPropagation();
+	e.stopImmediatePropagation();
+
     if($(e.target).text().includes('Recharge'))
       return;
     let rollButtons = $(e.currentTarget).closest('em:has(strong), strong:has(em)').nextUntil(':has(.avtt-ability-roll-button)').closest('.avtt-roll-button:not([data-rolltype="recharge"])');
@@ -476,15 +491,16 @@ function roll_button_contextmenu_handler(contextmenuEvent, displayName, imgUrl, 
 	const actionType = pressedButton.attr('data-actiontype');
 	const damageType = pressedButton.attr('data-damagetype');
 	const save = pressedButton.attr('data-save');
+	const targetDocument = contextmenuEvent.currentTarget.ownerDocument;
 
 
 
 	if (rollType === "damage" || (expression !== "1d20" && !/^1d20/gi.test(expression))) {
-		damage_dice_context_menu(`${expression}${modifier}`, modifier, actionType, rollType, displayName, imgUrl, entityType, entityId, damageType, save)
-			.present(contextmenuEvent.clientY, contextmenuEvent.clientX) // TODO: convert from iframe to main window
+		damage_dice_context_menu(adjustRollWithRollBuffs(`${expression}${modifier}`, rollType, pressedButton), modifier, actionType, rollType, displayName, imgUrl, entityType, entityId, damageType, save)
+			.present(contextmenuEvent.clientY, contextmenuEvent.clientX, targetDocument)
 	} else {
-		standard_dice_context_menu(`${expression}${modifier}`, modifier, actionType, rollType, displayName, imgUrl, entityType, entityId)
-			.present(contextmenuEvent.clientY, contextmenuEvent.clientX) // TODO: convert from iframe to main window
+		standard_dice_context_menu(adjustRollWithRollBuffs(`${expression}${modifier}`, rollType, pressedButton), modifier, actionType, rollType, displayName, imgUrl, entityType, entityId)
+			.present(contextmenuEvent.clientY, contextmenuEvent.clientX, targetDocument)
 	}
 }
 
@@ -504,7 +520,7 @@ function roll_button_clicked(clickEvent, displayName, imgUrl, entityType = undef
 	const action = pressedButton.attr('data-actiontype');
 	const save = pressedButton.attr('data-save');
 	const damageType = pressedButton.attr('data-damagetype');
-	modifier = modifier == 0 ? '+0' : modifier;
+	modifier = modifier == 0 && modifier != '' ? '+0' : modifier;
 
 	
   if (/^1d20/g.test(expression)) {
@@ -524,10 +540,11 @@ function roll_button_clicked(clickEvent, displayName, imgUrl, entityType = undef
      }
   }
  
-	
+	// applied after the advantage/disadvantage rewrite so a buff's ^1d20 replacement can't undo it
+	const buffedExpression = adjustRollWithRollBuffs(`${expression}${modifier}`, rollType, $(clickEvent.currentTarget));
 
 	window.diceRoller.roll(new DiceRoll(
-		`${expression}${modifier}`,
+		buffedExpression,
 		action,
 		rollType,
 		displayName,
@@ -562,7 +579,11 @@ function scan_creature_pane(target, displayName, creatureAvatar) {
 		replace_stat_block_description($(this));
 	});
 
-	target.find(".avtt-roll-button").on("click", function(clickEvent) {
+	target.find(".avtt-roll-button").off('pointerdown.click touchstart.click').on("pointerdown.click touchstart.click", function(clickEvent) {
+		if (e.button === 2) return;
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
 		roll_button_clicked(clickEvent, displayName, creatureAvatar, "monster")
 	});
 
