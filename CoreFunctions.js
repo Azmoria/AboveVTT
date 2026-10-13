@@ -997,6 +997,8 @@ function create_update_token(options, save = true) {
 
   if (!(id in window.TOKEN_OBJECTS)) {
     window.TOKEN_OBJECTS[id] = new Token(options);
+  } else {
+    window.TOKEN_OBJECTS[id].options = options;
   }
 
   if(options.repositionAoe != undefined){
